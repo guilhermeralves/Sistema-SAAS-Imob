@@ -166,21 +166,47 @@ export default function CRM() {
       return;
     }
 
+    //Formata nome digitado
+    const formattedData = {
+      ...newLeadData,
+      nome: newLeadData.nome
+        .toLowerCase()
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ')
+    };
+
     // CORREÇÃO: Passe os dados corretamente
-    createLead.mutate(newLeadData); // ← Passe newLeadData, não {}
+    createLead.mutate(formattedData); // ← Passe newLeadData, não {}
   };
 
   const handleStatusChange = (leadId: number, newStatus: string) => {
-    updateLead.mutate({ id: leadId, status: newStatus });
+    updateLead.mutate(
+      { id: leadId, status: newStatus },
+      {
+        onSuccess: () => {
+          refetch();
+          
+          // delay ao fechar o dialog para melhor sensação de usabilidade
+          setTimeout(() => {
+            setLeadDetailsOpen(false);
+            setSelectedLead(null); // ← Limpa o lead selecionado também
+          }, 350);
+        },
+        onError: () => {
+          toast.error("Erro ao atualizar status");
+        },
+      }
+    );
   };
 
-//Mensagem Informando que não possível adicionar anotação vazia nos detalhes do lead
+  //Mensagem Informando que não possível adicionar anotação vazia nos detalhes do lead
   const handleAddNote = () => {
     if (!newNote.trim()) {
       toast.warning("Digite algo antes de adicionar.");
       return;
     }
-  
+
     addNote.mutate({ idLead: selectedLead.id, anotacao: newNote });
   };
 
@@ -236,8 +262,6 @@ export default function CRM() {
     leads: leads?.filter((lead) => lead.status === status.value) || [],
   }));
 
-  /*const created = new Date(selectedLead.createdAt);*/
-
   return (
     <Layout>
       <div className="container py-8">
@@ -268,6 +292,7 @@ export default function CRM() {
                   <Input
                     id="nome"
                     value={newLeadData.nome}
+                    maxLength={40}
                     onChange={(e) => setNewLeadData({ ...newLeadData, nome: e.target.value })}
                   />
                 </div>
@@ -276,6 +301,7 @@ export default function CRM() {
                   <Input
                     type="email"
                     value={newLeadData.email}
+                    maxLength={35}
                     onChange={(e) =>
                       setNewLeadData({ ...newLeadData, email: e.target.value,})
                     }
@@ -440,10 +466,10 @@ export default function CRM() {
 
         {/* Dialog de Detalhes do Lead */}
         <Dialog open={leadDetailsOpen} onOpenChange={setLeadDetailsOpen}>
-        <DialogContent className="max-w-2xl max-h-[95vh] overflow-y-auto">
+        <DialogContent className="w-[95vh] max-h-[95vh] overflow-y-auto">
             {selectedLead && (
               <>
-                <DialogHeader>
+                <DialogHeader className="max-w-3xl">
                   <DialogTitle className="text-2xl">{selectedLead.nome}</DialogTitle>
                   <DialogDescription>
                     Lead #{selectedLead.id} • Criado em {
@@ -476,7 +502,7 @@ export default function CRM() {
                         <Label>Status</Label>
                         <Select
                           value={selectedLead.status}
-                          onValueChange={(value) => handleStatusChange(selectedLead.id, value)}
+                          onValueChange={(value) => handleStatusChange(selectedLead.id, value) }
                         >
                           <SelectTrigger className="-ml-1">
                             <SelectValue />
@@ -535,10 +561,10 @@ export default function CRM() {
                       {notes && notes.length > 0 ? (
                         <div className="space-y-3 max-h-64 overflow-y-auto">
                           {notes.map((note) => (
-                            <Card key={note.id} className="border-l-4 border-l-primary">
+                            <Card key={note.id} className="border-l-4 border-l-primary break-all">
                               <CardContent className="p-3">
                                 <p className="text-sm whitespace-pre-line">{note.anotacao}</p>
-                                <p className="text-xs text-muted-foreground mt-2">
+                                <p className="text-xs text-muted-foreground mt-4">
                                   {formatDateTime(note.createdAt)}
                                 </p>
                               </CardContent>

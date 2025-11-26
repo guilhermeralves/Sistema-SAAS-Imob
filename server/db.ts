@@ -192,9 +192,7 @@ export async function createLead(data: InsertLead) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  const now = new Date(
-    new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" })
-  );
+  const now = new Date();
 
   const result = await db.insert(leads).values({
     ...data,
