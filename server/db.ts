@@ -159,6 +159,8 @@ export async function getAllLeads() {
   return result;
 }
 
+ const private_key = "dwdejhjas";
+
 export async function getLeadsByResponsavel(idResponsavel: number) {
   const db = await getDb();
   if (!db) return [];
