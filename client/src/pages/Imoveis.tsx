@@ -158,6 +158,7 @@ export default function Imoveis() {
                 <Input
                   id="valorMin"
                   type="number"
+                  maxLength={12}
                   value={filters.valorMin}
                   onChange={(e) => setFilters({ ...filters, valorMin: e.target.value })}
                 />
@@ -168,6 +169,7 @@ export default function Imoveis() {
                 <Input
                   id="valorMax"
                   type="number"
+                  maxLength={12}
                   value={filters.valorMax}
                   onChange={(e) => setFilters({ ...filters, valorMax: e.target.value })}
                 />

@@ -411,15 +411,14 @@ export default function CRM() {
           </div>
         ) : (
             <Card>
-              <CardHeader>
-                <CardTitle>
-                  {PIPELINE_STATUS.find(s => s.value === statusSelected)?.label}
-                </CardTitle>
-                <CardDescription>
-                  {leadsFiltrados.length} lead(s) encontrado(s) 
-                </CardDescription>
-              </CardHeader>
-
+                <CardHeader>
+                  <CardTitle>
+                    {PIPELINE_STATUS.find(s => s.value === statusSelected)?.label}
+                  </CardTitle>
+                  <CardDescription>
+                    {leadsFiltrados.length} lead(s) encontrado(s) 
+                  </CardDescription>
+                </CardHeader>
               <CardContent>
                 {isLoading ? (
                   <div className="text-center py-8">
@@ -464,9 +463,9 @@ export default function CRM() {
             </Card>
         )}
 
-        {/* Dialog de Detalhes do Lead */}
+        {/* DIALOG DETALHES DO LEAD */}
         <Dialog open={leadDetailsOpen} onOpenChange={setLeadDetailsOpen}>
-        <DialogContent className="w-[95vh] max-h-[95vh] overflow-y-auto">
+          <DialogContent className="w-full max-w-[calc(100%-2rem)] max-h-[95vh] overflow-y-auto sm:max-w-lg lg:max-w-5xl">
             {selectedLead && (
               <>
                 <DialogHeader className="max-w-3xl">
