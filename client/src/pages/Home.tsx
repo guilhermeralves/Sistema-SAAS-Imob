@@ -1,4 +1,6 @@
 import Layout from "@/components/Layout";
+import React from "react";
+import { Banner } from "@/components/Banner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { trpc } from "@/lib/trpc";
@@ -17,12 +19,33 @@ import { Link } from "wouter";
  */
 
 // ========== ÁREA DE EDIÇÃO - BANNER ==========
-const BANNER_CONFIG = {
-  title: "Encontre o Imóvel dos Seus Sonhos",
-  subtitle: "A AFG Imobiliária facilita a compra, venda e locação de imóveis com tecnologia e atendimento personalizado.",
+const SLIDES = [
+  {
+  desktop:"/banner/desktop.webp",
+  mobile:"/banner/mobile.webp",
+  title: "Encontre o Imóvel dos Seus Sonhos.",
+  subtitle: "Facilitamos a compra, venda e locação de imóveis com tecnologia e atendimento personalizado.",
   ctaText: "Ver Imóveis",
   ctaLink: "/imoveis",
-};
+  },
+  {
+  desktop:"/banner_2/desktop.webp",
+  mobile:"/banner_2/mobile.webp",
+  title: "Controle da Locaçao de seus Imóveis.",
+  subtitle: "Não se preocupe com a gestão e administração de seus imóveis locados, Faremos por voce!",
+  ctaText: "Locações",
+  ctaLink: "/locacao",
+  },
+  {
+  desktop:"/banner_3/desktop.webp",
+  mobile:"/banner_3/mobile.webp",
+  title: "Melhor Consultoria de Investimentos do Setor Imobiliário.",
+  subtitle: "Facilitamos a compra, venda e locação de imóveis com tecnologia e atendimento personalizado.",
+  ctaText: "Investimentos",
+  ctaLink: "/investimentos",
+},];
+
+
 // ========== FIM DA ÁREA DE EDIÇÃO ==========
 
 // ========== ÁREA DE EDIÇÃO - SERVIÇOS ==========
@@ -67,29 +90,53 @@ function formatCurrency(value: number) {
 }
 
 export default function Home() {
+   const [index, setIndex] = React.useState(0);
+
+  React.useEffect(() => {
+    const id = setInterval(() => {
+      setIndex((i) => (i + 1) % SLIDES.length);
+    }, 10000);
+    return () => clearInterval(id);
+  }, []);
+
   const { data: destaques, isLoading } = trpc.properties.getDestacados.useQuery();
 
   return (
     <Layout>
       {/* Banner Hero */}
-      <section className="relative bg-gradient-to-br from-primary/10 via-background to-accent/10 py-20 md:py-32">
-        <div className="container">
-          <div className="max-w-3xl">
-            <h1 className="text-4xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
-              {BANNER_CONFIG.title}
+      <section className="relative z-0 overflow-hidden min-h-[70vh] md:min-h-[720px] py-20 md:py-32">
+
+        {/* Banner visual (fundo) */}
+        <Banner
+          desktop={SLIDES[index].desktop}
+          mobile={SLIDES[index].mobile}
+          alt={SLIDES[index].title}
+        />
+
+        {/* Overlay opcional */}
+        <div className="absolute inset-0 bg-black/30" />
+
+        {/* Conteúdo*/}
+        <div className="relative z-20 container">
+          <div className="max-w-3xl -translate-y-6">
+            <h1 className="text-2xl md:text-6xl font-bold mb-4 text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]">
+              {SLIDES[index].title}
             </h1>
-            <p className="text-lg md:text-xl text-muted-foreground mb-8">
-              {BANNER_CONFIG.subtitle}
+
+            <p className="text-base md:text-xl text-muted-foreground mb-8 text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]">
+              {SLIDES[index].subtitle}
             </p>
-            <Link href={BANNER_CONFIG.ctaLink}>
+
+            <Link href={SLIDES[index].ctaLink}>
               <Button size="lg" className="gap-2">
-                {BANNER_CONFIG.ctaText}
+                {SLIDES[index].ctaText}
                 <ArrowRight className="h-5 w-5" />
               </Button>
             </Link>
           </div>
         </div>
       </section>
+
 
       {/* Serviços */}
       <section className="py-16 md:py-24 bg-muted/30">

@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { APP_LOGO, APP_TITLE, getLoginUrl } from "@/const";
+import { APP_LOGO, getLoginUrl } from "@/const";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -45,13 +45,13 @@ export default function Header() {
     { href: "/meus-imoveis", label: "Meus Imóveis", icon: Building2 },
   ];
 
-  // Menu para administrativos
+  // Itens para administrativos
   const adminMenuItems = [
     { href: "/admin", label: "Painel Admin", icon: Users },
     { href: "/crm", label: "CRM", icon: LayoutDashboard },
   ];
 
-  // Determina quais itens mostrar baseado no role do usuário
+  // Determina quais itens no cabeçalho mostrar baseado no regra de usuário
   const getMenuItems = () => {
     const items = [...publicMenuItems];
     
@@ -77,9 +77,8 @@ export default function Header() {
         <Link href="/">
           <a className="flex items-center gap-3 hover:opacity-80 transition-opacity">
             {APP_LOGO && (
-              <img src={APP_LOGO} alt={APP_TITLE} className="h-15 w-15 object-contain" />
+              <img src={APP_LOGO} className="h-15 w-15 object-contain" />
             )}
-            <span className="text-xl font-bold text-primary p-6">{APP_TITLE}</span>
           </a>
         </Link>
 
