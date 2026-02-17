@@ -23,7 +23,7 @@ const styles = {
 export function Banner({ desktop, mobile, alt }: BannerProps ) {
   return (
     <picture className="absolute inset-0 z-0">
-      <source media="(max-width: 768px)" srcSet={mobile} />
+      <source media="(max-width: 600px)" srcSet={mobile} />
       <source media="(min-width: 769px)" srcSet={desktop} />
       <img
         src={desktop}

@@ -31,7 +31,7 @@ const SLIDES = [
   {
   desktop:"/banner_2/desktop.webp",
   mobile:"/banner_2/mobile.webp",
-  title: "Controle da Locaçao de seus Imóveis.",
+  title: "Controle a Locaçao de seus Imóveis.",
   subtitle: "Não se preocupe com a gestão e administração de seus imóveis locados, Faremos por voce!",
   ctaText: "Locações",
   ctaLink: "/locacao",
@@ -104,9 +104,9 @@ export default function Home() {
   return (
     <Layout>
       {/* Banner Hero */}
-      <section className="relative z-0 overflow-hidden min-h-[70vh] md:min-h-[720px] py-20 md:py-32">
+      <section className="relative z-0 overflow-hidden min-h-[85vh] md:min-h-[720px] py-20 md:py-32">
 
-        {/* Banner visual (fundo) */}
+        {/* Banner visual (fundo)  */}
         <Banner
           desktop={SLIDES[index].desktop}
           mobile={SLIDES[index].mobile}
@@ -117,9 +117,9 @@ export default function Home() {
         <div className="absolute inset-0 bg-black/30" />
 
         {/* Conteúdo*/}
-        <div className="relative z-20 container">
-          <div className="max-w-3xl -translate-y-6">
-            <h1 className="text-2xl md:text-6xl font-bold mb-4 text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]">
+        <div className="relative z-20 container ">
+          <div className="max-w-3xl -translate-y-6 mt-4">
+            <h1 className="text-3xl md:text-6xl font-bold mb-4 text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]">
               {SLIDES[index].title}
             </h1>
 

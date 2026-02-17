@@ -10,21 +10,21 @@ import fs from 'fs';
 
 /*Caso não esteja funcionando após o clone do projeto voce deverá realizar o seguinte comando no terminal = "pnpm add -D sharp"*/
 
-const input = 'client/image_teste/Banner_3.jpg';
-const outputDir = 'client/public/banner_3';
+const input = 'client/image_teste/Banner_2.jpg';
+const outputDir = 'client/public/banner_2';
 
 fs.mkdirSync(outputDir, { recursive: true });
 
 const formats = [
-  { name: 'mobile', width: 768 },
-  /*{ name: 'desktop', width: 1440 },
-  { name: 'desktop@2x', width: 2560 },*/
+  { name: 'mobile', /*width: 768*/ width: 2560 },
+  { name: 'desktop', width: 2560 },
+  /*{ name: 'desktop@2x', width: 2560 }*/
 ];
 
 for (const f of formats) {
   await sharp(input)
     .resize({ width: f.width })
-    .toFormat('webp', { quality: 80 })
+    .toFormat('webp', { quality: 90 })
     .toFile(`${outputDir}/${f.name}.webp`);
 }
 
