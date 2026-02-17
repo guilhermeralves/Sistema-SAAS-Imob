@@ -146,6 +146,25 @@ Isso criará:
 - **Corretor**: Pode gerenciar seus próprios imóveis e leads
 - **Administrativo**: Acesso total ao sistema
 
+## Autenticação (Login)
+
+O projeto usa **OAuth Manus** e cookie de sessão HTTP-only.
+
+### Fluxo resumido
+1. Frontend monta a URL de login (`getLoginUrl`) e envia o usuário para o portal OAuth.
+2. O callback `/api/oauth/callback` troca o `code` por token e cria sessão (`app_session_id`).
+3. Em cada request tRPC, o backend valida o cookie e injeta `ctx.user`.
+4. `protectedProcedure` bloqueia rotas sem sessão válida.
+
+### Variáveis de ambiente importantes
+- `VITE_OAUTH_PORTAL_URL`: URL do portal OAuth (frontend).
+- `VITE_APP_ID`: identificador da aplicação no OAuth.
+- `OAUTH_SERVER_URL`: URL do servidor OAuth para troca de token.
+- `JWT_SECRET`: segredo usado para assinar/verificar sessão.
+- `AUTH_BYPASS_LOCAL=true` (opcional): habilita usuário admin fake **somente em dev** para testes locais.
+
+> Recomendado: manter `AUTH_BYPASS_LOCAL` desabilitado em qualquer ambiente compartilhado.
+
 ## Tecnologias Utilizadas
 
 - **Frontend**: React 19, TypeScript, Tailwind CSS 4, shadcn/ui

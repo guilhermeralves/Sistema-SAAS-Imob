@@ -1,5 +1,6 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { User } from "../../drizzle/schema";
+import { ENV } from "./env";
 import { sdk } from "./sdk";
 
 export type TrpcContext = {
@@ -8,37 +9,36 @@ export type TrpcContext = {
   user: User | null;
 };
 
-export async function createContext(
-  opts: CreateExpressContextOptions) {
-  // ========================================
-  // MODO DESENVOLVIMENTO LOCAL
-  // Usuário fake sempre logado como admin
-  // REMOVER EM PRODUÇÃO!
-  // ========================================
-  
-  const fakeUser = {
+function getLocalBypassUser(): User {
+  const now = new Date();
+
+  return {
     id: 1,
     openId: "admin-local",
     name: "Administrador Local",
     email: "admin@local.com",
-    role: "administrativo" as const,
+    role: "administrativo",
     loginMethod: "local",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    lastSignedIn: new Date(),
-  };
-
-  return {
-    req: opts.req,
-    res: opts.res,
-    user: fakeUser, // Sempre autenticado
+    createdAt: now,
+    updatedAt: now,
+    lastSignedIn: now,
   };
 }
 
+export async function createContext(opts: CreateExpressContextOptions) {
+  if (!ENV.isProduction && ENV.authBypassEnabled) {
+    return {
+      req: opts.req,
+      res: opts.res,
+      user: getLocalBypassUser(),
+    };
+  }
 
-  /*try {
+  let user: User | null = null;
+
+  try {
     user = await sdk.authenticateRequest(opts.req);
-  } catch (error) {
+  } catch {
     // Authentication is optional for public procedures.
     user = null;
   }
@@ -48,4 +48,4 @@ export async function createContext(
     res: opts.res,
     user,
   };
-}*/
+}
