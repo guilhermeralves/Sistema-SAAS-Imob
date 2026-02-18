@@ -6,21 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue,} from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,} from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import { Users, Plus, Phone, Mail, MessageSquare, Upload, FileText, ArrowRight, User, Calendar } from "lucide-react";
 import { toast, Toaster } from "sonner";
@@ -267,7 +254,7 @@ export default function CRM() {
       <div className="container py-8">
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">CRM - Gestão de Leads</h1>
+            <h1 className="text-3xl font-bold text-foreground">Gestão de Leads</h1>
             <p className="text-muted-foreground mt-2">
               Gerencie seus leads e acompanhe o funil de vendas
             </p>
@@ -279,7 +266,8 @@ export default function CRM() {
                 Novo Lead
               </Button>
             </DialogTrigger>
-            <DialogContent>
+
+            <DialogContent className="w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
               <DialogHeader>
                 <DialogTitle>Cadastrar Novo Lead</DialogTitle>
                 <DialogDescription>

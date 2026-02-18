@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,8 +13,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
-import { Building2, MapPin, Bed, Bath, Car, Search, SlidersHorizontal } from "lucide-react";
+import { Building2, MapPin, Bed, Bath, Car, Search, SlidersHorizontal, Plus } from "lucide-react";
 import { Link } from "wouter";
+import { toast } from "sonner";
 
 /**
  * Página de Listagem de Imóveis
@@ -48,8 +50,149 @@ function formatCurrency(value: number) {
   }).format(value / 100);
 }
 
+// ========== FUNÇÃO PARA BUSCAR CEP ==========
+async function buscarCEP(cep: string) {
+  // Remove caracteres especiais
+  const cepLimpo = cep.replace(/\D/g, "");
+  
+  // Valida se tem 8 dígitos
+  if (cepLimpo.length !== 8) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/` );
+    const data = await response.json();
+
+    // Verifica se CEP é válido
+    if (data.erro) {
+      return null;
+    }
+
+    return {
+      endereco: data.logradouro,
+      bairro: data.bairro,
+      cidade: data.localidade,
+      estado: data.uf,
+    };
+  } catch (error) {
+    console.error("Erro ao buscar CEP:", error);
+    return null;
+  }
+}
+// ========== FIM DA FUNÇÃO ==========
+
 export default function Imoveis() {
-  const { data: imoveis, isLoading } = trpc.properties.list.useQuery();
+  const { data: imoveis, isLoading, refetch} = trpc.properties.list.useQuery();
+  // Estado para controlar o dialog (Aberto ou fechado)
+  const [newPropertyOpen, setNewPropertyOpen] = useState(false);
+  //Estado para armazenar os dados do formulário
+  const [newPropertyData, setNewPropertyData] = useState({
+    titulo: "",
+    descricao: "",
+    tipo: "apartamento",
+    finalidade: "venda",
+    valor: "",
+    area: "",
+    quartos: "",
+    banheiros: "",
+    vagas: "",
+    endereco: "",
+    bairro: "",
+    cidade: "",
+    estado: "",
+    cep: "",
+  });
+
+  const [cepLoading, setCepLoading] = useState(false);
+  const [cepError, setCepError] = useState("");
+
+  // Mutation para criar imóvel
+  const createProperty = trpc.properties.create.useMutation({
+    onSuccess: () => {
+      toast.success("Imóvel cadastrado com sucesso!");
+      refetch();  // Atualiza a lista
+      setNewPropertyOpen(false);  // Fecha o dialog
+      // Limpa o formulário
+      setNewPropertyData({
+        titulo: "",
+        descricao: "",
+        tipo: "apartamento",
+        finalidade: "venda",
+        valor: "",
+        area: "",
+        quartos: "",
+        banheiros: "",
+        vagas: "",
+        endereco: "",
+        bairro: "",
+        cidade: "",
+        estado: "",
+        cep: "",
+      });
+    },
+    onError: () => {
+      toast.error("Erro ao cadastrar imóvel");
+    },
+  });
+
+  // Função para validar e criar o imóvel
+  const handleCreateProperty = () => {
+    // Valida campos obrigatórios
+    if (!newPropertyData.titulo || !newPropertyData.valor || !newPropertyData.endereco) {
+      toast.error("Preencha título, valor e endereço");
+      return;
+    }
+
+    // Envia para o backend
+    createProperty.mutate({
+      ...newPropertyData,
+      valor: parseFloat(newPropertyData.valor),
+      area: parseFloat(newPropertyData.area),
+      quartos: parseInt(newPropertyData.quartos),
+      banheiros: parseInt(newPropertyData.banheiros),
+      vagas: parseInt(newPropertyData.vagas),
+    });
+  };
+
+  // ========== FUNÇÃO PARA LIDAR COM CEP ==========
+  const handleCepChange = async (value: string) => {
+    // Atualiza o valor do CEP no estado
+    setNewPropertyData({ ...newPropertyData, cep: value });
+
+    // Se o CEP tiver menos de 8 dígitos, não busca
+    if (value.replace(/\D/g, "").length < 8) {
+      setCepError("");
+      return;
+    }
+
+    // Inicia o carregamento
+    setCepLoading(true);
+    setCepError("");
+
+    // Aguarda 500ms para o usuário terminar de digitar
+    setTimeout(async () => {
+      const dados = await buscarCEP(value);
+
+      if (dados) {
+        // Preenche os campos automaticamente
+        setNewPropertyData((prev) => ({
+          ...prev,
+          endereco: dados.endereco,
+          bairro: dados.bairro,
+          cidade: dados.cidade,
+          estado: dados.estado,
+        }));
+        setCepError("");
+      } else {
+        setCepError("CEP não encontrado");
+      }
+
+      setCepLoading(false);
+    }, 500);
+  };
+  // ========== FIM DA FUNÇÃO ==========
+
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({
     tipo: "todos",
@@ -74,12 +217,255 @@ export default function Imoveis() {
   return (
     <Layout>
       <div className="container py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">Imóveis Disponíveis</h1>
-          <p className="text-muted-foreground">
-            Encontre o imóvel perfeito para você
-          </p>
+        <div className="flex justify-between items-center mb-8">
+          {/* Header */}
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">Imóveis Disponíveis</h1>
+            <p className="text-muted-foreground mt-2">
+              Encontre o imóvel perfeito para você
+            </p>
+          </div>
+
+          {/* Botão que abre o dialog */}
+          <Dialog open={newPropertyOpen} onOpenChange={setNewPropertyOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <Plus className="h-4 w-4" />
+                Novo Imóvel
+              </Button>
+            </DialogTrigger>
+
+            {/* Conteúdo do dialog */}
+            <DialogContent className="w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+              <DialogHeader>
+                <DialogTitle>Cadastrar Novo Imóvel</DialogTitle>
+                <DialogDescription>
+                  Preencha as informações do imóvel
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4">
+                {/* Campo Título */}
+                <div className="space-y-1 sm:space-y-2">
+                  <Label htmlFor="titulo" className="text-sm sm:text-base">Título *</Label>
+                  <Input
+                    id="titulo"
+                    value={newPropertyData.titulo}
+                    onChange={(e) =>
+                      setNewPropertyData({ ...newPropertyData, titulo: e.target.value })
+                    }
+                    placeholder="Ex: Apartamento 3 Quartos no Centro"
+                    className="text-sm sm:text-base"
+                  />
+                </div>
+
+                {/* Campo Descrição */}
+                <div className="space-y-1 sm:space-y-2">
+                  <Label htmlFor="descricao" className="text-sm sm:text-base">Descrição</Label>
+                  <textarea
+                    id="descricao"
+                    value={newPropertyData.descricao}
+                    onChange={(e) =>
+                      setNewPropertyData({ ...newPropertyData, descricao: e.target.value })
+                    }
+                    placeholder="Descrição sobre o imóvel"
+                    className="w-full p-2 border rounded text-sm sm:text-base resize-none"
+                    rows={3}
+                  />
+                </div>
+
+                {/* Campo Tipo e Finalidade (Grid) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div className="space-y-1 sm:space-y-2">
+                    <Label htmlFor="tipo" className="text-sm sm:text-base">Tipo *</Label>
+                    <select
+                      id="tipo"
+                      value={newPropertyData.tipo}
+                      onChange={(e) =>
+                        setNewPropertyData({ ...newPropertyData, tipo: e.target.value })
+                      }
+                      className="w-full p-2 border rounded text-sm sm:text-base"
+                    >
+                      <option value="apartamento">Apartamento</option>
+                      <option value="casa">Casa</option>
+                      <option value="terreno">Terreno</option>
+                      <option value="comercial">Comercial</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1 sm:space-y-2">
+                    <Label htmlFor="finalidade" className="text-sm sm:text-base">Finalidade *</Label>
+                    <select
+                      id="finalidade"
+                      value={newPropertyData.finalidade}
+                      onChange={(e) =>
+                        setNewPropertyData({ ...newPropertyData, finalidade: e.target.value })
+                      }
+                      className="w-full p-2 border rounded text-sm sm:text-base"
+                    >
+                      <option value="venda">Venda</option>
+                      <option value="locacao">Locação</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Campo Valor */}
+                <div className="space-y-1 sm:space-y-2">
+                  <Label htmlFor="valor" className="text-sm sm:text-base">Valor (R$) *</Label>
+                  <Input
+                    id="valor"
+                    type="number"
+                    value={newPropertyData.valor}
+                    onChange={(e) =>
+                      setNewPropertyData({ ...newPropertyData, valor: e.target.value })
+                    }
+                    placeholder="Ex: 450000"
+                    className="text-sm sm:text-base"
+                  />
+                </div>
+
+                {/* Campos de Características (Grid) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div className="space-y-1 sm:space-y-2">
+                    <Label htmlFor="area" className="text-sm sm:text-base">Área (m²)</Label>
+                    <Input
+                      id="area"
+                      type="number"
+                      value={newPropertyData.area}
+                      onChange={(e) =>
+                        setNewPropertyData({ ...newPropertyData, area: e.target.value })
+                      }
+                      className="text-sm sm:text-base"
+                    />
+                  </div>
+                  <div className="space-y-1 sm:space-y-2">
+                    <Label htmlFor="quartos" className="text-sm sm:text-base">Quartos</Label>
+                    <Input
+                      id="quartos"
+                      type="number"
+                      value={newPropertyData.quartos}
+                      onChange={(e) =>
+                        setNewPropertyData({ ...newPropertyData, quartos: e.target.value })
+                      }
+                      className="text-sm sm:text-base"
+                    />
+                  </div>
+                  <div className="space-y-1 sm:space-y-2">
+                    <Label htmlFor="banheiros" className="text-sm sm:text-base">Banheiros</Label>
+                    <Input
+                      id="banheiros"
+                      type="number"
+                      value={newPropertyData.banheiros}
+                      onChange={(e) =>
+                        setNewPropertyData({ ...newPropertyData, banheiros: e.target.value })
+                      }
+                      className="text-sm sm:text-base"
+                    />
+                  </div>
+                  <div className="space-y-1 sm:space-y-2">
+                    <Label htmlFor="vagas" className="text-sm sm:text-base">Vagas</Label>
+                    <Input
+                      id="vagas"
+                      type="number"
+                      value={newPropertyData.vagas}
+                      onChange={(e) =>
+                        setNewPropertyData({ ...newPropertyData, vagas: e.target.value })
+                      }
+                      className="text-sm sm:text-base"
+                    />
+                  </div>
+                </div>
+
+                {/* Campos de Localização */}
+                <div className="space-y-1 sm:space-y-2">
+                  <Label htmlFor="endereco" className="text-sm sm:text-base">Endereço *</Label>
+                  <Input
+                    id="endereco"
+                    value={newPropertyData.endereco}
+                    onChange={(e) =>
+                      setNewPropertyData({ ...newPropertyData, endereco: e.target.value })
+                    }
+                    placeholder="Ex: Rua Principal, 123"
+                    className="text-sm sm:text-base"
+                    disabled={cepLoading}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div className="space-y-1 sm:space-y-2">
+                    <Label htmlFor="bairro" className="text-sm sm:text-base">Bairro</Label>
+                    <Input
+                      id="bairro"
+                      value={newPropertyData.bairro}
+                      onChange={(e) =>
+                        setNewPropertyData({ ...newPropertyData, bairro: e.target.value })
+                      }
+                      placeholder="Ex: Centro"
+                      className="text-sm sm:text-base"
+                      disabled={cepLoading}
+                    />
+                  </div>
+                  <div className="space-y-1 sm:space-y-2">
+                    <Label htmlFor="cidade" className="text-sm sm:text-base">Cidade</Label>
+                    <Input
+                      id="cidade"
+                      value={newPropertyData.cidade}
+                      onChange={(e) =>
+                        setNewPropertyData({ ...newPropertyData, cidade: e.target.value })
+                      }
+                      placeholder="Ex: São Paulo"
+                      className="text-sm sm:text-base"
+                      disabled={cepLoading}
+                    />
+                  </div>
+                  <div className="space-y-1 sm:space-y-2">
+                    <Label htmlFor="estado" className="text-sm sm:text-base">Estado</Label>
+                    <Input
+                      id="estado"
+                      value={newPropertyData.estado}
+                      onChange={(e) =>
+                        setNewPropertyData({ ...newPropertyData, estado: e.target.value })
+                      }
+                      placeholder="SP"
+                      maxLength={2}
+                      className="text-sm sm:text-base"
+                      disabled={cepLoading}
+                    />
+                  </div>
+                  <div className="space-y-1 sm:space-y-2">
+                    <Label htmlFor="cep" className="text-sm sm:text-base">CEP</Label>
+                    <div className="relative">
+                      <Input
+                        id="cep"
+                        value={newPropertyData.cep}
+                        onChange={(e) => handleCepChange(e.target.value)}
+                        placeholder="01310-100"
+                        className="text-sm sm:text-base"
+                        maxLength={9}
+                      />
+                      {cepLoading && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                          <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                        </div>
+                      )}
+                    </div>
+                    {cepError && (
+                      <p className="text-red-500 text-xs sm:text-sm mt-1">{cepError}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Botão de Criar */}
+                <Button
+                  onClick={handleCreateProperty}
+                  className="w-full mt-2 sm:mt-4 text-sm sm:text-base py-2 sm:py-3"
+                  disabled={createProperty.isPending}
+                >
+                  {createProperty.isPending ? "Criando..." : "Criar Imóvel"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Filtros */}

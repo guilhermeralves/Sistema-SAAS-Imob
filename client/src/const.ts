@@ -4,7 +4,7 @@ export const APP_TITLE = import.meta.env.VITE_APP_TITLE || "App";
 
 export const APP_LOGO = "\Logo AFG.png";
 
-export const APP_LOGO2 = "\Logotipo AFG Azul.png";
+export const APP_LOGO2 = "\Logo AFG Azul.png";
 
 // Generate login URL at runtime so redirect URI reflects the current origin.
 export const getLoginUrl = () => {
