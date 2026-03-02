@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { APP_TITLE, APP_LOGO2 } from "@/const";
+import { APP_LOGO2, APP_TITLE, APP_VERSION } from "@/const";
 import { Mail, Phone, MapPin, Facebook, Instagram, Linkedin } from "lucide-react";
 
 /**
@@ -114,6 +114,8 @@ export default function Footer() {
           <p>
             © {currentYear} {APP_TITLE}. Todos os direitos reservados.
           </p>
+          <p className="mt-2">Created by Noxilon®</p>
+          <p>Version {APP_VERSION}</p>
         </div>
       </div>
     </footer>

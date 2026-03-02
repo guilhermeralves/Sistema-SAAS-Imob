@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { date, int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -15,6 +15,22 @@ export const users = mysqlTable("users", {
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
+  cpf: varchar("cpf", { length: 14 }).unique(),
+  phone: varchar("phone", { length: 20 }),
+  birthDate: date("birthDate"),
+  profession: varchar("profession", { length: 120 }),
+  grossMonthlyIncome: int("grossMonthlyIncome"),
+  maritalStatus: varchar("maritalStatus", { length: 40 }),
+  householdIncome: int("householdIncome"),
+  rg: varchar("rg", { length: 32 }),
+  nationality: varchar("nationality", { length: 80 }),
+  address: varchar("address", { length: 255 }),
+  neighborhood: varchar("neighborhood", { length: 100 }),
+  addressNumber: varchar("addressNumber", { length: 20 }),
+  city: varchar("city", { length: 100 }),
+  state: varchar("state", { length: 2 }),
+  zipCode: varchar("zipCode", { length: 10 }),
+  notes: text("notes"),
   loginMethod: varchar("loginMethod", { length: 64 }),
   passwordHash: varchar("passwordHash", { length: 255 }),
   role: mysqlEnum("role", ["cliente", "corretor", "administrativo"]).default("cliente").notNull(),

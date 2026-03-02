@@ -262,7 +262,10 @@ export default function MeusImoveis() {
                 Novo Imóvel
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogContent
+              className="max-w-3xl max-h-[90vh] overflow-y-auto"
+              onOpenAutoFocus={event => event.preventDefault()}
+            >
               <DialogHeader>
                 <DialogTitle>{editingImovel ? "Editar Imóvel" : "Cadastrar Novo Imóvel"}</DialogTitle>
                 <DialogDescription>

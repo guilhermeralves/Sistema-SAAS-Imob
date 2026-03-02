@@ -48,7 +48,25 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   };
   const updateSet: Record<string, unknown> = {};
 
-  const textFields = ["name", "email", "loginMethod", "passwordHash"] as const;
+  const textFields = [
+    "name",
+    "email",
+    "cpf",
+    "phone",
+    "profession",
+    "maritalStatus",
+    "rg",
+    "nationality",
+    "address",
+    "neighborhood",
+    "addressNumber",
+    "city",
+    "state",
+    "zipCode",
+    "notes",
+    "loginMethod",
+    "passwordHash",
+  ] as const;
   type TextField = (typeof textFields)[number];
 
   const assignNullable = (field: TextField) => {
@@ -79,6 +97,19 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     updateSet.isActive = user.isActive;
   } else {
     values.isActive = 1;
+  }
+
+  if (user.birthDate !== undefined) {
+    values.birthDate = user.birthDate;
+    updateSet.birthDate = user.birthDate;
+  }
+  if (user.grossMonthlyIncome !== undefined) {
+    values.grossMonthlyIncome = user.grossMonthlyIncome;
+    updateSet.grossMonthlyIncome = user.grossMonthlyIncome;
+  }
+  if (user.householdIncome !== undefined) {
+    values.householdIncome = user.householdIncome;
+    updateSet.householdIncome = user.householdIncome;
   }
 
   if (!values.lastSignedIn) {
@@ -158,6 +189,22 @@ export async function getUserByEmail(email: string) {
 
   if (result.length > 1) {
     throw new Error("Multiple users found for the same email");
+  }
+
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getUserByCpf(cpf: string) {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get user: database not available");
+    return undefined;
+  }
+
+  const result = await db.select().from(users).where(eq(users.cpf, cpf)).limit(2);
+
+  if (result.length > 1) {
+    throw new Error("Multiple users found for the same cpf");
   }
 
   return result.length > 0 ? result[0] : undefined;

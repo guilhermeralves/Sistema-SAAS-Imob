@@ -29,6 +29,34 @@
       "when": 1772457121421,
       "tag": "0003_absent_sandman",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1772485200000,
+      "tag": "0004_user_profiles_and_cpf",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1772469543897,
+      "tag": "0005_volatile_christian_walker",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1772488800000,
+      "tag": "0006_user_address_details",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1772471118837,
+      "tag": "0007_new_king_cobra",
+      "breakpoints": true
     }
   ]
 }

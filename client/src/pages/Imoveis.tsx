@@ -236,7 +236,10 @@ export default function Imoveis() {
             </DialogTrigger>
 
             {/* Conteúdo do dialog */}
-            <DialogContent className="w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+            <DialogContent
+              className="w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6"
+              onOpenAutoFocus={event => event.preventDefault()}
+            >
               <DialogHeader>
                 <DialogTitle>Cadastrar Novo Imóvel</DialogTitle>
                 <DialogDescription>

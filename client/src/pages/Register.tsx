@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { getPostLoginPath, getRedirectParam } from "@/lib/auth-routing";
+import { getPostLoginPath } from "@/lib/auth-routing";
 import { UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -14,17 +14,17 @@ import { Link, useLocation } from "wouter";
 
 export default function Register() {
   const [, setLocation] = useLocation();
-  const redirectPath = getRedirectParam();
   const utils = trpc.useUtils();
   const { user, loading, isAuthenticated } = useAuth();
   const [name, setName] = useState("");
+  const [cpf, setCpf] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   const register = trpc.auth.register.useMutation({
     onSuccess: async userData => {
       await utils.auth.me.invalidate();
-      setLocation(getPostLoginPath(userData, redirectPath));
+      setLocation(getPostLoginPath(userData));
     },
     onError: error => {
       toast.error(error.message || "Não foi possível cadastrar");
@@ -33,14 +33,15 @@ export default function Register() {
 
   useEffect(() => {
     if (!loading && isAuthenticated && user) {
-      setLocation(getPostLoginPath(user, redirectPath));
+      setLocation(getPostLoginPath(user));
     }
-  }, [isAuthenticated, loading, redirectPath, setLocation, user]);
+  }, [isAuthenticated, loading, setLocation, user]);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     register.mutate({
-      name: name || undefined,
+      name,
+      cpf,
       email,
       password,
     });
@@ -67,6 +68,16 @@ export default function Register() {
                   id="name"
                   value={name}
                   onChange={event => setName(event.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="cpf">CPF</Label>
+                <Input
+                  id="cpf"
+                  value={cpf}
+                  onChange={event => setCpf(event.target.value)}
+                  required
                 />
               </div>
               <div className="space-y-2">
@@ -97,7 +108,7 @@ export default function Register() {
 
             <p className="mt-4 text-sm text-muted-foreground">
               Já possui conta?{" "}
-              <Link href={getLoginUrl(redirectPath)}>
+              <Link href={getLoginUrl()}>
                 <a className="text-primary underline">Entrar</a>
               </Link>
             </p>

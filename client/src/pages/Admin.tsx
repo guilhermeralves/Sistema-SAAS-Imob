@@ -2,7 +2,6 @@ import { useState } from "react";
 import Layout from "@/components/Layout";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import type { AppRole } from "@shared/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -21,7 +20,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
-import { Users, Building2, FileText, TrendingUp, User, Shield } from "lucide-react";
+import { Building2, FileText, TrendingUp, User, Shield } from "lucide-react";
 import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
 import { Link } from "wouter";
@@ -39,7 +38,7 @@ function formatDate(date: Date | string) {
 export default function Admin() {
   const { user, loading, isAuthenticated } = useAuth();
 
-  const { data: users, isLoading: loadingUsers, refetch: refetchUsers } = trpc.admin.users.useQuery(
+  const { data: users } = trpc.admin.users.useQuery(
     undefined,
     { enabled: isAuthenticated && user?.role === "administrativo" }
   );
@@ -59,16 +58,6 @@ export default function Admin() {
     { enabled: isAuthenticated && user?.role === "administrativo" }
   );
 
-  const updateUserRole = trpc.admin.updateUserRole.useMutation({
-    onSuccess: () => {
-      toast.success("Role atualizado com sucesso!");
-      refetchUsers();
-    },
-    onError: () => {
-      toast.error("Erro ao atualizar role");
-    },
-  });
-
   const assignLead = trpc.leads.assign.useMutation({
     onSuccess: () => {
       toast.success("Lead atribuído com sucesso!");
@@ -79,12 +68,6 @@ export default function Admin() {
   });
 
   const corretoresAtivos = users?.filter((u) => u.role === "corretor" && u.isActive === 1) || [];
-
-  const handleRoleChange = (userId: number, newRole: AppRole) => {
-    if (confirm(`Tem certeza que deseja alterar o role deste usuário para ${newRole}?`)) {
-      updateUserRole.mutate({ id: userId, role: newRole });
-    }
-  };
 
   if (loading) {
     return (
@@ -140,15 +123,13 @@ export default function Admin() {
   const leadsFechados = leads?.filter((l) => l.status === "fechado").length || 0;
   const totalContratos = contracts?.length || 0;
   const contratosAtivos = contracts?.filter((c) => c.status === "ativo").length || 0;
-  const totalUsuarios = users?.length || 0;
-
   return (
     <Layout>
       <div className="container py-8">
         <div className="mb-8">
           <h1 className="text-4xl font-bold mb-2">Painel Administrativo</h1>
           <p className="text-muted-foreground">
-            Gerencie usuários, imóveis e visualize métricas do sistema
+            Gerencie imóveis, leads e contratos do sistema
           </p>
           <div className="mt-4">
             <Link href="/admin/users">
@@ -160,20 +141,7 @@ export default function Admin() {
         </div>
 
         {/* Métricas */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Total de Usuários</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{totalUsuarios}</div>
-              <p className="text-xs text-muted-foreground">
-                Clientes, corretores e admins
-              </p>
-            </CardContent>
-          </Card>
-
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Imóveis</CardTitle>
@@ -215,12 +183,8 @@ export default function Admin() {
         </div>
 
         {/* Tabs de Gestão */}
-        <Tabs defaultValue="usuarios" className="space-y-6">
+        <Tabs defaultValue="imoveis" className="space-y-6">
           <TabsList>
-            <TabsTrigger value="usuarios" className="gap-2">
-              <Users className="h-4 w-4" />
-              Usuários
-            </TabsTrigger>
             <TabsTrigger value="imoveis" className="gap-2">
               <Building2 className="h-4 w-4" />
               Imóveis
@@ -234,75 +198,6 @@ export default function Admin() {
               Contratos
             </TabsTrigger>
           </TabsList>
-
-          {/* Gestão de Usuários */}
-          <TabsContent value="usuarios">
-            <Card>
-              <CardHeader>
-                <CardTitle>Gerenciar Usuários</CardTitle>
-                <CardDescription>
-                  Visualize e gerencie os usuários do sistema
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {loadingUsers ? (
-                  <div className="space-y-3">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="h-16 bg-muted rounded animate-pulse" />
-                    ))}
-                  </div>
-                ) : users && users.length > 0 ? (
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Nome</TableHead>
-                          <TableHead>E-mail</TableHead>
-                          <TableHead>Role</TableHead>
-                          <TableHead>Cadastro</TableHead>
-                          <TableHead>Ações</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {users.map((u) => (
-                          <TableRow key={u.id}>
-                            <TableCell className="font-medium">{u.name || "—"}</TableCell>
-                            <TableCell>{u.email || "—"}</TableCell>
-                            <TableCell>
-                              <span className="px-2 py-1 rounded-full text-xs font-medium capitalize bg-primary/10 text-primary">
-                                {u.role}
-                              </span>
-                            </TableCell>
-                            <TableCell>{formatDate(u.createdAt)}</TableCell>
-                            <TableCell>
-                              <Select
-                                value={u.role}
-                                onValueChange={(value) => handleRoleChange(u.id, value as AppRole)}
-                              >
-                                <SelectTrigger className="w-40">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="cliente">Cliente</SelectItem>
-                                  <SelectItem value="corretor">Corretor</SelectItem>
-                                  <SelectItem value="administrativo">Administrativo</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ) : (
-                  <div className="text-center py-12">
-                    <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                    <p className="text-muted-foreground">Nenhum usuário encontrado</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
 
           {/* Gestão de Imóveis */}
           <TabsContent value="imoveis">

@@ -17,6 +17,7 @@ import CRM from "./pages/CRM";
 import MeusImoveis from "./pages/MeusImoveis";
 import Admin from "./pages/Admin";
 import AdminUsers from "./pages/AdminUsers";
+import AdminUserDetails from "./pages/AdminUserDetails";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -40,6 +41,9 @@ function Router() {
       </Route>
       <Route path={"/admin/users"}>
         <ProtectedRoute component={AdminUsers} roles={["administrativo"]} />
+      </Route>
+      <Route path={"/admin/users/:id"}>
+        <ProtectedRoute component={AdminUserDetails} roles={["administrativo"]} />
       </Route>
       <Route path={"/admin"}>
         <ProtectedRoute component={Admin} roles={["administrativo"]} />

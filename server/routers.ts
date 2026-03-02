@@ -1,8 +1,13 @@
 import { APP_ROLES } from "@shared/auth";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import {
+  CONTRACT_REQUIRED_USER_FIELDS,
+  USER_PROFILE_MARITAL_STATUSES,
+} from "@shared/user-profile";
 import { TRPCError } from "@trpc/server";
 import { nanoid } from "nanoid";
 import { z } from "zod";
+import { normalizeCpf, isValidCpf } from "./_core/cpf";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { hashPassword, verifyPassword } from "./_core/passwords";
 import { sdk } from "./_core/sdk";
@@ -20,10 +25,17 @@ const idSchema = z.object({
   id: z.number().int().positive(),
 });
 
+const cpfSchema = z
+  .string()
+  .trim()
+  .refine(isValidCpf, "CPF inválido")
+  .transform(normalizeCpf);
+
 const registerSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
   password: z.string().min(8).max(72),
-  name: z.string().trim().min(2).max(120).optional(),
+  name: z.string().trim().min(2).max(120),
+  cpf: cpfSchema,
 });
 
 const loginSchema = z.object({
@@ -34,8 +46,9 @@ const loginSchema = z.object({
 const adminCreateUserSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
   password: z.string().min(8).max(72),
-  name: z.string().trim().min(2).max(120).optional(),
-  role: z.enum(["corretor", "administrativo"]),
+  name: z.string().trim().min(2).max(120),
+  cpf: cpfSchema,
+  role: z.enum(APP_ROLES),
 });
 
 const adminUpdateUserSchema = z.object({
@@ -44,6 +57,30 @@ const adminUpdateUserSchema = z.object({
   role: z.enum(APP_ROLES).optional(),
   password: z.string().min(8).max(72).optional(),
   isActive: z.number().int().min(0).max(1).optional(),
+});
+
+const adminUserDetailsSchema = z.object({
+  id: z.number().int().positive(),
+  name: z.string().trim().min(2).max(120),
+  email: z.string().trim().toLowerCase().email(),
+  cpf: cpfSchema,
+  role: z.enum(APP_ROLES),
+  isActive: z.number().int().min(0).max(1),
+  phone: z.string().trim().max(20).optional(),
+  birthDate: z.string().nullable().optional(),
+  profession: z.string().trim().max(120).optional(),
+  grossMonthlyIncome: z.number().int().min(0).nullable().optional(),
+  maritalStatus: z.enum(USER_PROFILE_MARITAL_STATUSES).nullable().optional(),
+  householdIncome: z.number().int().min(0).nullable().optional(),
+  rg: z.string().trim().max(32).optional(),
+  nationality: z.string().trim().max(80).optional(),
+  address: z.string().trim().max(255).optional(),
+  neighborhood: z.string().trim().max(100).optional(),
+  addressNumber: z.string().trim().max(20).optional(),
+  city: z.string().trim().max(100).optional(),
+  state: z.string().trim().max(2).optional(),
+  zipCode: z.string().trim().max(10).optional(),
+  notes: z.string().trim().max(2000).optional(),
 });
 
 const assignLeadSchema = z.object({
@@ -88,22 +125,60 @@ async function ensureLeadAccess(
   return lead;
 }
 
+async function ensureUniqueUserIdentity(
+  email: string,
+  cpf: string,
+  currentUserId?: number
+) {
+  const { getUserByCpf, getUserByEmail } = await import("./db");
+
+  const userByEmail = await getUserByEmail(email);
+  if (userByEmail && userByEmail.id !== currentUserId) {
+    throw new TRPCError({ code: "CONFLICT", message: "E-mail já cadastrado" });
+  }
+
+  const userByCpf = await getUserByCpf(cpf);
+  if (userByCpf && userByCpf.id !== currentUserId) {
+    throw new TRPCError({ code: "CONFLICT", message: "CPF já cadastrado" });
+  }
+}
+
+async function assertContractProfileIsComplete(userId: number) {
+  const { getUserById } = await import("./db");
+  const user = await getUserById(userId);
+
+  if (!user) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado" });
+  }
+
+  const missingFields = CONTRACT_REQUIRED_USER_FIELDS.filter(field => {
+    const value = user[field];
+    return value === null || value === undefined || value === "";
+  });
+
+  if (missingFields.length > 0) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "O cliente precisa completar o perfil antes de iniciar um contrato: " +
+        missingFields.join(", "),
+    });
+  }
+}
+
 export const appRouter = router({
   system: systemRouter,
   auth: router({
     register: publicProcedure.input(registerSchema).mutation(async ({ ctx, input }) => {
-      const { createUser, getUserByEmail } = await import("./db");
-      const existingUser = await getUserByEmail(input.email);
-
-      if (existingUser) {
-        throw new TRPCError({ code: "CONFLICT", message: "E-mail já cadastrado" });
-      }
+      const { createUser } = await import("./db");
+      await ensureUniqueUserIdentity(input.email, input.cpf);
 
       const passwordHash = await hashPassword(input.password);
       const createdUser = await createUser({
         openId: `local:${nanoid()}`,
-        name: input.name?.trim() || null,
+        name: input.name.trim(),
         email: input.email,
+        cpf: input.cpf,
         loginMethod: "password",
         passwordHash,
         role: "cliente",
@@ -157,9 +232,7 @@ export const appRouter = router({
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return {
-        success: true,
-      } as const;
+      return { success: true } as const;
     }),
   }),
 
@@ -304,6 +377,7 @@ export const appRouter = router({
       return await getAllContracts();
     }),
     create: adminProcedure.input(z.any()).mutation(async ({ input }) => {
+      await assertContractProfileIsComplete((input as any).idCliente);
       const { createContract } = await import("./db");
       return await createContract(input as any);
     }),
@@ -330,19 +404,26 @@ export const appRouter = router({
       const { getAllUsers } = await import("./db");
       return toSafeUsers(await getAllUsers());
     }),
-    createUser: adminProcedure.input(adminCreateUserSchema).mutation(async ({ input }) => {
-      const { createUser, getUserByEmail } = await import("./db");
-      const existingUser = await getUserByEmail(input.email);
+    userById: adminProcedure.input(idSchema).query(async ({ input }) => {
+      const { getUserById } = await import("./db");
+      const user = await getUserById(input.id);
 
-      if (existingUser) {
-        throw new TRPCError({ code: "CONFLICT", message: "E-mail já cadastrado" });
+      if (!user) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
       }
+
+      return toSafeUser(user);
+    }),
+    createUser: adminProcedure.input(adminCreateUserSchema).mutation(async ({ input }) => {
+      const { createUser } = await import("./db");
+      await ensureUniqueUserIdentity(input.email, input.cpf);
 
       const passwordHash = await hashPassword(input.password);
       const createdUser = await createUser({
         openId: `local:${nanoid()}`,
-        name: input.name?.trim() || null,
+        name: input.name.trim(),
         email: input.email,
+        cpf: input.cpf,
         loginMethod: "password",
         passwordHash,
         role: input.role,
@@ -388,6 +469,48 @@ export const appRouter = router({
 
       return toSafeUser(updatedUser);
     }),
+    updateUserDetails: adminProcedure
+      .input(adminUserDetailsSchema)
+      .mutation(async ({ input }) => {
+        const { getUserById, updateUser } = await import("./db");
+        const user = await getUserById(input.id);
+
+        if (!user) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
+        }
+
+        await ensureUniqueUserIdentity(input.email, input.cpf, input.id);
+
+        await updateUser(input.id, {
+          name: input.name.trim(),
+          email: input.email,
+          cpf: input.cpf,
+          role: input.role,
+          isActive: input.isActive,
+          phone: input.phone?.trim() || null,
+          birthDate: input.birthDate ? new Date(`${input.birthDate}T00:00:00`) : null,
+          profession: input.profession?.trim() || null,
+          grossMonthlyIncome: input.grossMonthlyIncome ?? null,
+          maritalStatus: input.maritalStatus ?? null,
+          householdIncome: input.householdIncome ?? null,
+          rg: input.rg?.trim() || null,
+          nationality: input.nationality?.trim() || null,
+          address: input.address?.trim() || null,
+          neighborhood: input.neighborhood?.trim() || null,
+          addressNumber: input.addressNumber?.trim() || null,
+          city: input.city?.trim() || null,
+          state: input.state?.trim() || null,
+          zipCode: input.zipCode?.trim() || null,
+          notes: input.notes?.trim() || null,
+        });
+
+        const updatedUser = await getUserById(input.id);
+        if (!updatedUser) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
+        }
+
+        return toSafeUser(updatedUser);
+      }),
     updateUserRole: adminProcedure
       .input(
         z.object({

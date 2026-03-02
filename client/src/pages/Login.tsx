@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getRegisterUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { getPostLoginPath, getRedirectParam } from "@/lib/auth-routing";
+import { getPostLoginPath } from "@/lib/auth-routing";
 import { LogIn } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -14,7 +14,6 @@ import { Link, useLocation } from "wouter";
 
 export default function Login() {
   const [, setLocation] = useLocation();
-  const redirectPath = getRedirectParam();
   const utils = trpc.useUtils();
   const { user, loading, isAuthenticated } = useAuth();
   const [email, setEmail] = useState("");
@@ -23,7 +22,7 @@ export default function Login() {
   const login = trpc.auth.login.useMutation({
     onSuccess: async userData => {
       await utils.auth.me.invalidate();
-      setLocation(getPostLoginPath(userData, redirectPath));
+      setLocation(getPostLoginPath(userData));
     },
     onError: error => {
       toast.error(error.message || "Não foi possível entrar");
@@ -32,9 +31,9 @@ export default function Login() {
 
   useEffect(() => {
     if (!loading && isAuthenticated && user) {
-      setLocation(getPostLoginPath(user, redirectPath));
+      setLocation(getPostLoginPath(user));
     }
-  }, [isAuthenticated, loading, redirectPath, setLocation, user]);
+  }, [isAuthenticated, loading, setLocation, user]);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -87,7 +86,7 @@ export default function Login() {
 
             <p className="mt-4 text-sm text-muted-foreground">
               Ainda não tem conta?{" "}
-              <Link href={getRegisterUrl(redirectPath)}>
+              <Link href={getRegisterUrl()}>
                 <a className="text-primary underline">Cadastre-se</a>
               </Link>
             </p>
