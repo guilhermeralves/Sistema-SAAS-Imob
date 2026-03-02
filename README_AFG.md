@@ -151,7 +151,7 @@ Isso criará:
 - **Frontend**: React 19, TypeScript, Tailwind CSS 4, shadcn/ui
 - **Backend**: Express, tRPC 11
 - **Banco de Dados**: MySQL/TiDB com Drizzle ORM
-- **Autenticação**: Manus OAuth
+- **Autenticação**: e-mail/senha com sessão por cookie
 - **Validação**: Zod (via tRPC)
 
 ## Responsividade

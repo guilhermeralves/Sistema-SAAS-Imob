@@ -1,9 +1,12 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import ProtectedRoute from "@/components/ProtectedRoute";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
 import Home from "./pages/Home";
 import Imoveis from "./pages/Imoveis";
 import Servicos from "./pages/Servicos";
@@ -13,6 +16,7 @@ import AreaCliente from "./pages/AreaCliente";
 import CRM from "./pages/CRM";
 import MeusImoveis from "./pages/MeusImoveis";
 import Admin from "./pages/Admin";
+import AdminUsers from "./pages/AdminUsers";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -23,10 +27,23 @@ function Router() {
       <Route path={"/imoveis/:id"} component={ImovelDetalhes} />
       <Route path={"/servicos"} component={Servicos} />
       <Route path={"/contato"} component={Contato} />
-      <Route path={"/area-cliente"} component={AreaCliente} />
-      <Route path={"/crm"} component={CRM} />
-      <Route path={"/meus-imoveis"} component={MeusImoveis} />
-      <Route path={"/admin"} component={Admin} />
+      <Route path={"/login"} component={Login} />
+      <Route path={"/register"} component={Register} />
+      <Route path={"/area-cliente"}>
+        <ProtectedRoute component={AreaCliente} roles={["cliente"]} />
+      </Route>
+      <Route path={"/crm"}>
+        <ProtectedRoute component={CRM} roles={["corretor", "administrativo"]} />
+      </Route>
+      <Route path={"/meus-imoveis"}>
+        <ProtectedRoute component={MeusImoveis} roles={["corretor", "administrativo"]} />
+      </Route>
+      <Route path={"/admin/users"}>
+        <ProtectedRoute component={AdminUsers} roles={["administrativo"]} />
+      </Route>
+      <Route path={"/admin"}>
+        <ProtectedRoute component={Admin} roles={["administrativo"]} />
+      </Route>
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

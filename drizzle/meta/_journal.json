@@ -15,6 +15,20 @@
       "when": 1763321447188,
       "tag": "0001_dazzling_ricochet",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1772470800000,
+      "tag": "0002_local_auth_rbac",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1772457121421,
+      "tag": "0003_absent_sandman",
+      "breakpoints": true
     }
   ]
 }

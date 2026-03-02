@@ -2,6 +2,7 @@ import { useState } from "react";
 import Layout from "@/components/Layout";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import type { AppRole } from "@shared/auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -23,6 +24,7 @@ import { trpc } from "@/lib/trpc";
 import { Users, Building2, FileText, TrendingUp, User, Shield } from "lucide-react";
 import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
+import { Link } from "wouter";
 
 /**
  * Painel Administrativo
@@ -67,7 +69,18 @@ export default function Admin() {
     },
   });
 
-  const handleRoleChange = (userId: number, newRole: string) => {
+  const assignLead = trpc.leads.assign.useMutation({
+    onSuccess: () => {
+      toast.success("Lead atribuído com sucesso!");
+    },
+    onError: () => {
+      toast.error("Erro ao atribuir lead");
+    },
+  });
+
+  const corretoresAtivos = users?.filter((u) => u.role === "corretor" && u.isActive === 1) || [];
+
+  const handleRoleChange = (userId: number, newRole: AppRole) => {
     if (confirm(`Tem certeza que deseja alterar o role deste usuário para ${newRole}?`)) {
       updateUserRole.mutate({ id: userId, role: newRole });
     }
@@ -137,6 +150,13 @@ export default function Admin() {
           <p className="text-muted-foreground">
             Gerencie usuários, imóveis e visualize métricas do sistema
           </p>
+          <div className="mt-4">
+            <Link href="/admin/users">
+              <a className="text-sm font-medium text-primary underline">
+                Abrir painel completo de usuários
+              </a>
+            </Link>
+          </div>
         </div>
 
         {/* Métricas */}
@@ -257,7 +277,7 @@ export default function Admin() {
                             <TableCell>
                               <Select
                                 value={u.role}
-                                onValueChange={(value) => handleRoleChange(u.id, value)}
+                                onValueChange={(value) => handleRoleChange(u.id, value as AppRole)}
                               >
                                 <SelectTrigger className="w-40">
                                   <SelectValue />
@@ -373,6 +393,7 @@ export default function Admin() {
                           <TableHead>Telefone</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead>Origem</TableHead>
+                          <TableHead>Responsável</TableHead>
                           <TableHead>Cadastro</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -388,6 +409,29 @@ export default function Admin() {
                               </span>
                             </TableCell>
                             <TableCell className="capitalize">{l.origem || "—"}</TableCell>
+                            <TableCell>
+                              <Select
+                                value={l.idResponsavel ? String(l.idResponsavel) : "unassigned"}
+                                onValueChange={(value) =>
+                                  assignLead.mutate({
+                                    leadId: l.id,
+                                    userId: value === "unassigned" ? null : Number(value),
+                                  })
+                                }
+                              >
+                                <SelectTrigger className="w-44">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="unassigned">Não atribuído</SelectItem>
+                                  {corretoresAtivos.map((corretor) => (
+                                    <SelectItem key={corretor.id} value={String(corretor.id)}>
+                                      {corretor.name || corretor.email || `Corretor #${corretor.id}`}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
                             <TableCell>{formatDate(l.createdAt)}</TableCell>
                           </TableRow>
                         ))}

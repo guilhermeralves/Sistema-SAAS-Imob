@@ -6,6 +6,7 @@ import os from 'os';
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
+import { ensureBootstrapAdmin } from "./bootstrapAdmin";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 
@@ -29,6 +30,8 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 async function startServer() {
+  await ensureBootstrapAdmin();
+
   const app = express();
   const server = createServer(app);
   // Configure body parser with larger size limit for file uploads

@@ -1,12 +1,158 @@
-import { COOKIE_NAME } from "@shared/const";
+import { APP_ROLES } from "@shared/auth";
+import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { TRPCError } from "@trpc/server";
+import { nanoid } from "nanoid";
+import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { hashPassword, verifyPassword } from "./_core/passwords";
+import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import {
+  adminProcedure,
+  clientProcedure,
+  publicProcedure,
+  router,
+  staffProcedure,
+} from "./_core/trpc";
+import { toSafeUser, toSafeUsers } from "./_core/users";
+
+const idSchema = z.object({
+  id: z.number().int().positive(),
+});
+
+const registerSchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+  password: z.string().min(8).max(72),
+  name: z.string().trim().min(2).max(120).optional(),
+});
+
+const loginSchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+  password: z.string().min(8).max(72),
+});
+
+const adminCreateUserSchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+  password: z.string().min(8).max(72),
+  name: z.string().trim().min(2).max(120).optional(),
+  role: z.enum(["corretor", "administrativo"]),
+});
+
+const adminUpdateUserSchema = z.object({
+  id: z.number().int().positive(),
+  name: z.string().trim().min(2).max(120).optional(),
+  role: z.enum(APP_ROLES).optional(),
+  password: z.string().min(8).max(72).optional(),
+  isActive: z.number().int().min(0).max(1).optional(),
+});
+
+const assignLeadSchema = z.object({
+  leadId: z.number().int().positive(),
+  userId: z.number().int().positive().nullable(),
+});
+
+function setSessionCookie(ctx: { req: any; res: any }, sessionToken: string) {
+  const cookieOptions = getSessionCookieOptions(ctx.req);
+  ctx.res.cookie(COOKIE_NAME, sessionToken, {
+    ...cookieOptions,
+    maxAge: ONE_YEAR_MS,
+  });
+}
+
+async function ensurePropertyExists(id: number) {
+  const { getPropertyById } = await import("./db");
+  const property = await getPropertyById(id);
+
+  if (!property) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Imóvel não encontrado" });
+  }
+
+  return property;
+}
+
+async function ensureLeadAccess(
+  user: { id: number; role: "cliente" | "corretor" | "administrativo" },
+  leadId: number
+) {
+  const { getLeadById } = await import("./db");
+  const lead = await getLeadById(leadId);
+
+  if (!lead) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Lead não encontrado" });
+  }
+
+  if (user.role === "corretor" && lead.idResponsavel !== user.id) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Você não tem acesso a este lead" });
+  }
+
+  return lead;
+}
 
 export const appRouter = router({
-    // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   auth: router({
+    register: publicProcedure.input(registerSchema).mutation(async ({ ctx, input }) => {
+      const { createUser, getUserByEmail } = await import("./db");
+      const existingUser = await getUserByEmail(input.email);
+
+      if (existingUser) {
+        throw new TRPCError({ code: "CONFLICT", message: "E-mail já cadastrado" });
+      }
+
+      const passwordHash = await hashPassword(input.password);
+      const createdUser = await createUser({
+        openId: `local:${nanoid()}`,
+        name: input.name?.trim() || null,
+        email: input.email,
+        loginMethod: "password",
+        passwordHash,
+        role: "cliente",
+        isActive: 1,
+        lastSignedIn: new Date(),
+      });
+
+      const sessionToken = await sdk.createSessionToken(createdUser.openId, {
+        name: createdUser.name || createdUser.email || createdUser.openId,
+        provider: "local",
+        userId: createdUser.id,
+      });
+
+      setSessionCookie(ctx, sessionToken);
+
+      return toSafeUser(createdUser);
+    }),
+    login: publicProcedure.input(loginSchema).mutation(async ({ ctx, input }) => {
+      const { getUserByEmail, upsertUser } = await import("./db");
+      const user = await getUserByEmail(input.email);
+
+      if (!user || !user.passwordHash) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "E-mail ou senha inválidos" });
+      }
+
+      if (user.isActive !== 1) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Usuário desativado" });
+      }
+
+      const isPasswordValid = await verifyPassword(input.password, user.passwordHash);
+      if (!isPasswordValid) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "E-mail ou senha inválidos" });
+      }
+
+      await upsertUser({
+        openId: user.openId,
+        lastSignedIn: new Date(),
+      });
+
+      const sessionToken = await sdk.createSessionToken(user.openId, {
+        name: user.name || user.email || user.openId,
+        provider: "local",
+        userId: user.id,
+      });
+
+      setSessionCookie(ctx, sessionToken);
+
+      return toSafeUser(user);
+    }),
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
@@ -17,18 +163,12 @@ export const appRouter = router({
     }),
   }),
 
-  // ============= PROPERTIES ROUTER =============
   properties: router({
     list: publicProcedure.query(async () => {
       const { getAllProperties } = await import("./db");
       return await getAllProperties();
     }),
-    getById: publicProcedure.input((val: unknown) => {
-      if (typeof val === "object" && val !== null && "id" in val && typeof val.id === "number") {
-        return val as { id: number };
-      }
-      throw new Error("Invalid input");
-    }).query(async ({ input }) => {
+    getById: publicProcedure.input(idSchema).query(async ({ input }) => {
       const { getPropertyById } = await import("./db");
       return await getPropertyById(input.id);
     }),
@@ -36,166 +176,229 @@ export const appRouter = router({
       const { getDestacados } = await import("./db");
       return await getDestacados();
     }),
-    myProperties: protectedProcedure.query(async ({ ctx }) => {
-      const { getPropertiesByCorretor } = await import("./db");
+    myProperties: staffProcedure.query(async ({ ctx }) => {
+      const { getAllProperties, getPropertiesByCorretor } = await import("./db");
+      if (ctx.user.role === "administrativo") {
+        return await getAllProperties();
+      }
       return await getPropertiesByCorretor(ctx.user.id);
     }),
-    create: protectedProcedure.input((val: unknown) => val).mutation(async ({ ctx, input }) => {
-      if (ctx.user.role !== "corretor" && ctx.user.role !== "administrativo") {
-        throw new Error("Apenas corretores e administradores podem criar imóveis");
-      }
+    create: staffProcedure.input(z.any()).mutation(async ({ ctx, input }) => {
       const { createProperty } = await import("./db");
-      return await createProperty({ ...input as any, idCorretor: ctx.user.id });
+      const payload = { ...(input as any) };
+
+      payload.idCorretor =
+        ctx.user.role === "administrativo" && typeof payload.idCorretor === "number"
+          ? payload.idCorretor
+          : ctx.user.id;
+
+      return await createProperty(payload);
     }),
-    update: protectedProcedure.input((val: unknown) => val).mutation(async ({ ctx, input }) => {
+    update: staffProcedure.input(z.any()).mutation(async ({ ctx, input }) => {
+      const { updateProperty } = await import("./db");
       const { id, ...data } = input as any;
-      const { getPropertyById, updateProperty } = await import("./db");
-      const property = await getPropertyById(id);
-      if (!property) throw new Error("Imóvel não encontrado");
+      const property = await ensurePropertyExists(id);
+
       if (ctx.user.role === "corretor" && property.idCorretor !== ctx.user.id) {
-        throw new Error("Você não tem permissão para editar este imóvel");
+        throw new TRPCError({ code: "FORBIDDEN", message: "Você não tem permissão para editar este imóvel" });
       }
+
+      if (ctx.user.role === "corretor") {
+        data.idCorretor = ctx.user.id;
+      }
+
       return await updateProperty(id, data);
     }),
-    delete: protectedProcedure.input((val: unknown) => {
-      if (typeof val === "object" && val !== null && "id" in val && typeof val.id === "number") {
-        return val as { id: number };
-      }
-      throw new Error("Invalid input");
-    }).mutation(async ({ ctx, input }) => {
-      const { getPropertyById, deleteProperty } = await import("./db");
-      const property = await getPropertyById(input.id);
-      if (!property) throw new Error("Imóvel não encontrado");
-      if (ctx.user.role === "corretor" && property.idCorretor !== ctx.user.id) {
-        throw new Error("Você não tem permissão para deletar este imóvel");
-      }
+    delete: adminProcedure.input(idSchema).mutation(async ({ input }) => {
+      const { deleteProperty } = await import("./db");
+      await ensurePropertyExists(input.id);
       return await deleteProperty(input.id);
     }),
   }),
 
-  // ============= LEADS ROUTER =============
   leads: router({
-    list: protectedProcedure.query(async ({ ctx }) => {
+    list: staffProcedure.query(async ({ ctx }) => {
       const { getAllLeads, getLeadsByResponsavel } = await import("./db");
       if (ctx.user.role === "administrativo") {
         return await getAllLeads();
       }
       return await getLeadsByResponsavel(ctx.user.id);
     }),
-    getById: protectedProcedure.input((val: unknown) => {
-      if (typeof val === "object" && val !== null && "id" in val && typeof val.id === "number") {
-        return val as { id: number };
-      }
-      throw new Error("Invalid input");
-    }).query(async ({ input }) => {
-      const { getLeadById } = await import("./db");
-      return await getLeadById(input.id);
+    getById: staffProcedure.input(idSchema).query(async ({ ctx, input }) => {
+      return await ensureLeadAccess(ctx.user, input.id);
     }),
-    create: publicProcedure.input((val: unknown) => val).mutation(async ({ input }) => {
+    create: publicProcedure.input(z.any()).mutation(async ({ ctx, input }) => {
       const { createLead } = await import("./db");
-      return await createLead(input as any);
+      const payload = { ...(input as any) };
+
+      if (ctx.user && (ctx.user.role === "corretor" || ctx.user.role === "administrativo")) {
+        payload.idResponsavel = ctx.user.id;
+      } else {
+        delete payload.idResponsavel;
+      }
+
+      return await createLead(payload);
     }),
-    update: protectedProcedure.input((val: unknown) => val).mutation(async ({ input }) => {
-      const { id, ...data } = input as any;
+    update: staffProcedure.input(z.any()).mutation(async ({ ctx, input }) => {
       const { updateLead } = await import("./db");
+      const { id, ...data } = input as any;
+      await ensureLeadAccess(ctx.user, id);
+
+      if (ctx.user.role !== "administrativo") {
+        delete data.idResponsavel;
+      }
+
       return await updateLead(id, data);
     }),
-    delete: protectedProcedure.input((val: unknown) => {
-      if (typeof val === "object" && val !== null && "id" in val && typeof val.id === "number") {
-        return val as { id: number };
+    assign: adminProcedure.input(assignLeadSchema).mutation(async ({ input }) => {
+      const { getUserById, updateLead } = await import("./db");
+      await ensureLeadAccess({ id: 0, role: "administrativo" }, input.leadId);
+
+      if (input.userId !== null) {
+        const assignedUser = await getUserById(input.userId);
+        if (!assignedUser || assignedUser.role !== "corretor" || assignedUser.isActive !== 1) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Selecione um corretor ativo" });
+        }
       }
-      throw new Error("Invalid input");
-    }).mutation(async ({ input }) => {
+
+      return await updateLead(input.leadId, { idResponsavel: input.userId });
+    }),
+    delete: adminProcedure.input(idSchema).mutation(async ({ input }) => {
       const { deleteLead } = await import("./db");
+      await ensureLeadAccess({ id: 0, role: "administrativo" }, input.id);
       return await deleteLead(input.id);
     }),
-    getNotes: protectedProcedure.input((val: unknown) => {
-      if (typeof val === "object" && val !== null && "idLead" in val && typeof val.idLead === "number") {
-        return val as { idLead: number };
-      }
-      throw new Error("Invalid input");
-    }).query(async ({ input }) => {
-      const { getLeadNotes } = await import("./db");
-      return await getLeadNotes(input.idLead);
-    }),
-    addNote: protectedProcedure.input((val: unknown) => val).mutation(async ({ ctx, input }) => {
+    getNotes: staffProcedure
+      .input(z.object({ idLead: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        const { getLeadNotes } = await import("./db");
+        await ensureLeadAccess(ctx.user, input.idLead);
+        return await getLeadNotes(input.idLead);
+      }),
+    addNote: staffProcedure.input(z.any()).mutation(async ({ ctx, input }) => {
       const { createLeadNote } = await import("./db");
-      return await createLeadNote({ ...input as any, idUsuario: ctx.user.id });
+      await ensureLeadAccess(ctx.user, (input as any).idLead);
+      return await createLeadNote({ ...(input as any), idUsuario: ctx.user.id });
     }),
-    getFiles: protectedProcedure.input((val: unknown) => {
-      if (typeof val === "object" && val !== null && "idLead" in val && typeof val.idLead === "number") {
-        return val as { idLead: number };
-      }
-      throw new Error("Invalid input");
-    }).query(async ({ input }) => {
-      const { getLeadFiles } = await import("./db");
-      return await getLeadFiles(input.idLead);
-    }),
-    addFile: protectedProcedure.input((val: unknown) => val).mutation(async ({ ctx, input }) => {
+    getFiles: staffProcedure
+      .input(z.object({ idLead: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        const { getLeadFiles } = await import("./db");
+        await ensureLeadAccess(ctx.user, input.idLead);
+        return await getLeadFiles(input.idLead);
+      }),
+    addFile: staffProcedure.input(z.any()).mutation(async ({ ctx, input }) => {
       const { createLeadFile } = await import("./db");
-      return await createLeadFile({ ...input as any, idUsuario: ctx.user.id });
+      await ensureLeadAccess(ctx.user, (input as any).idLead);
+      return await createLeadFile({ ...(input as any), idUsuario: ctx.user.id });
     }),
   }),
 
-  // ============= CONTRACTS ROUTER =============
   contracts: router({
-    myContracts: protectedProcedure.query(async ({ ctx }) => {
+    myContracts: clientProcedure.query(async ({ ctx }) => {
       const { getContractsByCliente } = await import("./db");
       return await getContractsByCliente(ctx.user.id);
     }),
-    list: protectedProcedure.query(async ({ ctx }) => {
-      if (ctx.user.role !== "administrativo") {
-        throw new Error("Apenas administradores podem listar todos os contratos");
-      }
+    list: adminProcedure.query(async () => {
       const { getAllContracts } = await import("./db");
       return await getAllContracts();
     }),
-    create: protectedProcedure.input((val: unknown) => val).mutation(async ({ ctx, input }) => {
-      if (ctx.user.role !== "administrativo") {
-        throw new Error("Apenas administradores podem criar contratos");
-      }
+    create: adminProcedure.input(z.any()).mutation(async ({ input }) => {
       const { createContract } = await import("./db");
       return await createContract(input as any);
     }),
   }),
 
-  // ============= DOCUMENTS ROUTER =============
   documents: router({
-    myDocuments: protectedProcedure.query(async ({ ctx }) => {
+    myDocuments: clientProcedure.query(async ({ ctx }) => {
       const { getDocumentsByUsuario } = await import("./db");
       return await getDocumentsByUsuario(ctx.user.id);
     }),
-    create: protectedProcedure.input((val: unknown) => val).mutation(async ({ ctx, input }) => {
+    create: clientProcedure.input(z.any()).mutation(async ({ ctx, input }) => {
       const { createDocument } = await import("./db");
-      return await createDocument({ ...input as any, idUsuario: ctx.user.id });
+      return await createDocument({ ...(input as any), idUsuario: ctx.user.id });
     }),
-    updateStatus: protectedProcedure.input((val: unknown) => val).mutation(async ({ ctx, input }) => {
-      if (ctx.user.role !== "administrativo") {
-        throw new Error("Apenas administradores podem atualizar status de documentos");
-      }
+    updateStatus: adminProcedure.input(z.any()).mutation(async ({ input }) => {
       const { id, status } = input as any;
       const { updateDocument } = await import("./db");
       return await updateDocument(id, { status });
     }),
   }),
 
-  // ============= ADMIN ROUTER =============
   admin: router({
-    users: protectedProcedure.query(async ({ ctx }) => {
-      if (ctx.user.role !== "administrativo") {
-        throw new Error("Apenas administradores podem listar usuários");
-      }
+    users: adminProcedure.query(async () => {
       const { getAllUsers } = await import("./db");
-      return await getAllUsers();
+      return toSafeUsers(await getAllUsers());
     }),
-    updateUserRole: protectedProcedure.input((val: unknown) => val).mutation(async ({ ctx, input }) => {
-      if (ctx.user.role !== "administrativo") {
-        throw new Error("Apenas administradores podem atualizar roles");
+    createUser: adminProcedure.input(adminCreateUserSchema).mutation(async ({ input }) => {
+      const { createUser, getUserByEmail } = await import("./db");
+      const existingUser = await getUserByEmail(input.email);
+
+      if (existingUser) {
+        throw new TRPCError({ code: "CONFLICT", message: "E-mail já cadastrado" });
       }
-      const { id, role } = input as any;
-      const { updateUserRole } = await import("./db");
-      return await updateUserRole(id, role);
+
+      const passwordHash = await hashPassword(input.password);
+      const createdUser = await createUser({
+        openId: `local:${nanoid()}`,
+        name: input.name?.trim() || null,
+        email: input.email,
+        loginMethod: "password",
+        passwordHash,
+        role: input.role,
+        isActive: 1,
+      });
+
+      return toSafeUser(createdUser);
     }),
+    updateUser: adminProcedure.input(adminUpdateUserSchema).mutation(async ({ ctx, input }) => {
+      const { getUserById, updateUser } = await import("./db");
+      const targetUser = await getUserById(input.id);
+
+      if (!targetUser) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
+      }
+
+      if (ctx.user.id === targetUser.id && input.isActive === 0) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Você não pode desativar sua própria conta" });
+      }
+
+      const updatePayload: Record<string, unknown> = {};
+
+      if (input.name !== undefined) {
+        updatePayload.name = input.name.trim();
+      }
+      if (input.role !== undefined) {
+        updatePayload.role = input.role;
+      }
+      if (input.isActive !== undefined) {
+        updatePayload.isActive = input.isActive;
+      }
+      if (input.password) {
+        updatePayload.passwordHash = await hashPassword(input.password);
+        updatePayload.loginMethod = "password";
+      }
+
+      await updateUser(input.id, updatePayload);
+
+      const updatedUser = await getUserById(input.id);
+      if (!updatedUser) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
+      }
+
+      return toSafeUser(updatedUser);
+    }),
+    updateUserRole: adminProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          role: z.enum(APP_ROLES),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { updateUserRole } = await import("./db");
+        return await updateUserRole(input.id, input.role);
+      }),
   }),
 });
 

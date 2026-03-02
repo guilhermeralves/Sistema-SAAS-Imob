@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { APP_LOGO, getLoginUrl } from "@/const";
+import { APP_LOGO, getLoginUrl, getRegisterUrl } from "@/const";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -9,7 +9,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Menu, User, LogOut, Home, Building2, Briefcase, Phone, Users, FileText, LayoutDashboard } from "lucide-react";
+import { ROLE_LABELS } from "@shared/auth";
+import { Menu, User, LogOut, Home, Building2, Briefcase, Phone, Users, LayoutDashboard, Settings } from "lucide-react";
 import { useState } from "react";
 
 /**
@@ -47,8 +48,9 @@ export default function Header() {
 
   // Itens para administrativos
   const adminMenuItems = [
-    { href: "/admin", label: "Painel Admin", icon: Users },
+    { href: "/admin/users", label: "Usuários", icon: Users },
     { href: "/crm", label: "CRM", icon: LayoutDashboard },
+    { href: "/admin", label: "Painel Admin", icon: Settings },
   ];
 
   // Determina quais itens no cabeçalho mostrar baseado no regra de usuário
@@ -110,8 +112,8 @@ export default function Header() {
                 <div className="px-2 py-1.5 text-sm">
                   <p className="font-medium">{user.name || "Usuário"}</p>
                   <p className="text-xs text-muted-foreground">{user.email}</p>
-                  <p className="text-xs text-muted-foreground capitalize mt-1">
-                    Role: {user.role}
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Papel: {ROLE_LABELS[user.role]}
                   </p>
                 </div>
                 <DropdownMenuSeparator />
@@ -122,9 +124,14 @@ export default function Header() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <Button asChild size="sm">
-              <a href={getLoginUrl()}>Entrar</a>
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button asChild size="sm" variant="outline" className="hidden sm:inline-flex">
+                <a href={getRegisterUrl()}>Cadastrar</a>
+              </Button>
+              <Button asChild size="sm">
+                <a href={getLoginUrl()}>Entrar</a>
+              </Button>
+            </div>
           )}
 
           {/* Menu Mobile */}
@@ -154,6 +161,26 @@ export default function Header() {
                 </a>
               </Link>
             ))}
+            {!isAuthenticated && !loading && (
+              <>
+                <a
+                  href={getLoginUrl()}
+                  className="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-primary hover:bg-accent transition-colors"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <User className="h-4 w-4" />
+                  Entrar
+                </a>
+                <a
+                  href={getRegisterUrl()}
+                  className="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-primary hover:bg-accent transition-colors"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  <User className="h-4 w-4" />
+                  Cadastrar
+                </a>
+              </>
+            )}
           </nav>
         </div>
       )}

@@ -22,6 +22,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
+import { TRPCClientError } from "@trpc/client";
 import { Building2, Plus, Edit, Trash2, MapPin, User } from "lucide-react";
 import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
@@ -99,7 +100,11 @@ export default function MeusImoveis() {
       toast.success("Imóvel removido com sucesso!");
       refetch();
     },
-    onError: () => {
+    onError: (error) => {
+      if (error instanceof TRPCClientError && error.data?.code === "FORBIDDEN") {
+        toast.error("Corretores não podem excluir imóveis.");
+        return;
+      }
       toast.error("Erro ao remover imóvel");
     },
   });

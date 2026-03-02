@@ -61,7 +61,7 @@ function getStatusColor(status: string) {
 
 export default function CRM() {
   const { user, loading, isAuthenticated } = useAuth();
-  const [statusSelected, setStatusSelected] = useState<string>("new");
+  const [statusSelected, setStatusSelected] = useState<string>("novo");
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [newLeadOpen, setNewLeadOpen] = useState(false);
   const [leadDetailsOpen, setLeadDetailsOpen] = useState(false);

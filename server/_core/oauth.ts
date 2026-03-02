@@ -39,6 +39,7 @@ export function registerOAuthRoutes(app: Express) {
       const sessionToken = await sdk.createSessionToken(userInfo.openId, {
         name: userInfo.name || "",
         expiresInMs: ONE_YEAR_MS,
+        provider: "oauth",
       });
 
       const cookieOptions = getSessionCookieOptions(req);
