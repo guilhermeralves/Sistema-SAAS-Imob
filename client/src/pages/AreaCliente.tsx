@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ChangeEvent } from "react";
 import Layout from "@/components/Layout";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -7,9 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
-import { FileText, Upload, User, Download, CheckCircle2, Clock, XCircle, Building2 } from "lucide-react";
+import { FileText, Upload, Download, CheckCircle2, Clock, XCircle, Building2, User } from "lucide-react";
 import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
+import { Link } from "wouter";
 
 /**
  * Área do Cliente
@@ -58,7 +59,7 @@ export default function AreaCliente() {
     },
   });
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, tipo: string) => {
+  const handleFileUpload = async (e: ChangeEvent<HTMLInputElement>, tipo: string) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -131,8 +132,24 @@ export default function AreaCliente() {
           </p>
         </div>
 
+        <Card className="mb-6 border-dashed">
+          <CardContent className="flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">{"Ficha do Usu\u00E1rio"}</h2>
+              <p className="text-sm text-muted-foreground">
+                Abra sua ficha completa para revisar e editar os dados cadastrais.
+              </p>
+            </div>
+            <Button asChild>
+              <Link href="/minha-ficha?from=area-cliente">
+                <a>Abrir minha ficha</a>
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+
         <Tabs defaultValue="contratos" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 lg:w-auto">
+          <TabsList className="grid w-full grid-cols-2 lg:w-auto">
             <TabsTrigger value="contratos" className="gap-2">
               <FileText className="h-4 w-4" />
               Contratos
@@ -140,10 +157,6 @@ export default function AreaCliente() {
             <TabsTrigger value="documentos" className="gap-2">
               <Upload className="h-4 w-4" />
               Documentos
-            </TabsTrigger>
-            <TabsTrigger value="perfil" className="gap-2">
-              <User className="h-4 w-4" />
-              Meu Perfil
             </TabsTrigger>
           </TabsList>
 
@@ -300,35 +313,6 @@ export default function AreaCliente() {
                     <p className="text-muted-foreground">Nenhum documento enviado ainda</p>
                   </div>
                 )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Perfil */}
-          <TabsContent value="perfil" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Dados Pessoais</CardTitle>
-                <CardDescription>
-                  Visualize suas informações cadastradas
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label>Nome</Label>
-                  <Input value={user.name || ""} disabled />
-                </div>
-                <div>
-                  <Label>E-mail</Label>
-                  <Input value={user.email || ""} disabled />
-                </div>
-                <div>
-                  <Label>Tipo de Conta</Label>
-                  <Input value="Cliente" disabled />
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Para alterar seus dados, entre em contato com nossa equipe.
-                </p>
               </CardContent>
             </Card>
           </TabsContent>

@@ -1,8 +1,13 @@
+import { useAuth } from "@/_core/hooks/useAuth";
+import DateInput from "@/components/DateInput";
 import Layout from "@/components/Layout";
+import MoneyInput from "@/components/MoneyInput";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { lookupCep } from "@/lib/cep";
+import { displayDateToIso, isoDateToDisplay } from "@/lib/date";
 import {
   Select,
   SelectContent,
@@ -11,11 +16,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { parseMoneyCentsInput } from "@/lib/money";
 import { trpc } from "@/lib/trpc";
 import { type AppRole } from "@shared/auth";
 import { USER_PROFILE_MARITAL_STATUSES, type UserProfileMaritalStatus } from "@shared/user-profile";
 import { ArrowLeft, Save, UserRoundSearch } from "lucide-react";
-import { useEffect, useRef, useState, type KeyboardEvent, type ClipboardEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Link, useRoute } from "wouter";
 
@@ -42,41 +48,10 @@ type UserDetailsForm = {
   notes: string;
 };
 
-function currencyToNumber(value: string) {
-  const digits = value.replace(/\D/g, "");
-  if (!digits) return null;
-  return Number(digits);
-}
-
-function toDateInputValue(value: Date | string | null | undefined) {
-  if (!value) return "";
-  if (typeof value === "string") {
-    return value.slice(0, 10);
-  }
-  return value.toISOString().slice(0, 10);
-}
-
 function formatZipCode(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 8);
   if (digits.length <= 5) return digits;
   return `${digits.slice(0, 5)}-${digits.slice(5)}`;
-}
-
-function normalizeCurrencyInput(value: string) {
-  const digits = value.replace(/\D/g, "");
-  return digits.replace(/^0+(?=\d)/, "");
-}
-
-function formatCurrencyInput(value: string) {
-  const normalized = normalizeCurrencyInput(value);
-  if (!normalized) return "";
-
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number(normalized) / 100);
 }
 
 function getMaritalStatusLabel(status: UserProfileMaritalStatus) {
@@ -91,55 +66,57 @@ function getMaritalStatusLabel(status: UserProfileMaritalStatus) {
   return labels[status];
 }
 
-async function buscarCEP(cep: string) {
-  const cepLimpo = cep.replace(/\D/g, "");
-
-  if (cepLimpo.length !== 8) {
-    return null;
-  }
-
-  try {
-    const response = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
-    const data = await response.json();
-
-    if (data.erro) {
-      return null;
-    }
-
-    return {
-      endereco: data.logradouro || "",
-      bairro: data.bairro || "",
-      cidade: data.localidade || "",
-      estado: data.uf || "",
-    };
-  } catch (error) {
-    console.error("Erro ao buscar CEP:", error);
-    return null;
-  }
-}
-
 export default function AdminUserDetails() {
-  const [, params] = useRoute("/admin/users/:id");
-  const userId = params?.id ? Number(params.id) : NaN;
+  const { user: authenticatedUser } = useAuth();
+  const [isAdminRoute, params] = useRoute("/admin/users/:id");
+  const [isSelfRoute] = useRoute("/minha-ficha");
+  const userId = isAdminRoute ? Number(params?.id) : authenticatedUser?.id ?? NaN;
   const utils = trpc.useUtils();
   const [form, setForm] = useState<UserDetailsForm | null>(null);
   const [cepLoading, setCepLoading] = useState(false);
   const [cepError, setCepError] = useState("");
   const cepTimeoutRef = useRef<number | null>(null);
 
-  const { data: user, isLoading } = trpc.admin.userById.useQuery(
+  const { data: adminUser, isLoading: adminUserLoading } = trpc.admin.userById.useQuery(
     { id: userId },
-    { enabled: Number.isFinite(userId) }
+    { enabled: isAdminRoute && Number.isFinite(userId) }
   );
+
+  const { data: selfUser, isLoading: selfUserLoading } = trpc.auth.me.useQuery(undefined, {
+    enabled: isSelfRoute,
+  });
+
+  const user = isAdminRoute ? adminUser : selfUser;
+  const isLoading = isAdminRoute ? adminUserLoading : selfUserLoading;
+  const isEditingSelf = isSelfRoute && !isAdminRoute;
+  const isFromClientArea =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("from") === "area-cliente";
+  const backHref = isEditingSelf ? (isFromClientArea ? "/area-cliente" : "/") : "/admin/users";
+  const backLabel = isEditingSelf
+    ? isFromClientArea
+      ? "Voltar para \u00C1rea do Cliente"
+      : "Voltar para Home"
+    : "Voltar para usu\u00E1rios";
 
   const updateUserDetails = trpc.admin.updateUserDetails.useMutation({
     onSuccess: async () => {
-      toast.success("Ficha do usuário atualizada");
+      toast.success("Ficha do usu\u00E1rio atualizada");
       await utils.admin.userById.invalidate({ id: userId });
       await utils.admin.users.invalidate();
     },
     onError: error => {
-      toast.error(error.message || "Não foi possível salvar a ficha");
+      toast.error(error.message || "N\u00E3o foi poss\u00EDvel salvar a ficha");
+    },
+  });
+
+  const updateOwnProfile = trpc.profile.update.useMutation({
+    onSuccess: async () => {
+      toast.success("Ficha do usu\u00E1rio atualizada");
+      await utils.auth.me.invalidate();
+    },
+    onError: error => {
+      toast.error(error.message || "N\u00E3o foi poss\u00EDvel salvar a ficha");
     },
   });
 
@@ -153,7 +130,7 @@ export default function AdminUserDetails() {
       role: user.role,
       isActive: String(user.isActive) as "0" | "1",
       phone: user.phone || "",
-      birthDate: toDateInputValue(user.birthDate),
+      birthDate: isoDateToDisplay(user.birthDate),
       profession: user.profession || "",
       grossMonthlyIncome:
         user.grossMonthlyIncome !== null && user.grossMonthlyIncome !== undefined
@@ -202,14 +179,19 @@ export default function AdminUserDetails() {
     setCepLoading(true);
 
     cepTimeoutRef.current = window.setTimeout(async () => {
-      const dados = await buscarCEP(formattedValue);
+      const result = await lookupCep(formattedValue);
 
-      if (!dados) {
-        setCepError("CEP não encontrado");
+      if (result.status !== "success") {
+        setCepError(
+          result.status === "not_found"
+            ? "CEP não encontrado"
+            : "Serviço de CEP indisponível no momento"
+        );
         setCepLoading(false);
         return;
       }
 
+      const dados = result.data;
       setForm(current =>
         current
           ? {
@@ -228,76 +210,20 @@ export default function AdminUserDetails() {
     }, 500);
   };
 
-  const updateCurrencyField = (
-    field: "grossMonthlyIncome" | "householdIncome",
-    nextValue: string
-  ) => {
-    const normalized = normalizeCurrencyInput(nextValue);
-    setForm(current => (current ? { ...current, [field]: normalized } : current));
-  };
-
-  const handleCurrencyKeyDown = (
-    event: KeyboardEvent<HTMLInputElement>,
-    field: "grossMonthlyIncome" | "householdIncome"
-  ) => {
-    if (event.ctrlKey || event.metaKey || event.altKey) {
-      return;
-    }
-
-    if (/^\d$/.test(event.key)) {
-      event.preventDefault();
-      setForm(current =>
-        current
-          ? { ...current, [field]: normalizeCurrencyInput(`${current[field]}${event.key}`) }
-          : current
-      );
-      return;
-    }
-
-    if (event.key === "Backspace") {
-      event.preventDefault();
-      setForm(current =>
-        current ? { ...current, [field]: current[field].slice(0, -1) } : current
-      );
-      return;
-    }
-
-    if (event.key === "Delete") {
-      event.preventDefault();
-      updateCurrencyField(field, "");
-      return;
-    }
-
-    const allowedKeys = ["Tab", "ArrowLeft", "ArrowRight", "Home", "End"];
-    if (allowedKeys.includes(event.key)) {
-      return;
-    }
-
-    event.preventDefault();
-  };
-
-  const handleCurrencyPaste = (
-    event: ClipboardEvent<HTMLInputElement>,
-    field: "grossMonthlyIncome" | "householdIncome"
-  ) => {
-    event.preventDefault();
-    updateCurrencyField(field, event.clipboardData.getData("text"));
-  };
-
   return (
     <Layout>
       <div className="container py-8 space-y-6">
         <div className="flex items-center justify-between gap-4">
           <div>
             <div className="mb-3">
-              <Link href="/admin/users">
+              <Link href={backHref}>
                 <a className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
                   <ArrowLeft className="h-4 w-4" />
-                  <span>Voltar para usuarios</span>
+                  <span>{backLabel}</span>
                 </a>
               </Link>
             </div>
-            <h1 className="text-4xl font-bold">Ficha do Usuário</h1>
+            <h1 className="text-4xl font-bold">{"Ficha do Usu\u00E1rio"}</h1>
             <p className="text-muted-foreground">
               Complete os dados pessoais e financeiros exigidos para contratos.
             </p>
@@ -343,27 +269,31 @@ export default function AdminUserDetails() {
                   <Label>Telefone</Label>
                   <Input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
                 </div>
-                <div className="space-y-2">
-                  <Label>Papel</Label>
-                  <Select value={form.role} onValueChange={value => setForm({ ...form, role: value as AppRole })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="cliente">Cliente</SelectItem>
-                      <SelectItem value="corretor">Corretor</SelectItem>
-                      <SelectItem value="administrativo">Admin</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Select value={form.isActive} onValueChange={value => setForm({ ...form, isActive: value as "0" | "1" })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">Ativo</SelectItem>
-                      <SelectItem value="0">Inativo</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                {isEditingSelf ? null : (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Papel</Label>
+                      <Select value={form.role} onValueChange={value => setForm({ ...form, role: value as AppRole })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cliente">Cliente</SelectItem>
+                          <SelectItem value="corretor">Corretor</SelectItem>
+                          <SelectItem value="administrativo">Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Status</Label>
+                      <Select value={form.isActive} onValueChange={value => setForm({ ...form, isActive: value as "0" | "1" })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">Ativo</SelectItem>
+                          <SelectItem value="0">Inativo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
 
@@ -377,7 +307,10 @@ export default function AdminUserDetails() {
               <CardContent className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Data de nascimento</Label>
-                  <Input type="date" value={form.birthDate} onChange={e => setForm({ ...form, birthDate: e.target.value })} />
+                  <DateInput
+                    value={form.birthDate}
+                    onValueChange={value => setForm({ ...form, birthDate: value })}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Profissão</Label>
@@ -385,13 +318,13 @@ export default function AdminUserDetails() {
                 </div>
                 <div className="space-y-2">
                   <Label>Salário bruto mensal</Label>
-                  <Input
-                    type="text"
-                    inputMode="numeric"
-                    value={formatCurrencyInput(form.grossMonthlyIncome)}
-                    onChange={() => undefined}
-                    onKeyDown={event => handleCurrencyKeyDown(event, "grossMonthlyIncome")}
-                    onPaste={event => handleCurrencyPaste(event, "grossMonthlyIncome")}
+                  <MoneyInput
+                    value={form.grossMonthlyIncome}
+                    onValueChange={value =>
+                      setForm(current =>
+                        current ? { ...current, grossMonthlyIncome: value } : current
+                      )
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -418,13 +351,13 @@ export default function AdminUserDetails() {
                 </div>
                 <div className="space-y-2">
                   <Label>Renda familiar conjunta</Label>
-                  <Input
-                    type="text"
-                    inputMode="numeric"
-                    value={formatCurrencyInput(form.householdIncome)}
-                    onChange={() => undefined}
-                    onKeyDown={event => handleCurrencyKeyDown(event, "householdIncome")}
-                    onPaste={event => handleCurrencyPaste(event, "householdIncome")}
+                  <MoneyInput
+                    value={form.householdIncome}
+                    onValueChange={value =>
+                      setForm(current =>
+                        current ? { ...current, householdIncome: value } : current
+                      )
+                    }
                   />
                 </div>
                 <div className="space-y-2">
@@ -490,38 +423,59 @@ export default function AdminUserDetails() {
             </Card>
 
             <div className="flex justify-end">
-              <Button
-                className="gap-2"
-                disabled={updateUserDetails.isPending}
-                onClick={() =>
-                  updateUserDetails.mutate({
-                    id: userId,
-                    name: form.name,
-                    email: form.email,
-                    cpf: form.cpf,
-                    role: form.role,
-                    isActive: Number(form.isActive) as 0 | 1,
-                    phone: form.phone || undefined,
-                    birthDate: form.birthDate || null,
-                    profession: form.profession || undefined,
-                    grossMonthlyIncome: currencyToNumber(form.grossMonthlyIncome),
-                    maritalStatus: form.maritalStatus || null,
-                    householdIncome: currencyToNumber(form.householdIncome),
-                    rg: form.rg || undefined,
-                    nationality: form.nationality || undefined,
-                    address: form.address || undefined,
-                    neighborhood: form.neighborhood || undefined,
-                    addressNumber: form.addressNumber || undefined,
-                    city: form.city || undefined,
-                    state: form.state || undefined,
-                    zipCode: form.zipCode || undefined,
-                    notes: form.notes || undefined,
-                  })
-                }
-              >
-                <Save className="h-4 w-4" />
-                {updateUserDetails.isPending ? "Salvando..." : "Salvar ficha"}
-              </Button>
+                <Button
+                  className="gap-2"
+                  disabled={updateUserDetails.isPending || updateOwnProfile.isPending}
+                  onClick={() =>
+                    isEditingSelf
+                      ? updateOwnProfile.mutate({
+                          name: form.name,
+                          email: form.email,
+                          cpf: form.cpf,
+                          phone: form.phone || undefined,
+                          birthDate: displayDateToIso(form.birthDate) || null,
+                          profession: form.profession || undefined,
+                          grossMonthlyIncome: parseMoneyCentsInput(form.grossMonthlyIncome),
+                          maritalStatus: form.maritalStatus || null,
+                          householdIncome: parseMoneyCentsInput(form.householdIncome),
+                          rg: form.rg || undefined,
+                          nationality: form.nationality || undefined,
+                          address: form.address || undefined,
+                          neighborhood: form.neighborhood || undefined,
+                          addressNumber: form.addressNumber || undefined,
+                          city: form.city || undefined,
+                          state: form.state || undefined,
+                          zipCode: form.zipCode || undefined,
+                          notes: form.notes || undefined,
+                        })
+                      : updateUserDetails.mutate({
+                          id: userId,
+                          name: form.name,
+                          email: form.email,
+                          cpf: form.cpf,
+                          role: form.role,
+                          isActive: Number(form.isActive) as 0 | 1,
+                          phone: form.phone || undefined,
+                          birthDate: displayDateToIso(form.birthDate) || null,
+                          profession: form.profession || undefined,
+                          grossMonthlyIncome: parseMoneyCentsInput(form.grossMonthlyIncome),
+                          maritalStatus: form.maritalStatus || null,
+                          householdIncome: parseMoneyCentsInput(form.householdIncome),
+                          rg: form.rg || undefined,
+                          nationality: form.nationality || undefined,
+                          address: form.address || undefined,
+                          neighborhood: form.neighborhood || undefined,
+                          addressNumber: form.addressNumber || undefined,
+                          city: form.city || undefined,
+                          state: form.state || undefined,
+                          zipCode: form.zipCode || undefined,
+                          notes: form.notes || undefined,
+                        })
+                  }
+                >
+                  <Save className="h-4 w-4" />
+                  {updateUserDetails.isPending || updateOwnProfile.isPending ? "Salvando..." : "Salvar ficha"}
+                </Button>
             </div>
           </>
         )}

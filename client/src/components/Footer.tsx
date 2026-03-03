@@ -114,8 +114,8 @@ export default function Footer() {
           <p>
             © {currentYear} {APP_TITLE}. Todos os direitos reservados.
           </p>
-          <p className="mt-2">Created by Noxilon®</p>
-          <p>Version {APP_VERSION}</p>
+          <p className="mt-2">Created by <span className="font-bold">Noxilon®</span></p>
+          <p>Software Version v{APP_VERSION}</p>
         </div>
       </div>
     </footer>

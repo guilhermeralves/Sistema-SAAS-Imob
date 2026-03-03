@@ -60,6 +60,7 @@ export const properties = mysqlTable("properties", {
   banheiros: int("banheiros"),
   vagas: int("vagas"),
   endereco: varchar("endereco", { length: 255 }).notNull(),
+  numero: varchar("numero", { length: 20 }),
   bairro: varchar("bairro", { length: 100 }),
   cidade: varchar("cidade", { length: 100 }).notNull(),
   estado: varchar("estado", { length: 2 }).notNull(),

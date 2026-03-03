@@ -1,11 +1,17 @@
-import { useState } from "react";
-import Layout from "@/components/Layout";
 import { useAuth } from "@/_core/hooks/useAuth";
+import MoneyInput from "@/components/MoneyInput";
+import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -13,39 +19,42 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
+import { getLoginUrl } from "@/const";
+import { lookupCep } from "@/lib/cep";
+import { formatMoneyFromCentsValue, parseMoneyCentsInput } from "@/lib/money";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
-import { Building2, Plus, Edit, Trash2, MapPin, User } from "lucide-react";
+import { Building2, Edit, MapPin, Search, Trash2, User } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { getLoginUrl } from "@/const";
+import { Link } from "wouter";
 
-/**
- * Página Meus Imóveis
- * 
- * Gestão de imóveis para corretores.
- */
+type PropertyFilter = "all" | "active";
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value / 100);
-}
+type PropertyFormState = {
+  titulo: string;
+  descricao: string;
+  tipo: string;
+  finalidade: string;
+  valor: string;
+  valorLocacao: string;
+  area: string;
+  quartos: string;
+  banheiros: string;
+  vagas: string;
+  endereco: string;
+  numero: string;
+  bairro: string;
+  cidade: string;
+  estado: string;
+  cep: string;
+  destaque: string;
+};
 
-export default function MeusImoveis() {
-  const { user, loading, isAuthenticated } = useAuth();
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingImovel, setEditingImovel] = useState<any>(null);
-
-  const [formData, setFormData] = useState({
+function createEmptyForm(): PropertyFormState {
+  return {
     titulo: "",
     descricao: "",
     tipo: "apartamento",
@@ -57,38 +66,43 @@ export default function MeusImoveis() {
     banheiros: "",
     vagas: "",
     endereco: "",
+    numero: "",
     bairro: "",
     cidade: "",
     estado: "",
     cep: "",
     destaque: "0",
-  });
+  };
+}
 
-  const { data: imoveis, isLoading, refetch } = trpc.properties.myProperties.useQuery(
-    undefined,
-    { enabled: isAuthenticated && (user?.role === "corretor" || user?.role === "administrativo") }
-  );
+function formatZipCode(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 5) return digits;
+  return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+}
 
-  const createProperty = trpc.properties.create.useMutation({
-    onSuccess: () => {
-      toast.success("Imóvel cadastrado com sucesso!");
-      refetch();
-      setDialogOpen(false);
-      resetForm();
-    },
-    onError: (error) => {
-      toast.error("Erro ao cadastrar imóvel");
-      console.error(error);
-    },
+export default function MeusImoveis() {
+  const { user, loading, isAuthenticated } = useAuth();
+  const canDeleteProperties = user?.role === "administrativo";
+  const utils = trpc.useUtils();
+  const [editingImovel, setEditingImovel] = useState<any>(null);
+  const [formData, setFormData] = useState<PropertyFormState>(createEmptyForm);
+  const [selectedFilter, setSelectedFilter] = useState<PropertyFilter | null>(null);
+  const [search, setSearch] = useState("");
+  const [cepLoading, setCepLoading] = useState(false);
+  const [cepError, setCepError] = useState("");
+  const cepTimeoutRef = useRef<number | null>(null);
+
+  const { data: imoveis, isLoading, refetch } = trpc.properties.myProperties.useQuery(undefined, {
+    enabled: isAuthenticated && (user?.role === "corretor" || user?.role === "administrativo"),
   });
 
   const updateProperty = trpc.properties.update.useMutation({
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success("Imóvel atualizado com sucesso!");
-      refetch();
-      setDialogOpen(false);
-      setEditingImovel(null);
-      resetForm();
+      closeEditDialog();
+      await refetch();
+      await utils.properties.myProperties.invalidate();
     },
     onError: () => {
       toast.error("Erro ao atualizar imóvel");
@@ -96,94 +110,130 @@ export default function MeusImoveis() {
   });
 
   const deleteProperty = trpc.properties.delete.useMutation({
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success("Imóvel removido com sucesso!");
-      refetch();
+      await refetch();
+      await utils.properties.myProperties.invalidate();
     },
-    onError: (error) => {
+    onError: error => {
       if (error instanceof TRPCClientError && error.data?.code === "FORBIDDEN") {
         toast.error("Corretores não podem excluir imóveis.");
         return;
       }
+
       toast.error("Erro ao remover imóvel");
     },
   });
 
-  const resetForm = () => {
-    setFormData({
-      titulo: "",
-      descricao: "",
-      tipo: "apartamento",
-      finalidade: "venda",
-      valor: "",
-      valorLocacao: "",
-      area: "",
-      quartos: "",
-      banheiros: "",
-      vagas: "",
-      endereco: "",
-      bairro: "",
-      cidade: "",
-      estado: "",
-      cep: "",
-      destaque: "0",
-    });
+  useEffect(() => {
+    return () => {
+      if (cepTimeoutRef.current !== null) {
+        window.clearTimeout(cepTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const closeEditDialog = () => {
+    setEditingImovel(null);
+    setFormData(createEmptyForm());
+    setCepLoading(false);
+    setCepError("");
   };
 
   const handleEdit = (imovel: any) => {
     setEditingImovel(imovel);
     setFormData({
-      titulo: imovel.titulo,
+      titulo: imovel.titulo || "",
       descricao: imovel.descricao || "",
-      tipo: imovel.tipo,
-      finalidade: imovel.finalidade,
-      valor: (imovel.valor / 100).toString(),
-      valorLocacao: imovel.valorLocacao ? (imovel.valorLocacao / 100).toString() : "",
+      tipo: imovel.tipo || "apartamento",
+      finalidade: imovel.finalidade || "venda",
+      valor: imovel.valor ? String(imovel.valor) : "",
+      valorLocacao: imovel.valorLocacao ? String(imovel.valorLocacao) : "",
       area: imovel.area?.toString() || "",
       quartos: imovel.quartos?.toString() || "",
       banheiros: imovel.banheiros?.toString() || "",
       vagas: imovel.vagas?.toString() || "",
-      endereco: imovel.endereco,
+      endereco: imovel.endereco || "",
+      numero: imovel.numero || "",
       bairro: imovel.bairro || "",
-      cidade: imovel.cidade,
-      estado: imovel.estado,
+      cidade: imovel.cidade || "",
+      estado: imovel.estado || "",
       cep: imovel.cep || "",
-      destaque: imovel.destaque.toString(),
+      destaque: String(imovel.destaque ?? 0),
     });
-    setDialogOpen(true);
+  };
+
+  const handleZipCodeChange = (value: string) => {
+    const formattedValue = formatZipCode(value);
+    setFormData(current => ({ ...current, cep: formattedValue }));
+    setCepError("");
+
+    if (cepTimeoutRef.current !== null) {
+      window.clearTimeout(cepTimeoutRef.current);
+    }
+
+    if (formattedValue.replace(/\D/g, "").length < 8) {
+      setCepLoading(false);
+      return;
+    }
+
+    setCepLoading(true);
+    cepTimeoutRef.current = window.setTimeout(async () => {
+      const result = await lookupCep(formattedValue);
+
+      if (result.status !== "success") {
+        setCepError(
+          result.status === "not_found"
+            ? "CEP não encontrado"
+            : "Serviço de CEP indisponível no momento"
+        );
+        setCepLoading(false);
+        return;
+      }
+
+      const dados = result.data;
+      setFormData(current => ({
+        ...current,
+        cep: formattedValue,
+        endereco: dados.endereco,
+        bairro: dados.bairro,
+        cidade: dados.cidade,
+        estado: dados.estado,
+      }));
+      setCepError("");
+      setCepLoading(false);
+    }, 500);
   };
 
   const handleSubmit = () => {
+    if (!editingImovel) return;
+
     if (!formData.titulo || !formData.valor || !formData.endereco || !formData.cidade || !formData.estado) {
       toast.error("Preencha todos os campos obrigatórios");
       return;
     }
 
-    const data = {
+    updateProperty.mutate({
+      id: editingImovel.id,
       titulo: formData.titulo,
       descricao: formData.descricao,
       tipo: formData.tipo,
       finalidade: formData.finalidade,
-      valor: Math.round(parseFloat(formData.valor) * 100),
-      valorLocacao: formData.valorLocacao ? Math.round(parseFloat(formData.valorLocacao) * 100) : null,
-      area: formData.area ? parseInt(formData.area) : null,
-      quartos: formData.quartos ? parseInt(formData.quartos) : null,
-      banheiros: formData.banheiros ? parseInt(formData.banheiros) : null,
-      vagas: formData.vagas ? parseInt(formData.vagas) : null,
+      valor: parseMoneyCentsInput(formData.valor) ?? 0,
+      valorLocacao: parseMoneyCentsInput(formData.valorLocacao),
+      area: formData.area ? parseInt(formData.area, 10) : null,
+      quartos: formData.quartos ? parseInt(formData.quartos, 10) : null,
+      banheiros: formData.banheiros ? parseInt(formData.banheiros, 10) : null,
+      vagas: formData.vagas ? parseInt(formData.vagas, 10) : null,
       endereco: formData.endereco,
+      numero: formData.numero || null,
       bairro: formData.bairro,
       cidade: formData.cidade,
       estado: formData.estado,
       cep: formData.cep,
-      destaque: parseInt(formData.destaque),
-      fotos: "[]", // TODO: Implementar upload de fotos
-    };
-
-    if (editingImovel) {
-      updateProperty.mutate({ id: editingImovel.id, ...data });
-    } else {
-      createProperty.mutate(data);
-    }
+      destaque: parseInt(formData.destaque, 10),
+      fotos: editingImovel.fotos || "[]",
+    });
   };
 
   const handleDelete = (id: number) => {
@@ -192,13 +242,44 @@ export default function MeusImoveis() {
     }
   };
 
+  const totalImoveis = imoveis?.length ?? 0;
+  const activeCount = imoveis?.filter(imovel => imovel.status === "ativo").length ?? 0;
+
+  const filteredImoveis = useMemo(() => {
+    const normalizedSearch = search.trim().toLowerCase();
+
+    return (imoveis ?? [])
+      .filter(imovel => {
+        if (!selectedFilter || selectedFilter === "all") return true;
+        if (selectedFilter === "active") return imovel.status === "ativo";
+        return true;
+      })
+      .filter(imovel => {
+        if (!normalizedSearch) return true;
+
+        const values = [
+          imovel.titulo,
+          imovel.tipo,
+          imovel.finalidade,
+          imovel.status,
+          imovel.endereco,
+          imovel.numero || "",
+          imovel.bairro || "",
+          imovel.cidade,
+          imovel.estado,
+        ];
+
+        return values.some(value => (value || "").toLowerCase().includes(normalizedSearch));
+      });
+  }, [imoveis, search, selectedFilter]);
+
   if (loading) {
     return (
       <Layout>
         <div className="container py-8">
           <div className="animate-pulse space-y-4">
-            <div className="h-8 bg-muted rounded w-1/3" />
-            <div className="h-64 bg-muted rounded" />
+            <div className="h-8 w-1/3 rounded bg-muted" />
+            <div className="h-64 rounded bg-muted" />
           </div>
         </div>
       </Layout>
@@ -209,9 +290,9 @@ export default function MeusImoveis() {
     return (
       <Layout>
         <div className="container py-16 text-center">
-          <User className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-          <h1 className="text-2xl font-bold mb-2">Acesso Restrito</h1>
-          <p className="text-muted-foreground mb-6">
+          <User className="mx-auto mb-4 h-16 w-16 text-muted-foreground" />
+          <h1 className="mb-2 text-2xl font-bold">Acesso Restrito</h1>
+          <p className="mb-6 text-muted-foreground">
             Você precisa estar autenticado para acessar esta página.
           </p>
           <Button asChild>
@@ -226,9 +307,9 @@ export default function MeusImoveis() {
     return (
       <Layout>
         <div className="container py-16 text-center">
-          <Building2 className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-          <h1 className="text-2xl font-bold mb-2">Acesso Negado</h1>
-          <p className="text-muted-foreground mb-6">
+          <Building2 className="mx-auto mb-4 h-16 w-16 text-muted-foreground" />
+          <h1 className="mb-2 text-2xl font-bold">Acesso Negado</h1>
+          <p className="mb-6 text-muted-foreground">
             Esta área é exclusiva para corretores e administradores.
           </p>
           <Button asChild>
@@ -241,66 +322,178 @@ export default function MeusImoveis() {
 
   return (
     <Layout>
-      <div className="container py-8">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-4xl font-bold mb-2">Meus Imóveis</h1>
-            <p className="text-muted-foreground">
-              Gerencie seus imóveis cadastrados
-            </p>
-          </div>
-          <Dialog open={dialogOpen} onOpenChange={(open) => {
-            setDialogOpen(open);
-            if (!open) {
-              setEditingImovel(null);
-              resetForm();
-            }
-          }}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus className="h-4 w-4" />
-                Novo Imóvel
-              </Button>
-            </DialogTrigger>
-            <DialogContent
-              className="max-w-3xl max-h-[90vh] overflow-y-auto"
-              onOpenAutoFocus={event => event.preventDefault()}
-            >
-              <DialogHeader>
-                <DialogTitle>{editingImovel ? "Editar Imóvel" : "Cadastrar Novo Imóvel"}</DialogTitle>
-                <DialogDescription>
-                  Preencha as informações do imóvel
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
-                  <Label htmlFor="titulo">Título *</Label>
-                  <Input
-                    id="titulo"
-                    value={formData.titulo}
-                    onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
-                    placeholder="Ex: Apartamento 3 quartos no Centro"
-                  />
-                </div>
+      <div className="container space-y-6 py-8">
+        <div>
+          <h1 className="mb-2 text-4xl font-bold">Meus Imóveis</h1>
+          <p className="text-muted-foreground">
+            Consulte e atualize os imóveis já cadastrados.
+          </p>
+        </div>
 
-                <div>
-                  <Label htmlFor="tipo">Tipo *</Label>
-                  <Select value={formData.tipo} onValueChange={(value) => setFormData({ ...formData, tipo: value })}>
+        <div className="grid gap-4 md:grid-cols-2">
+          {[
+            { key: "all" as PropertyFilter, label: "Total de Imóveis", value: totalImoveis },
+            { key: "active" as PropertyFilter, label: "Imóveis Ativos", value: activeCount },
+          ].map(card => {
+            const isSelected = selectedFilter === card.key;
+
+            return (
+              <Card
+                key={card.key}
+                className={`cursor-pointer transition-all hover:shadow-md ${isSelected ? "ring-2 ring-primary shadow-md" : ""}`}
+                onClick={() => setSelectedFilter(current => (current === card.key ? null : card.key))}
+              >
+                <CardHeader className="px-6 pt-4 pb-1 md:pb-2">
+                  <CardTitle className="text-sm">{card.label}</CardTitle>
+                </CardHeader>
+                <CardContent className="px-6 pt-0 pb-4 text-2xl font-bold md:pb-6">
+                  {card.value}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5" />
+              Lista de imóveis
+            </CardTitle>
+            <CardDescription>
+              Filtre pelo que estiver cadastrado em cada imóvel.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="relative mb-4 lg:max-w-xl">
+              <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={event => setSearch(event.target.value)}
+                placeholder="Pesquisar por título, endereço, cidade, tipo, finalidade ou status"
+                className="pl-9"
+              />
+            </div>
+
+            {isLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map(item => (
+                  <div key={item} className="h-12 animate-pulse rounded bg-muted" />
+                ))}
+              </div>
+            ) : filteredImoveis.length > 0 ? (
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Imóvel</TableHead>
+                      <TableHead>Localização</TableHead>
+                      <TableHead>Finalidade</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Valor</TableHead>
+                      <TableHead className="w-32">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredImoveis.map(imovel => (
+                      <TableRow key={imovel.id}>
+                        <TableCell>
+                          <div className="font-medium">{imovel.titulo}</div>
+                          <div className="text-xs text-muted-foreground capitalize">{imovel.tipo}</div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <MapPin className="h-4 w-4 text-muted-foreground" />
+                            <span>
+                              {imovel.bairro ? `${imovel.bairro}, ` : ""}
+                              {imovel.cidade}/{imovel.estado}
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="capitalize">{imovel.finalidade}</TableCell>
+                        <TableCell className="capitalize">{imovel.status}</TableCell>
+                        <TableCell className="font-medium">{formatMoneyFromCentsValue(imovel.valor)}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEdit(imovel)}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Editar
+                            </Button>
+                            {canDeleteProperties ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => handleDelete(imovel.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            ) : null}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <p className="text-muted-foreground">Nenhum imóvel encontrado para o filtro atual.</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Dialog open={Boolean(editingImovel)} onOpenChange={open => !open && closeEditDialog()}>
+          <DialogContent
+            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6"
+            onOpenAutoFocus={event => event.preventDefault()}
+          >
+            <DialogHeader>
+              <DialogTitle>Editar Imóvel</DialogTitle>
+              <DialogDescription>Atualize as informações do imóvel.</DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="space-y-1 sm:space-y-2">
+                <Label htmlFor="titulo" className="text-sm sm:text-base">Título *</Label>
+                <Input
+                  id="titulo"
+                  value={formData.titulo}
+                  onChange={event => setFormData({ ...formData, titulo: event.target.value })}
+                  placeholder="Ex: Apartamento 3 Quartos no Centro"
+                  className="text-sm sm:text-base"
+                />
+              </div>
+
+              <div className="space-y-1 sm:space-y-2">
+                <Label htmlFor="descricao" className="text-sm sm:text-base">Descrição</Label>
+                <Textarea
+                  id="descricao"
+                  value={formData.descricao}
+                  onChange={event => setFormData({ ...formData, descricao: event.target.value })}
+                  rows={3}
+                  className="text-sm sm:text-base"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+                <div className="space-y-1 sm:space-y-2">
+                  <Label htmlFor="tipo" className="text-sm sm:text-base">Tipo *</Label>
+                  <Select value={formData.tipo} onValueChange={value => setFormData({ ...formData, tipo: value })}>
                     <SelectTrigger id="tipo">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="casa">Casa</SelectItem>
                       <SelectItem value="apartamento">Apartamento</SelectItem>
+                      <SelectItem value="casa">Casa</SelectItem>
                       <SelectItem value="terreno">Terreno</SelectItem>
                       <SelectItem value="comercial">Comercial</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
-                <div>
-                  <Label htmlFor="finalidade">Finalidade *</Label>
-                  <Select value={formData.finalidade} onValueChange={(value) => setFormData({ ...formData, finalidade: value })}>
+                <div className="space-y-1 sm:space-y-2">
+                  <Label htmlFor="finalidade" className="text-sm sm:text-base">Finalidade *</Label>
+                  <Select value={formData.finalidade} onValueChange={value => setFormData({ ...formData, finalidade: value })}>
                     <SelectTrigger id="finalidade">
                       <SelectValue />
                     </SelectTrigger>
@@ -311,129 +504,142 @@ export default function MeusImoveis() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
 
-                <div>
-                  <Label htmlFor="valor">Valor (R$) *</Label>
-                  <Input
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+                <div className="space-y-1 sm:space-y-2">
+                  <Label htmlFor="valor" className="text-sm sm:text-base">Valor (R$) *</Label>
+                  <MoneyInput
                     id="valor"
-                    type="number"
                     value={formData.valor}
-                    onChange={(e) => setFormData({ ...formData, valor: e.target.value })}
-                    placeholder="500000"
+                    onValueChange={value => setFormData({ ...formData, valor: value })}
+                    placeholder="R$ 0,00"
+                    className="text-sm sm:text-base"
                   />
                 </div>
-
-                <div>
-                  <Label htmlFor="valorLocacao">Valor Locação (R$)</Label>
-                  <Input
+                <div className="space-y-1 sm:space-y-2">
+                  <Label htmlFor="valorLocacao" className="text-sm sm:text-base">Valor Locação (R$)</Label>
+                  <MoneyInput
                     id="valorLocacao"
-                    type="number"
                     value={formData.valorLocacao}
-                    onChange={(e) => setFormData({ ...formData, valorLocacao: e.target.value })}
-                    placeholder="2000"
+                    onValueChange={value => setFormData({ ...formData, valorLocacao: value })}
+                    placeholder="R$ 0,00"
+                    className="text-sm sm:text-base"
                   />
                 </div>
+              </div>
 
-                <div>
-                  <Label htmlFor="area">Área (m²)</Label>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+                <div className="space-y-1 sm:space-y-2">
+                  <Label htmlFor="area" className="text-sm sm:text-base">Área (m²)</Label>
                   <Input
                     id="area"
                     type="number"
                     value={formData.area}
-                    onChange={(e) => setFormData({ ...formData, area: e.target.value })}
+                    onChange={event => setFormData({ ...formData, area: event.target.value })}
+                    className="text-sm sm:text-base"
                   />
                 </div>
-
-                <div>
-                  <Label htmlFor="quartos">Quartos</Label>
+                <div className="space-y-1 sm:space-y-2">
+                  <Label htmlFor="quartos" className="text-sm sm:text-base">Quartos</Label>
                   <Input
                     id="quartos"
                     type="number"
                     value={formData.quartos}
-                    onChange={(e) => setFormData({ ...formData, quartos: e.target.value })}
+                    onChange={event => setFormData({ ...formData, quartos: event.target.value })}
+                    className="text-sm sm:text-base"
                   />
                 </div>
-
-                <div>
-                  <Label htmlFor="banheiros">Banheiros</Label>
+                <div className="space-y-1 sm:space-y-2">
+                  <Label htmlFor="banheiros" className="text-sm sm:text-base">Banheiros</Label>
                   <Input
                     id="banheiros"
                     type="number"
                     value={formData.banheiros}
-                    onChange={(e) => setFormData({ ...formData, banheiros: e.target.value })}
+                    onChange={event => setFormData({ ...formData, banheiros: event.target.value })}
+                    className="text-sm sm:text-base"
                   />
                 </div>
-
-                <div>
-                  <Label htmlFor="vagas">Vagas</Label>
+                <div className="space-y-1 sm:space-y-2">
+                  <Label htmlFor="vagas" className="text-sm sm:text-base">Vagas</Label>
                   <Input
                     id="vagas"
                     type="number"
                     value={formData.vagas}
-                    onChange={(e) => setFormData({ ...formData, vagas: e.target.value })}
+                    onChange={event => setFormData({ ...formData, vagas: event.target.value })}
+                    className="text-sm sm:text-base"
                   />
                 </div>
+              </div>
 
-                <div className="md:col-span-2">
-                  <Label htmlFor="endereco">Endereço *</Label>
+              <div className="space-y-1 sm:space-y-2">
+                <Label htmlFor="endereco" className="text-sm sm:text-base">Endereço *</Label>
+                <Input
+                  id="endereco"
+                  value={formData.endereco}
+                  onChange={event => setFormData({ ...formData, endereco: event.target.value })}
+                  className="text-sm sm:text-base"
+                  disabled={cepLoading}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+                <div className="space-y-1 sm:space-y-2">
+                  <Label htmlFor="numero" className="text-sm sm:text-base">Número</Label>
                   <Input
-                    id="endereco"
-                    value={formData.endereco}
-                    onChange={(e) => setFormData({ ...formData, endereco: e.target.value })}
+                    id="numero"
+                    value={formData.numero}
+                    onChange={event => setFormData({ ...formData, numero: event.target.value })}
+                    className="text-sm sm:text-base"
                   />
                 </div>
-
-                <div>
-                  <Label htmlFor="bairro">Bairro</Label>
+                <div className="space-y-1 sm:space-y-2">
+                  <Label htmlFor="bairro" className="text-sm sm:text-base">Bairro</Label>
                   <Input
                     id="bairro"
                     value={formData.bairro}
-                    onChange={(e) => setFormData({ ...formData, bairro: e.target.value })}
+                    onChange={event => setFormData({ ...formData, bairro: event.target.value })}
+                    className="text-sm sm:text-base"
+                    disabled={cepLoading}
                   />
                 </div>
-
-                <div>
-                  <Label htmlFor="cidade">Cidade *</Label>
+                <div className="space-y-1 sm:space-y-2">
+                  <Label htmlFor="cidade" className="text-sm sm:text-base">Cidade *</Label>
                   <Input
                     id="cidade"
                     value={formData.cidade}
-                    onChange={(e) => setFormData({ ...formData, cidade: e.target.value })}
+                    onChange={event => setFormData({ ...formData, cidade: event.target.value })}
+                    className="text-sm sm:text-base"
+                    disabled={cepLoading}
                   />
                 </div>
-
-                <div>
-                  <Label htmlFor="estado">Estado (UF) *</Label>
+                <div className="space-y-1 sm:space-y-2">
+                  <Label htmlFor="estado" className="text-sm sm:text-base">Estado *</Label>
                   <Input
                     id="estado"
                     maxLength={2}
                     value={formData.estado}
-                    onChange={(e) => setFormData({ ...formData, estado: e.target.value.toUpperCase() })}
-                    placeholder="SP"
+                    onChange={event => setFormData({ ...formData, estado: event.target.value.toUpperCase() })}
+                    className="text-sm sm:text-base"
+                    disabled={cepLoading}
                   />
                 </div>
-
-                <div>
-                  <Label htmlFor="cep">CEP</Label>
+                <div className="space-y-1 sm:space-y-2">
+                  <Label htmlFor="cep" className="text-sm sm:text-base">CEP</Label>
                   <Input
                     id="cep"
                     value={formData.cep}
-                    onChange={(e) => setFormData({ ...formData, cep: e.target.value })}
+                    inputMode="numeric"
+                    maxLength={9}
+                    onChange={event => handleZipCodeChange(event.target.value)}
+                    className="text-sm sm:text-base"
                   />
+                  {cepLoading ? <p className="text-xs text-muted-foreground">Buscando CEP...</p> : null}
+                  {cepError ? <p className="text-xs text-red-500">{cepError}</p> : null}
                 </div>
-
-                <div className="md:col-span-2">
-                  <Label htmlFor="descricao">Descrição</Label>
-                  <Textarea
-                    id="descricao"
-                    value={formData.descricao}
-                    onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
-                    rows={4}
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="destaque">Destaque na Home?</Label>
-                  <Select value={formData.destaque} onValueChange={(value) => setFormData({ ...formData, destaque: value })}>
+                <div className="space-y-1 sm:space-y-2">
+                  <Label htmlFor="destaque" className="text-sm sm:text-base">Destaque na Home?</Label>
+                  <Select value={formData.destaque} onValueChange={value => setFormData({ ...formData, destaque: value })}>
                     <SelectTrigger id="destaque">
                       <SelectValue />
                     </SelectTrigger>
@@ -443,84 +649,33 @@ export default function MeusImoveis() {
                     </SelectContent>
                   </Select>
                 </div>
-
-                <div className="md:col-span-2">
-                  <Button
-                    onClick={handleSubmit}
-                    className="w-full"
-                    disabled={createProperty.isPending || updateProperty.isPending}
-                  >
-                    {createProperty.isPending || updateProperty.isPending
-                      ? "Salvando..."
-                      : editingImovel
-                      ? "Atualizar Imóvel"
-                      : "Cadastrar Imóvel"}
-                  </Button>
-                </div>
               </div>
-            </DialogContent>
-          </Dialog>
-        </div>
 
-        {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3].map((i) => (
-              <Card key={i} className="overflow-hidden">
-                <div className="h-48 bg-muted animate-pulse" />
-                <CardContent className="p-4">
-                  <div className="h-4 bg-muted rounded animate-pulse mb-2" />
-                  <div className="h-3 bg-muted rounded animate-pulse w-2/3" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : imoveis && imoveis.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {imoveis.map((imovel) => (
-              <Card key={imovel.id} className="overflow-hidden">
-                <div className="h-48 bg-muted flex items-center justify-center">
-                  <Building2 className="h-12 w-12 text-muted-foreground" />
-                </div>
-                <CardContent className="p-4">
-                  <h3 className="font-bold text-lg mb-2 line-clamp-1">{imovel.titulo}</h3>
-                  <div className="flex items-center gap-1 text-sm text-muted-foreground mb-3">
-                    <MapPin className="h-4 w-4" />
-                    <span className="line-clamp-1">{imovel.cidade}, {imovel.estado}</span>
-                  </div>
-                  <div className="text-2xl font-bold text-primary mb-4">
-                    {formatCurrency(imovel.valor)}
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" className="flex-1" onClick={() => handleEdit(imovel)}>
-                      <Edit className="h-4 w-4 mr-2" />
-                      Editar
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => handleDelete(imovel.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : (
+              <Button
+                onClick={handleSubmit}
+                className="mt-2 w-full py-2 text-sm sm:mt-4 sm:py-3 sm:text-base"
+                disabled={updateProperty.isPending}
+              >
+                {updateProperty.isPending ? "Salvando..." : "Atualizar Imóvel"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {!isLoading && (!imoveis || imoveis.length === 0) ? (
           <Card className="p-12 text-center">
-            <Building2 className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <h3 className="text-lg font-semibold mb-2">Nenhum imóvel cadastrado</h3>
-            <p className="text-muted-foreground mb-4">
-              Comece cadastrando seu primeiro imóvel
+            <Building2 className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+            <h3 className="mb-2 text-lg font-semibold">Nenhum imóvel cadastrado</h3>
+            <p className="mb-4 text-muted-foreground">
+              Os novos imóveis devem ser cadastrados pela tela principal de imóveis.
             </p>
-            <Button onClick={() => setDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Cadastrar Imóvel
+            <Button asChild>
+              <Link href="/imoveis">
+                <a>Ir para Imóveis</a>
+              </Link>
             </Button>
           </Card>
-        )}
+        ) : null}
       </div>
     </Layout>
   );

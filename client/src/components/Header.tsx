@@ -55,7 +55,10 @@ export default function Header() {
 
   // Determina quais itens no cabeçalho mostrar baseado no regra de usuário
   const getMenuItems = () => {
-    const items = [...publicMenuItems];
+    const items =
+      isAuthenticated && user && user.role !== "cliente"
+        ? publicMenuItems.filter(item => item.href !== "/contato")
+        : [...publicMenuItems];
     
     if (isAuthenticated && user) {
       if (user.role === "cliente") {
@@ -109,14 +112,24 @@ export default function Header() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <div className="px-2 py-1.5 text-sm">
-                  <p className="font-medium">{user.name || "Usuário"}</p>
-                  <p className="text-xs text-muted-foreground">{user.email}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Papel: {ROLE_LABELS[user.role]}
-                  </p>
-                </div>
+                <Link href="/minha-ficha">
+                  <a className="block rounded-sm px-2 py-1.5 text-sm transition-colors hover:bg-accent">
+                    <p className="font-medium">{user.name || "Usuário"}</p>
+                    <p className="text-xs text-muted-foreground">{user.email}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Papel: {ROLE_LABELS[user.role]}
+                    </p>
+                  </a>
+                </Link>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/minha-ficha">
+                    <a className="flex items-center gap-2">
+                      <User className="h-4 w-4" />
+                      Meu Perfil
+                    </a>
+                  </Link>
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => logout()} className="gap-2 cursor-pointer">
                   <LogOut className="h-4 w-4" />
                   Sair

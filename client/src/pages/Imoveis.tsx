@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import Layout from "@/components/Layout";
+import MoneyInput from "@/components/MoneyInput";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { lookupCep } from "@/lib/cep";
+import { formatMoneyFromCentsValue, parseMoneyCentsInput } from "@/lib/money";
 import {
   Select,
   SelectContent,
@@ -12,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { Building2, MapPin, Bed, Bath, Car, Search, SlidersHorizontal, Plus } from "lucide-react";
 import { Link } from "wouter";
@@ -43,47 +47,17 @@ const FINALIDADES = [
 ];
 // ========== FIM DA ÁREA DE EDIÇÃO ==========
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value / 100);
+function formatZipCode(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 5) return digits;
+  return `${digits.slice(0, 5)}-${digits.slice(5)}`;
 }
-
-// ========== FUNÇÃO PARA BUSCAR CEP ==========
-async function buscarCEP(cep: string) {
-  // Remove caracteres especiais
-  const cepLimpo = cep.replace(/\D/g, "");
-  
-  // Valida se tem 8 dígitos
-  if (cepLimpo.length !== 8) {
-    return null;
-  }
-
-  try {
-    const response = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/` );
-    const data = await response.json();
-
-    // Verifica se CEP é válido
-    if (data.erro) {
-      return null;
-    }
-
-    return {
-      endereco: data.logradouro,
-      bairro: data.bairro,
-      cidade: data.localidade,
-      estado: data.uf,
-    };
-  } catch (error) {
-    console.error("Erro ao buscar CEP:", error);
-    return null;
-  }
-}
-// ========== FIM DA FUNÇÃO ==========
 
 export default function Imoveis() {
+  const { user, isAuthenticated } = useAuth();
   const { data: imoveis, isLoading, refetch} = trpc.properties.list.useQuery();
+  const canManageProperties =
+    isAuthenticated && (user?.role === "corretor" || user?.role === "administrativo");
   // Estado para controlar o dialog (Aberto ou fechado)
   const [newPropertyOpen, setNewPropertyOpen] = useState(false);
   //Estado para armazenar os dados do formulário
@@ -98,6 +72,7 @@ export default function Imoveis() {
     banheiros: "",
     vagas: "",
     endereco: "",
+    numero: "",
     bairro: "",
     cidade: "",
     estado: "",
@@ -106,6 +81,15 @@ export default function Imoveis() {
 
   const [cepLoading, setCepLoading] = useState(false);
   const [cepError, setCepError] = useState("");
+  const cepTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (cepTimeoutRef.current !== null) {
+        window.clearTimeout(cepTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Mutation para criar imóvel
   const createProperty = trpc.properties.create.useMutation({
@@ -125,6 +109,7 @@ export default function Imoveis() {
         banheiros: "",
         vagas: "",
         endereco: "",
+        numero: "",
         bairro: "",
         cidade: "",
         estado: "",
@@ -147,7 +132,7 @@ export default function Imoveis() {
     // Envia para o backend
     createProperty.mutate({
       ...newPropertyData,
-      valor: parseFloat(newPropertyData.valor),
+      valor: parseMoneyCentsInput(newPropertyData.valor) ?? 0,
       area: parseFloat(newPropertyData.area),
       quartos: parseInt(newPropertyData.quartos),
       banheiros: parseInt(newPropertyData.banheiros),
@@ -157,27 +142,33 @@ export default function Imoveis() {
 
   // ========== FUNÇÃO PARA LIDAR COM CEP ==========
   const handleCepChange = async (value: string) => {
-    // Atualiza o valor do CEP no estado
-    setNewPropertyData({ ...newPropertyData, cep: value });
+    const formattedValue = formatZipCode(value);
+    setNewPropertyData(current => ({ ...current, cep: formattedValue }));
+    setCepError("");
+
+    if (cepTimeoutRef.current !== null) {
+      window.clearTimeout(cepTimeoutRef.current);
+    }
 
     // Se o CEP tiver menos de 8 dígitos, não busca
-    if (value.replace(/\D/g, "").length < 8) {
-      setCepError("");
+    if (formattedValue.replace(/\D/g, "").length < 8) {
+      setCepLoading(false);
       return;
     }
 
     // Inicia o carregamento
     setCepLoading(true);
-    setCepError("");
 
     // Aguarda 500ms para o usuário terminar de digitar
-    setTimeout(async () => {
-      const dados = await buscarCEP(value);
+    cepTimeoutRef.current = window.setTimeout(async () => {
+      const result = await lookupCep(formattedValue);
 
-      if (dados) {
+      if (result.status === "success") {
+        const dados = result.data;
         // Preenche os campos automaticamente
         setNewPropertyData((prev) => ({
           ...prev,
+          cep: formattedValue,
           endereco: dados.endereco,
           bairro: dados.bairro,
           cidade: dados.cidade,
@@ -185,7 +176,11 @@ export default function Imoveis() {
         }));
         setCepError("");
       } else {
-        setCepError("CEP não encontrado");
+        setCepError(
+          result.status === "not_found"
+            ? "CEP não encontrado"
+            : "Serviço de CEP indisponível no momento"
+        );
       }
 
       setCepLoading(false);
@@ -209,8 +204,8 @@ export default function Imoveis() {
     if (filters.finalidade !== "todos" && imovel.finalidade !== filters.finalidade) return false;
     if (filters.cidade && !imovel.cidade.toLowerCase().includes(filters.cidade.toLowerCase())) return false;
     if (filters.bairro && !imovel.bairro?.toLowerCase().includes(filters.bairro.toLowerCase())) return false;
-    if (filters.valorMin && imovel.valor < parseInt(filters.valorMin) * 100) return false;
-    if (filters.valorMax && imovel.valor > parseInt(filters.valorMax) * 100) return false;
+    if (filters.valorMin && imovel.valor < (parseMoneyCentsInput(filters.valorMin) ?? 0)) return false;
+    if (filters.valorMax && imovel.valor > (parseMoneyCentsInput(filters.valorMax) ?? 0)) return false;
     return true;
   });
 
@@ -227,6 +222,7 @@ export default function Imoveis() {
           </div>
 
           {/* Botão que abre o dialog */}
+          {canManageProperties ? (
           <Dialog open={newPropertyOpen} onOpenChange={setNewPropertyOpen}>
             <DialogTrigger asChild>
               <Button className="gap-2">
@@ -315,14 +311,13 @@ export default function Imoveis() {
                 {/* Campo Valor */}
                 <div className="space-y-1 sm:space-y-2">
                   <Label htmlFor="valor" className="text-sm sm:text-base">Valor (R$) *</Label>
-                  <Input
+                  <MoneyInput
                     id="valor"
-                    type="number"
                     value={newPropertyData.valor}
-                    onChange={(e) =>
-                      setNewPropertyData({ ...newPropertyData, valor: e.target.value })
+                    onValueChange={(value) =>
+                      setNewPropertyData({ ...newPropertyData, valor: value })
                     }
-                    placeholder="Ex: 450000"
+                    placeholder="R$ 0,00"
                     className="text-sm sm:text-base"
                   />
                 </div>
@@ -395,6 +390,18 @@ export default function Imoveis() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div className="space-y-1 sm:space-y-2">
+                    <Label htmlFor="numero" className="text-sm sm:text-base">Número</Label>
+                    <Input
+                      id="numero"
+                      value={newPropertyData.numero}
+                      onChange={(e) =>
+                        setNewPropertyData({ ...newPropertyData, numero: e.target.value })
+                      }
+                      placeholder="Ex: 123"
+                      className="text-sm sm:text-base"
+                    />
+                  </div>
                   <div className="space-y-1 sm:space-y-2">
                     <Label htmlFor="bairro" className="text-sm sm:text-base">Bairro</Label>
                     <Input
@@ -469,6 +476,7 @@ export default function Imoveis() {
               </div>
             </DialogContent>
           </Dialog>
+          ) : null}
         </div>
 
         {/* Filtros */}
@@ -544,23 +552,19 @@ export default function Imoveis() {
 
               <div className="space-y-2">
                 <Label htmlFor="valorMin">Valor Mínimo</Label>
-                <Input
+                <MoneyInput
                   id="valorMin"
-                  type="number"
-                  maxLength={12}
                   value={filters.valorMin}
-                  onChange={(e) => setFilters({ ...filters, valorMin: e.target.value })}
+                  onValueChange={(value) => setFilters({ ...filters, valorMin: value })}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="valorMax">Valor Máximo</Label>
-                <Input
+                <MoneyInput
                   id="valorMax"
-                  type="number"
-                  maxLength={12}
                   value={filters.valorMax}
-                  onChange={(e) => setFilters({ ...filters, valorMax: e.target.value })}
+                  onValueChange={(value) => setFilters({ ...filters, valorMax: value })}
                 />
               </div>
             </div>
@@ -655,7 +659,7 @@ export default function Imoveis() {
                         )}
                       </div>
                       <div className="text-2xl font-bold text-primary">
-                        {formatCurrency(imovel.valor)}
+                        {formatMoneyFromCentsValue(imovel.valor)}
                       </div>
                     </CardContent>
                   </Card>

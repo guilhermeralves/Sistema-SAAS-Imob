@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Layout from "@/components/Layout";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { Mail, Phone, MapPin, MessageCircle, Send, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
+import { useLocation } from "wouter";
 
 /**
  * Página de Contato
@@ -34,6 +36,8 @@ const WHATSAPP_CONFIG = {
 // ========== FIM DA ÁREA DE EDIÇÃO ==========
 
 export default function Contato() {
+  const { user, isAuthenticated, loading } = useAuth();
+  const [, setLocation] = useLocation();
   const [formData, setFormData] = useState({
     nome: "",
     email: "",
@@ -41,6 +45,22 @@ export default function Contato() {
     mensagem: "",
   });
   const [submitted, setSubmitted] = useState(false);
+  const isClientUser = isAuthenticated && user?.role === "cliente";
+  const shouldHideContactPage = isAuthenticated && user?.role !== "cliente";
+
+  useEffect(() => {
+    if (shouldHideContactPage) {
+      setLocation("/");
+    }
+  }, [setLocation, shouldHideContactPage]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || window.location.hash !== "#contato-topo") {
+      return;
+    }
+
+    document.getElementById("contato-topo")?.scrollIntoView({ block: "start" });
+  }, []);
 
   const createLead = trpc.leads.create.useMutation({
     onSuccess: () => {
@@ -56,26 +76,46 @@ export default function Contato() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!formData.nome || !formData.email || !formData.mensagem) {
+
+    if ((!isClientUser && (!formData.nome || !formData.email)) || !formData.mensagem) {
       toast.error("Por favor, preencha todos os campos obrigatórios.");
       return;
     }
 
     createLead.mutate({
-      nome: formData.nome,
-      email: formData.email,
-      telefone: formData.telefone,
+      nome: isClientUser ? user?.name || user?.email || "Cliente" : formData.nome,
+      email: isClientUser ? user?.email || "" : formData.email,
+      telefone: isClientUser ? user?.phone || "" : formData.telefone,
       origem: "site",
       interesse: formData.mensagem,
       status: "novo",
     });
   };
 
+  if (shouldHideContactPage) {
+    return null;
+  }
+
+  if (loading) {
+    return (
+      <Layout>
+        <div className="container py-8">
+          <div className="space-y-4 animate-pulse">
+            <div className="h-12 w-1/3 rounded bg-muted" />
+            <div className="h-96 rounded bg-muted" />
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       {/* Hero */}
-      <section className="bg-gradient-to-br from-primary/15 via-background to-accent/10 py-8 md:py-12">
+      <section
+        id="contato-topo"
+        className="bg-gradient-to-br from-primary/15 via-background to-accent/10 py-8 md:py-12"
+      >
         <div className="container text-center">
           <h1 className="text-4xl md:text-5xl font-bold mb-2">Fale Conosco</h1>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
@@ -93,7 +133,9 @@ export default function Contato() {
                 <CardHeader>
                   <CardTitle className="text-2xl">Envie sua Mensagem</CardTitle>
                   <CardDescription>
-                    Preencha o formulário abaixo e entraremos em contato o mais breve possível
+                    {isClientUser
+                      ? `Conte como podemos te ajudar ${user?.name || user?.email || ""}`
+                      : "Preencha o formulário abaixo e entraremos em contato o mais breve possível"}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -110,39 +152,43 @@ export default function Contato() {
                     </div>
                   ) : (
                     <form onSubmit={handleSubmit} className="space-y-4">
-                      <div>
-                        <Label className="py-2" htmlFor="nome">Nome Completo</Label>
-                        <Input
-                          id="nome"
-                          placeholder="Seu nome"
-                          value={formData.nome}
-                          onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                          required
-                        />
-                      </div>
+                      {isClientUser ? null : (
+                        <>
+                          <div>
+                            <Label className="py-2" htmlFor="nome">Nome Completo</Label>
+                            <Input
+                              id="nome"
+                              placeholder="Seu nome"
+                              value={formData.nome}
+                              onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+                              required
+                            />
+                          </div>
 
-                      <div>
-                        <Label className="py-2" htmlFor="email">E-mail</Label>
-                        <Input
-                          id="email"
-                          type="email"
-                          placeholder="seu@email.com"
-                          value={formData.email}
-                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                          required
-                        />
-                      </div>
+                          <div>
+                            <Label className="py-2" htmlFor="email">E-mail</Label>
+                            <Input
+                              id="email"
+                              type="email"
+                              placeholder="seu@email.com"
+                              value={formData.email}
+                              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                              required
+                            />
+                          </div>
 
-                      <div>
-                        <Label className="py-2" htmlFor="telefone">Telefone</Label>
-                        <Input
-                          id="telefone"
-                          type="tel"
-                          placeholder="(11) 99999-9999"
-                          value={formData.telefone}
-                          onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
-                        />
-                      </div>
+                          <div>
+                            <Label className="py-2" htmlFor="telefone">Telefone</Label>
+                            <Input
+                              id="telefone"
+                              type="tel"
+                              placeholder="(11) 99999-9999"
+                              value={formData.telefone}
+                              onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
+                            />
+                          </div>
+                        </>
+                      )}
 
                       <div>
                         <Label className="py-2" htmlFor="mensagem">Mensagem</Label>

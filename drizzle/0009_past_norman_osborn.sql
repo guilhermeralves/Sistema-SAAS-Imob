@@ -1,0 +1,1 @@
+ALTER TABLE `properties` ADD `numero` varchar(20);

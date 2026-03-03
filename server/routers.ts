@@ -16,6 +16,7 @@ import {
   adminProcedure,
   clientProcedure,
   publicProcedure,
+  protectedProcedure,
   router,
   staffProcedure,
 } from "./_core/trpc";
@@ -81,6 +82,12 @@ const adminUserDetailsSchema = z.object({
   state: z.string().trim().max(2).optional(),
   zipCode: z.string().trim().max(10).optional(),
   notes: z.string().trim().max(2000).optional(),
+});
+
+const profileDetailsSchema = adminUserDetailsSchema.omit({
+  id: true,
+  role: true,
+  isActive: true,
 });
 
 const assignLeadSchema = z.object({
@@ -396,6 +403,47 @@ export const appRouter = router({
       const { id, status } = input as any;
       const { updateDocument } = await import("./db");
       return await updateDocument(id, { status });
+    }),
+  }),
+
+  profile: router({
+    update: protectedProcedure.input(profileDetailsSchema).mutation(async ({ ctx, input }) => {
+      const { getUserById, updateUser } = await import("./db");
+      const user = await getUserById(ctx.user.id);
+
+      if (!user) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
+      }
+
+      await ensureUniqueUserIdentity(input.email, input.cpf, ctx.user.id);
+
+      await updateUser(ctx.user.id, {
+        name: input.name.trim(),
+        email: input.email,
+        cpf: input.cpf,
+        phone: input.phone?.trim() || null,
+        birthDate: input.birthDate ? new Date(`${input.birthDate}T00:00:00`) : null,
+        profession: input.profession?.trim() || null,
+        grossMonthlyIncome: input.grossMonthlyIncome ?? null,
+        maritalStatus: input.maritalStatus ?? null,
+        householdIncome: input.householdIncome ?? null,
+        rg: input.rg?.trim() || null,
+        nationality: input.nationality?.trim() || null,
+        address: input.address?.trim() || null,
+        neighborhood: input.neighborhood?.trim() || null,
+        addressNumber: input.addressNumber?.trim() || null,
+        city: input.city?.trim() || null,
+        state: input.state?.trim() || null,
+        zipCode: input.zipCode?.trim() || null,
+        notes: input.notes?.trim() || null,
+      });
+
+      const updatedUser = await getUserById(ctx.user.id);
+      if (!updatedUser) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
+      }
+
+      return toSafeUser(updatedUser);
     }),
   }),
 

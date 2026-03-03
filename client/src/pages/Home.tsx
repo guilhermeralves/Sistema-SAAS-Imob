@@ -1,8 +1,10 @@
 import Layout from "@/components/Layout";
 import React from "react";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { Banner } from "@/components/Banner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { Building2, Search, FileText, Users, ArrowRight, MapPin, Bed, Bath, Car } from "lucide-react";
 import { Link } from "wouter";
@@ -90,7 +92,8 @@ function formatCurrency(value: number) {
 }
 
 export default function Home() {
-   const [index, setIndex] = React.useState(0);
+  const { isAuthenticated } = useAuth();
+  const [index, setIndex] = React.useState(0);
 
   React.useEffect(() => {
     const id = setInterval(() => {
@@ -100,6 +103,13 @@ export default function Home() {
   }, []);
 
   const { data: destaques, isLoading } = trpc.properties.getDestacados.useQuery();
+  const announceHref = isAuthenticated
+    ? `https://wa.me/${CAPTACAO_CONFIG.whatsapp}?text=${encodeURIComponent(
+        "Olá tudo bem? Gostaria de Anunciar meu Imóvel na AFG!"
+      )}`
+    : getLoginUrl();
+  const announceTarget = isAuthenticated ? "_blank" : undefined;
+  const announceRel = isAuthenticated ? "noopener noreferrer" : undefined;
 
   return (
     <Layout>
@@ -273,16 +283,12 @@ export default function Home() {
                   asChild
                   className="gap-2"
                 >
-                  <a
-                    href={`https://wa.me/${CAPTACAO_CONFIG.whatsapp}?text=Olá! Gostaria de anunciar meu imóvel.`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
+                  <a href={announceHref} target={announceTarget} rel={announceRel}>
                     {CAPTACAO_CONFIG.ctaText}
                     <ArrowRight className="h-5 w-5" />
                   </a>
                 </Button>
-                <Link href="/contato">
+                <Link href="/contato#contato-topo">
                   <Button size="lg" variant="outline">
                     Fale Conosco
                   </Button>

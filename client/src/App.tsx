@@ -1,5 +1,6 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import MobileKeyboardDismiss from "@/components/MobileKeyboardDismiss";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
@@ -32,6 +33,9 @@ function Router() {
       <Route path={"/register"} component={Register} />
       <Route path={"/area-cliente"}>
         <ProtectedRoute component={AreaCliente} roles={["cliente"]} />
+      </Route>
+      <Route path={"/minha-ficha"}>
+        <ProtectedRoute component={AdminUserDetails} roles={["cliente", "corretor", "administrativo"]} />
       </Route>
       <Route path={"/crm"}>
         <ProtectedRoute component={CRM} roles={["corretor", "administrativo"]} />
@@ -68,6 +72,7 @@ function App() {
         // switchable
       >
         <TooltipProvider>
+          <MobileKeyboardDismiss />
           <Toaster
             richColors
             toastOptions={{
