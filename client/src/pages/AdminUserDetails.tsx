@@ -154,6 +154,13 @@ export default function AdminUserDetails() {
   }, [user]);
 
   useEffect(() => {
+    if (!isAdminRoute || !adminUser) return;
+
+    void utils.admin.users.invalidate();
+    void utils.admin.hasNewUsers.invalidate();
+  }, [adminUser, isAdminRoute, utils]);
+
+  useEffect(() => {
     return () => {
       if (cepTimeoutRef.current !== null) {
         window.clearTimeout(cepTimeoutRef.current);

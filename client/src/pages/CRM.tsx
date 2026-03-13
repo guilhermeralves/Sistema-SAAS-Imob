@@ -371,18 +371,18 @@ export default function CRM() {
             return (
               <Card
                 key={status.value}
-                className={`cursor-pointer transition-all hover:shadow-lg ${isSelected ? 'ring-2 ring-primary shadow-lg' : ''
+                className={`min-h-[124px] cursor-pointer rounded-2xl border border-border/80 transition-all hover:shadow-md ${isSelected ? 'ring-2 ring-primary shadow-md' : 'shadow-sm'
                   }`}
                 onClick={() => setStatusSelected(status.value)}
               >
-                <CardContent className="p-4">
+                <CardContent className="flex h-full items-center p-6">
                   <div className="flex items-center gap-3">
                     <div className={`w-3 h-3 rounded-full ${status.color}`} />
                     <div className="flex-1">
                       <p className="text-sm font-medium text-foreground">
                         {status.label}
                       </p>
-                      <p className="text-2xl font-bold text-foreground mt-1">
+                      <p className="mt-2 text-3xl font-bold tracking-tight text-foreground">
                         {qtdLeads}
                       </p>
                     </div>

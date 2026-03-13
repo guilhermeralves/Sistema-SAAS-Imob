@@ -1,7 +1,9 @@
-import { desc, eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
+import { and, desc, eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
 import {
+  adminUserViews,
   InsertContract,
+  InsertAdminUserView,
   InsertDocument,
   InsertLead,
   InsertLeadFile,
@@ -79,6 +81,11 @@ export async function upsertUser(user: InsertUser): Promise<void> {
 
   textFields.forEach(assignNullable);
 
+  if (user.registrationSource !== undefined) {
+    values.registrationSource = user.registrationSource;
+    updateSet.registrationSource = user.registrationSource;
+  }
+
   if (user.lastSignedIn !== undefined) {
     values.lastSignedIn = user.lastSignedIn;
     updateSet.lastSignedIn = user.lastSignedIn;
@@ -120,7 +127,8 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     updateSet.lastSignedIn = new Date();
   }
 
-  await db.insert(users).values(values).onDuplicateKeyUpdate({
+  await db.insert(users).values(values).onConflictDoUpdate({
+    target: users.openId,
     set: updateSet,
   });
 }
@@ -138,6 +146,74 @@ export async function createUser(user: InsertUser) {
   }
 
   return createdUser;
+}
+
+export async function getViewedUserIdsByAdmin(adminUserId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = await db
+    .select({ viewedUserId: adminUserViews.viewedUserId })
+    .from(adminUserViews)
+    .where(eq(adminUserViews.adminUserId, adminUserId));
+
+  return rows.map(row => row.viewedUserId);
+}
+
+export async function markUserAsViewedByAdmin(adminUserId: number, viewedUserId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const payload: InsertAdminUserView = {
+    adminUserId,
+    viewedUserId,
+    viewedAt: new Date(),
+  };
+
+  await db
+    .insert(adminUserViews)
+    .values(payload)
+    .onConflictDoNothing({
+      target: [adminUserViews.adminUserId, adminUserViews.viewedUserId],
+    });
+}
+
+export async function markUsersAsViewedByAdmin(adminUserId: number, viewedUserIds: number[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (viewedUserIds.length === 0) return;
+
+  const payloads: InsertAdminUserView[] = viewedUserIds.map(viewedUserId => ({
+    adminUserId,
+    viewedUserId,
+    viewedAt: new Date(),
+  }));
+
+  await db
+    .insert(adminUserViews)
+    .values(payloads)
+    .onConflictDoNothing({
+      target: [adminUserViews.adminUserId, adminUserViews.viewedUserId],
+    });
+}
+
+export async function hasNewPublicUsersForAdmin(adminUserId: number) {
+  const db = await getDb();
+  if (!db) return false;
+
+  const publicUsers = await db
+    .select({
+      id: users.id,
+    })
+    .from(users)
+    .where(and(eq(users.role, "cliente"), eq(users.registrationSource, "public_signup")));
+
+  if (publicUsers.length === 0) {
+    return false;
+  }
+
+  const viewedIds = new Set(await getViewedUserIdsByAdmin(adminUserId));
+  return publicUsers.some(user => !viewedIds.has(user.id));
 }
 
 export async function updateUser(id: number, data: Partial<InsertUser>) {

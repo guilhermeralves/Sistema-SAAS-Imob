@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { APP_LOGO, getLoginUrl, getRegisterUrl } from "@/const";
 import { Button } from "@/components/ui/button";
+import { trpc } from "@/lib/trpc";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +27,10 @@ import { useState } from "react";
 export default function Header() {
   const { user, loading, isAuthenticated, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { data: hasNewUsers } = trpc.admin.hasNewUsers.useQuery(undefined, {
+    enabled: isAuthenticated && user?.role === "administrativo",
+    refetchOnWindowFocus: true,
+  });
 
   // Menu público (visível para todos)
   const publicMenuItems = [
@@ -75,6 +80,23 @@ export default function Header() {
 
   const menuItems = getMenuItems();
 
+  const handleMenuNavigation = (
+    event: React.MouseEvent<HTMLAnchorElement>,
+    href: string,
+    closeMobile = false
+  ) => {
+    if (closeMobile) {
+      setMobileMenuOpen(false);
+    }
+
+    if (typeof window === "undefined") return;
+
+    if (window.location.pathname === href) {
+      event.preventDefault();
+      window.location.assign(href);
+    }
+  };
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-15 items-center justify-between">
@@ -91,9 +113,21 @@ export default function Header() {
         <nav className="hidden md:flex items-center gap-6">
           {menuItems.map((item) => (
             <Link key={item.href} href={item.href}>
-              <a className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary transition-colors">
+              <a
+                className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
+                onClick={event => handleMenuNavigation(event, item.href)}
+              >
                 <item.icon className="h-4 w-4" />
-                {item.label}
+                <span className="flex items-center gap-2">
+                  <span>{item.label}</span>
+                  {item.href === "/admin/users" && hasNewUsers ? (
+                    <span
+                      className="inline-block h-2.5 w-2.5 rounded-full bg-primary"
+                      aria-label="Existem novos cadastros"
+                      title="Existem novos cadastros"
+                    />
+                  ) : null}
+                </span>
               </a>
             </Link>
           ))}
@@ -167,33 +201,22 @@ export default function Header() {
               <Link key={item.href} href={item.href}>
                 <a
                   className="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-primary hover:bg-accent transition-colors"
-                  onClick={() => setMobileMenuOpen(false)}
+                  onClick={event => handleMenuNavigation(event, item.href, true)}
                 >
                   <item.icon className="h-4 w-4" />
-                  {item.label}
+                  <span className="flex items-center gap-2">
+                    <span>{item.label}</span>
+                    {item.href === "/admin/users" && hasNewUsers ? (
+                      <span
+                        className="inline-block h-2.5 w-2.5 rounded-full bg-primary"
+                        aria-label="Existem novos cadastros"
+                        title="Existem novos cadastros"
+                      />
+                    ) : null}
+                  </span>
                 </a>
               </Link>
             ))}
-            {!isAuthenticated && !loading && (
-              <>
-                <a
-                  href={getLoginUrl()}
-                  className="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-primary hover:bg-accent transition-colors"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  <User className="h-4 w-4" />
-                  Entrar
-                </a>
-                <a
-                  href={getRegisterUrl()}
-                  className="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-primary hover:bg-accent transition-colors"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  <User className="h-4 w-4" />
-                  Cadastrar
-                </a>
-              </>
-            )}
           </nav>
         </div>
       )}

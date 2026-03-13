@@ -33,6 +33,7 @@ export function registerOAuthRoutes(app: Express) {
         name: userInfo.name || null,
         email: userInfo.email ?? null,
         loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
+        registrationSource: "oauth",
         lastSignedIn: new Date(),
       });
 

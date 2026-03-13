@@ -20,7 +20,7 @@ import {
   router,
   staffProcedure,
 } from "./_core/trpc";
-import { toSafeUser, toSafeUsers } from "./_core/users";
+import { toSafeUser } from "./_core/users";
 
 const idSchema = z.object({
   id: z.number().int().positive(),
@@ -37,6 +37,7 @@ const registerSchema = z.object({
   password: z.string().min(8).max(72),
   name: z.string().trim().min(2).max(120),
   cpf: cpfSchema,
+  phone: z.string().trim().min(14).max(20),
 });
 
 const loginSchema = z.object({
@@ -173,6 +174,44 @@ async function assertContractProfileIsComplete(userId: number) {
   }
 }
 
+async function getAdminUsersWithFlags(adminUserId: number) {
+  const { getAllUsers, getViewedUserIdsByAdmin } = await import("./db");
+  const allUsers = await getAllUsers();
+  const viewedIds = new Set(await getViewedUserIdsByAdmin(adminUserId));
+
+  return allUsers.map(user => ({
+    ...toSafeUser(user),
+    isNewForAdmin:
+      user.role === "cliente" &&
+      user.registrationSource === "public_signup" &&
+      !viewedIds.has(user.id),
+  }));
+}
+
+async function getAdminUserWithFlags(adminUserId: number, userId: number) {
+  const { getUserById, getViewedUserIdsByAdmin, markUserAsViewedByAdmin } = await import("./db");
+  const user = await getUserById(userId);
+
+  if (!user) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Usuario nao encontrado" });
+  }
+
+
+  const isTrackableNewUser =
+    user.role === "cliente" && user.registrationSource === "public_signup";
+
+  if (isTrackableNewUser) {
+    await markUserAsViewedByAdmin(adminUserId, user.id);
+  }
+
+  const viewedIds = new Set(await getViewedUserIdsByAdmin(adminUserId));
+
+  return {
+    ...toSafeUser(user),
+    isNewForAdmin: isTrackableNewUser && !viewedIds.has(user.id),
+  };
+}
+
 export const appRouter = router({
   system: systemRouter,
   auth: router({
@@ -186,8 +225,10 @@ export const appRouter = router({
         name: input.name.trim(),
         email: input.email,
         cpf: input.cpf,
+        phone: input.phone.trim(),
         loginMethod: "password",
         passwordHash,
+        registrationSource: "public_signup",
         role: "cliente",
         isActive: 1,
         lastSignedIn: new Date(),
@@ -209,8 +250,8 @@ export const appRouter = router({
 
       if (!user || !user.passwordHash) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "E-mail ou senha inválidos" });
-      }
 
+      }
       if (user.isActive !== 1) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Usuário desativado" });
       }
@@ -410,11 +451,15 @@ export const appRouter = router({
     update: protectedProcedure.input(profileDetailsSchema).mutation(async ({ ctx, input }) => {
       const { getUserById, updateUser } = await import("./db");
       const user = await getUserById(ctx.user.id);
-
       if (!user) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Usuario nao encontrado" });
+      }
+      /*
+
         throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
       }
 
+      */
       await ensureUniqueUserIdentity(input.email, input.cpf, ctx.user.id);
 
       await updateUser(ctx.user.id, {
@@ -448,19 +493,38 @@ export const appRouter = router({
   }),
 
   admin: router({
-    users: adminProcedure.query(async () => {
-      const { getAllUsers } = await import("./db");
-      return toSafeUsers(await getAllUsers());
+    users: adminProcedure.query(async ({ ctx }) => {
+      return await getAdminUsersWithFlags(ctx.user.id);
     }),
-    userById: adminProcedure.input(idSchema).query(async ({ input }) => {
-      const { getUserById } = await import("./db");
-      const user = await getUserById(input.id);
+    hasNewUsers: adminProcedure.query(async ({ ctx }) => {
+      const { hasNewPublicUsersForAdmin } = await import("./db");
+      return await hasNewPublicUsersForAdmin(ctx.user.id);
+    }),
+    userById: adminProcedure.input(idSchema).query(async ({ ctx, input }) => {
+      return await getAdminUserWithFlags(ctx.user.id, input.id);
+      /*
 
-      if (!user) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
       }
 
-      return toSafeUser(user);
+      */
+    }),
+    markAllNewUsersAsViewed: adminProcedure.mutation(async ({ ctx }) => {
+      const { getAllUsers, getViewedUserIdsByAdmin, markUsersAsViewedByAdmin } = await import("./db");
+      const users = await getAllUsers();
+      const viewedIds = new Set(await getViewedUserIdsByAdmin(ctx.user.id));
+      const newUserIds = users
+        .filter(
+          user =>
+            user.role === "cliente" &&
+            user.registrationSource === "public_signup" &&
+            !viewedIds.has(user.id)
+        )
+        .map(user => user.id);
+
+      await markUsersAsViewedByAdmin(ctx.user.id, newUserIds);
+
+      return { markedCount: newUserIds.length };
     }),
     createUser: adminProcedure.input(adminCreateUserSchema).mutation(async ({ input }) => {
       const { createUser } = await import("./db");
@@ -474,6 +538,7 @@ export const appRouter = router({
         cpf: input.cpf,
         loginMethod: "password",
         passwordHash,
+        registrationSource: "admin_created",
         role: input.role,
         isActive: 1,
       });

@@ -6,23 +6,27 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getRegisterUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { getPostLoginPath } from "@/lib/auth-routing";
 import { LogIn } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 
 export default function Login() {
-  const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
   const { user, loading, isAuthenticated } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  const redirectToHomeWithRefresh = () => {
+    if (typeof window !== "undefined") {
+      window.location.assign("/");
+    }
+  };
+
   const login = trpc.auth.login.useMutation({
-    onSuccess: async userData => {
+    onSuccess: async () => {
       await utils.auth.me.invalidate();
-      setLocation(getPostLoginPath(userData));
+      redirectToHomeWithRefresh();
     },
     onError: error => {
       toast.error(error.message || "Não foi possível entrar");
@@ -31,9 +35,9 @@ export default function Login() {
 
   useEffect(() => {
     if (!loading && isAuthenticated && user) {
-      setLocation(getPostLoginPath(user));
+      redirectToHomeWithRefresh();
     }
-  }, [isAuthenticated, loading, setLocation, user]);
+  }, [isAuthenticated, loading, user]);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();

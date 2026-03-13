@@ -6,7 +6,7 @@
  * Para executar: node seed.mjs
  */
 
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle } from "drizzle-orm/node-postgres";
 import { users, properties, leads, contracts, documents, leadNotes } from "./drizzle/schema.ts";
 
 const db = drizzle(process.env.DATABASE_URL);

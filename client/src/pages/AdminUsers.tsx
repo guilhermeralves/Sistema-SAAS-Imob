@@ -1,6 +1,7 @@
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -9,6 +10,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -28,7 +35,7 @@ import {
 } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
 import { ROLE_LABELS, type AppRole } from "@shared/auth";
-import { Plus, Search, Shield, UserCog } from "lucide-react";
+import { MoreHorizontal, Plus, Search, Shield, UserCog } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Link } from "wouter";
@@ -61,6 +68,7 @@ export default function AdminUsers() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editState, setEditState] = useState<EditState>(null);
   const [selectedFilter, setSelectedFilter] = useState<UserFilter | null>(null);
+  const [showClientsWithContracts, setShowClientsWithContracts] = useState(false);
   const [search, setSearch] = useState("");
   const [createForm, setCreateForm] = useState({
     name: "",
@@ -71,6 +79,17 @@ export default function AdminUsers() {
   });
 
   const { data: users, isLoading } = trpc.admin.users.useQuery();
+  const { data: contracts } = trpc.contracts.list.useQuery(undefined, {
+    enabled: selectedFilter === "cliente" && showClientsWithContracts,
+  });
+  const newUsersCount = useMemo(
+    () => users?.filter(user => user.isNewForAdmin).length ?? 0,
+    [users]
+  );
+  const clientIdsWithContracts = useMemo(
+    () => new Set((contracts ?? []).map(contract => contract.idCliente)),
+    [contracts]
+  );
 
   const createUser = trpc.admin.createUser.useMutation({
     onSuccess: async () => {
@@ -78,9 +97,25 @@ export default function AdminUsers() {
       setCreateOpen(false);
       setCreateForm({ name: "", cpf: "", email: "", password: "", role: "corretor" });
       await utils.admin.users.invalidate();
+      await utils.admin.hasNewUsers.invalidate();
     },
     onError: error => {
       toast.error(error.message || "Nao foi possivel criar o usuario");
+    },
+  });
+
+  const markAllNewUsersAsViewed = trpc.admin.markAllNewUsersAsViewed.useMutation({
+    onSuccess: async data => {
+      toast.success(
+        data.markedCount > 0
+          ? "Todos os novos cadastros foram marcados como vistos"
+          : "Nao havia novos cadastros pendentes"
+      );
+      await utils.admin.users.invalidate();
+      await utils.admin.hasNewUsers.invalidate();
+    },
+    onError: error => {
+      toast.error(error.message || "Nao foi possivel marcar os cadastros como vistos");
     },
   });
 
@@ -97,6 +132,14 @@ export default function AdminUsers() {
 
   const sortedUsers = useMemo(() => {
     return [...(users ?? [])].sort((left, right) => {
+      if (left.isNewForAdmin !== right.isNewForAdmin) {
+        return left.isNewForAdmin ? -1 : 1;
+      }
+
+      if (left.isNewForAdmin && right.isNewForAdmin) {
+        return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+      }
+
       const leftValue = (left.name || left.email || "").trim();
       const rightValue = (right.name || right.email || "").trim();
 
@@ -142,14 +185,18 @@ export default function AdminUsers() {
           ROLE_LABELS[user.role],
           user.role,
           user.isActive === 1 ? "ativo" : "inativo",
-          formatDate(user.lastSignedIn),
+          user.isNewForAdmin ? "novo" : formatDate(user.lastSignedIn),
         ];
 
         return searchableValues.some(value =>
           value.toLowerCase().includes(normalizedSearch)
         );
+      })
+      .filter(user => {
+        if (selectedFilter !== "cliente" || !showClientsWithContracts) return true;
+        return clientIdsWithContracts.has(user.id);
       });
-  }, [search, selectedFilter, sortedUsers]);
+  }, [clientIdsWithContracts, search, selectedFilter, showClientsWithContracts, sortedUsers]);
 
   const cards: Array<{ key: UserFilter; label: string; value: number }> = [
     { key: "all", label: "Todos os Cadastros", value: users?.length ?? 0 },
@@ -163,7 +210,7 @@ export default function AdminUsers() {
       <div className="container py-8 space-y-6">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-4xl font-bold">Usuarios</h1>
+            <h1 className="text-3xl font-bold">Usuarios</h1>
             <p className="text-muted-foreground">
               Gerencie usuarios, ajuste permissoes e desative contas.
             </p>
@@ -279,17 +326,17 @@ export default function AdminUsers() {
             return (
               <Card
                 key={card.key}
-                className={`cursor-pointer transition-all hover:shadow-md ${
-                  isSelected ? "ring-2 ring-primary shadow-md" : ""
+                className={`min-h-[124px] cursor-pointer rounded-2xl border border-border/80 transition-all hover:shadow-md ${
+                  isSelected ? "ring-2 ring-primary shadow-md" : "shadow-sm"
                 }`}
                 onClick={() =>
                   setSelectedFilter(current => (current === card.key ? null : card.key))
                 }
               >
-                <CardHeader className="px-6 pt-4 pb-1 md:pb-2">
-                  <CardTitle className="text-sm">{card.label}</CardTitle>
+                <CardHeader className="px-6 pt-5 pb-2">
+                  <CardTitle className="text-sm font-medium">{card.label}</CardTitle>
                 </CardHeader>
-                <CardContent className="px-6 pb-4 pt-0 md:pb-6 text-2xl font-bold">
+                <CardContent className="px-6 pb-5 pt-0 text-3xl font-bold tracking-tight">
                   {card.value}
                 </CardContent>
               </Card>
@@ -299,13 +346,32 @@ export default function AdminUsers() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5" />
-              Lista de todos os usuarios
-            </CardTitle>
-            <CardDescription>
-              Gerencie informacoes e permissoes de qualquer cadastro, mesmo que inativo.
-            </CardDescription>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <CardTitle className="flex items-center gap-1 text-xl">
+                  <Shield className="h-5 w-5" />
+                  Lista de todos os usuarios
+                </CardTitle>
+                <CardDescription className="mt-2">
+                  Gerencie informacoes e permissoes de qualquer cadastro, mesmo que inativo.
+                </CardDescription>
+              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" aria-label="Abrir acoes da lista de usuarios">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    disabled={markAllNewUsersAsViewed.isPending}
+                    onClick={() => markAllNewUsersAsViewed.mutate()}
+                  >
+                    Marcar todos cadastros novos como vistos ({newUsersCount})
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="relative mb-4 lg:max-w-xl">
@@ -317,6 +383,22 @@ export default function AdminUsers() {
                 className="pl-9"
               />
             </div>
+
+            {selectedFilter === "cliente" ? (
+              <div className="mb-4 flex items-center gap-3">
+                <Checkbox
+                  id="clientes-com-contratos"
+                  checked={showClientsWithContracts}
+                  onCheckedChange={checked => setShowClientsWithContracts(checked === true)}
+                />
+                <Label
+                  htmlFor="clientes-com-contratos"
+                  className="cursor-pointer text-sm font-medium"
+                >
+                  Clientes com contratos
+                </Label>
+              </div>
+            ) : null}
 
             {isLoading ? (
               <div className="space-y-3">
@@ -345,7 +427,15 @@ export default function AdminUsers() {
                         <TableCell>{user.email || "-"}</TableCell>
                         <TableCell>{ROLE_LABELS[user.role]}</TableCell>
                         <TableCell>{user.isActive === 1 ? "Ativo" : "Inativo"}</TableCell>
-                        <TableCell>{formatDate(user.lastSignedIn)}</TableCell>
+                        <TableCell>
+                          {user.isNewForAdmin ? (
+                            <span className="inline-flex items-center rounded-full bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground">
+                              Novo
+                            </span>
+                          ) : (
+                            formatDate(user.lastSignedIn)
+                          )}
+                        </TableCell>
                         <TableCell>
                           <Button variant="outline" size="sm" asChild>
                             <Link href={`/admin/users/${user.id}`}>

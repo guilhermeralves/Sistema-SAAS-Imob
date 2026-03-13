@@ -127,7 +127,7 @@ export default function Admin() {
     <Layout>
       <div className="container py-8">
         <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">Painel Administrativo</h1>
+          <h1 className="text-3xl font-bold mb-2">Painel Administrativo</h1>
           <p className="text-muted-foreground">
             Gerencie imóveis, leads e contratos do sistema
           </p>
@@ -142,39 +142,39 @@ export default function Admin() {
 
         {/* Métricas */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <Card className="min-h-[124px] rounded-2xl border border-border/80 shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between px-6 pt-5 pb-2">
               <CardTitle className="text-sm font-medium">Imóveis</CardTitle>
               <Building2 className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{totalImoveis}</div>
+            <CardContent className="px-6 pb-5 pt-0">
+              <div className="text-3xl font-bold tracking-tight">{totalImoveis}</div>
               <p className="text-xs text-muted-foreground">
                 {imoveisAtivos} ativos
               </p>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <Card className="min-h-[124px] rounded-2xl border border-border/80 shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between px-6 pt-5 pb-2">
               <CardTitle className="text-sm font-medium">Leads</CardTitle>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{totalLeads}</div>
+            <CardContent className="px-6 pb-5 pt-0">
+              <div className="text-3xl font-bold tracking-tight">{totalLeads}</div>
               <p className="text-xs text-muted-foreground">
                 {leadsFechados} fechados
               </p>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <Card className="min-h-[124px] rounded-2xl border border-border/80 shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between px-6 pt-5 pb-2">
               <CardTitle className="text-sm font-medium">Contratos</CardTitle>
               <FileText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{totalContratos}</div>
+            <CardContent className="px-6 pb-5 pt-0">
+              <div className="text-3xl font-bold tracking-tight">{totalContratos}</div>
               <p className="text-xs text-muted-foreground">
                 {contratosAtivos} ativos
               </p>

@@ -30,6 +30,7 @@ export async function ensureBootstrapAdmin() {
       email,
       loginMethod: "password",
       passwordHash,
+      registrationSource: "bootstrap",
       role: "administrativo",
       isActive: 1,
       lastSignedIn: new Date(),

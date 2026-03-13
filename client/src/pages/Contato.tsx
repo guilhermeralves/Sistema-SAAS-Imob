@@ -48,6 +48,19 @@ export default function Contato() {
   const isClientUser = isAuthenticated && user?.role === "cliente";
   const shouldHideContactPage = isAuthenticated && user?.role !== "cliente";
 
+  const formatPhoneNumber = (value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, 11);
+
+    if (digits.length === 0) return "";
+    if (digits.length <= 2) return `(${digits}`;
+    if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    if (digits.length <= 10) {
+      return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    }
+
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  };
+
   useEffect(() => {
     if (shouldHideContactPage) {
       setLocation("/");
@@ -158,7 +171,6 @@ export default function Contato() {
                             <Label className="py-2" htmlFor="nome">Nome Completo</Label>
                             <Input
                               id="nome"
-                              placeholder="Seu nome"
                               value={formData.nome}
                               onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                               required
@@ -170,7 +182,6 @@ export default function Contato() {
                             <Input
                               id="email"
                               type="email"
-                              placeholder="seu@email.com"
                               value={formData.email}
                               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                               required
@@ -182,9 +193,13 @@ export default function Contato() {
                             <Input
                               id="telefone"
                               type="tel"
-                              placeholder="(11) 99999-9999"
                               value={formData.telefone}
-                              onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  telefone: formatPhoneNumber(e.target.value),
+                                })
+                              }
                             />
                           </div>
                         </>

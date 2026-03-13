@@ -6,25 +6,43 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { getPostLoginPath } from "@/lib/auth-routing";
 import { UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 
 export default function Register() {
-  const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
   const { user, loading, isAuthenticated } = useAuth();
   const [name, setName] = useState("");
   const [cpf, setCpf] = useState("");
+  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  const formatPhoneNumber = (value: string) => {
+    const digits = value.replace(/\D/g, "").slice(0, 11);
+
+    if (digits.length === 0) return "";
+    if (digits.length <= 2) return `(${digits}`;
+    if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    if (digits.length <= 10) {
+      return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    }
+
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  };
+
+  const redirectToHomeWithRefresh = () => {
+    if (typeof window !== "undefined") {
+      window.location.assign("/");
+    }
+  };
+
   const register = trpc.auth.register.useMutation({
-    onSuccess: async userData => {
+    onSuccess: async () => {
       await utils.auth.me.invalidate();
-      setLocation(getPostLoginPath(userData));
+      redirectToHomeWithRefresh();
     },
     onError: error => {
       toast.error(error.message || "Não foi possível cadastrar");
@@ -33,15 +51,16 @@ export default function Register() {
 
   useEffect(() => {
     if (!loading && isAuthenticated && user) {
-      setLocation(getPostLoginPath(user));
+      redirectToHomeWithRefresh();
     }
-  }, [isAuthenticated, loading, setLocation, user]);
+  }, [isAuthenticated, loading, user]);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     register.mutate({
       name,
       cpf,
+      phone,
       email,
       password,
     });
@@ -57,7 +76,7 @@ export default function Register() {
               Criar Conta
             </CardTitle>
             <CardDescription>
-              O cadastro público cria sempre uma conta CLIENTE.
+              Cadastre-se para aproveitar os benefícios de nossa plataforma.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -87,6 +106,16 @@ export default function Register() {
                   type="email"
                   value={email}
                   onChange={event => setEmail(event.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone">Telefone</Label>
+                <Input
+                  id="phone"
+                  type="tel"
+                  value={phone}
+                  onChange={event => setPhone(formatPhoneNumber(event.target.value))}
                   required
                 />
               </div>
