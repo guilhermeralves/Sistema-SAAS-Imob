@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getLoginUrl } from "@/const";
+import { formatCpf, isValidCpf, normalizeCpf } from "@/lib/cpf";
 import { trpc } from "@/lib/trpc";
 import { UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -40,8 +41,19 @@ export default function Register() {
   };
 
   const register = trpc.auth.register.useMutation({
-    onSuccess: async () => {
+    onSuccess: async data => {
       await utils.auth.me.invalidate();
+
+      if (data.linkedLeadPreview?.latestInterest) {
+        toast.success(
+          `Encontramos um interesse anterior em: ${data.linkedLeadPreview.latestInterest}. Seu acesso foi vinculado a esse lead.`
+        );
+        window.setTimeout(() => {
+          redirectToHomeWithRefresh();
+        }, 1200);
+        return;
+      }
+
       redirectToHomeWithRefresh();
     },
     onError: error => {
@@ -57,9 +69,15 @@ export default function Register() {
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (!isValidCpf(cpf)) {
+      toast.error("CPF invalido. Confira os digitos informados.");
+      return;
+    }
+
     register.mutate({
       name,
-      cpf,
+      cpf: normalizeCpf(cpf),
       phone,
       email,
       password,
@@ -95,7 +113,9 @@ export default function Register() {
                 <Input
                   id="cpf"
                   value={cpf}
-                  onChange={event => setCpf(event.target.value)}
+                  inputMode="numeric"
+                  maxLength={14}
+                  onChange={event => setCpf(formatCpf(event.target.value))}
                   required
                 />
               </div>

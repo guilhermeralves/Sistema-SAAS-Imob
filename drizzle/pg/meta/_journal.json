@@ -15,6 +15,27 @@
       "when": 1773361758837,
       "tag": "0001_freezing_shadow_king",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1773429898694,
+      "tag": "0002_lead_user_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1773433739248,
+      "tag": "0003_add_user_creci",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1773435621176,
+      "tag": "0004_creci_status_flow",
+      "breakpoints": true
     }
   ]
 }

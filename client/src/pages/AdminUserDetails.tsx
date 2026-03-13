@@ -2,11 +2,23 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import DateInput from "@/components/DateInput";
 import Layout from "@/components/Layout";
 import MoneyInput from "@/components/MoneyInput";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { lookupCep } from "@/lib/cep";
+import { formatCreci, isValidCreci } from "@/lib/creci";
+import { formatCpf, isValidCpf, normalizeCpf } from "@/lib/cpf";
 import { displayDateToIso, isoDateToDisplay } from "@/lib/date";
 import {
   Select,
@@ -20,7 +32,7 @@ import { parseMoneyCentsInput } from "@/lib/money";
 import { trpc } from "@/lib/trpc";
 import { type AppRole } from "@shared/auth";
 import { USER_PROFILE_MARITAL_STATUSES, type UserProfileMaritalStatus } from "@shared/user-profile";
-import { ArrowLeft, Save, UserRoundSearch } from "lucide-react";
+import { ArrowLeft, BadgeCheck, Clock3, Save, UserRoundSearch } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Link, useRoute } from "wouter";
@@ -32,6 +44,7 @@ type UserDetailsForm = {
   role: AppRole;
   isActive: "0" | "1";
   phone: string;
+  creci: string;
   birthDate: string;
   profession: string;
   grossMonthlyIncome: string;
@@ -66,6 +79,21 @@ function getMaritalStatusLabel(status: UserProfileMaritalStatus) {
   return labels[status];
 }
 
+const SOUTH_AMERICAN_NATIONALITIES = [
+  "Argentina",
+  "Bolivia",
+  "Brasil",
+  "Chile",
+  "Colombia",
+  "Equador",
+  "Guiana",
+  "Paraguai",
+  "Peru",
+  "Suriname",
+  "Uruguai",
+  "Venezuela",
+] as const;
+
 export default function AdminUserDetails() {
   const { user: authenticatedUser } = useAuth();
   const [isAdminRoute, params] = useRoute("/admin/users/:id");
@@ -73,6 +101,7 @@ export default function AdminUserDetails() {
   const userId = isAdminRoute ? Number(params?.id) : authenticatedUser?.id ?? NaN;
   const utils = trpc.useUtils();
   const [form, setForm] = useState<UserDetailsForm | null>(null);
+  const [confirmCreciRemovalOpen, setConfirmCreciRemovalOpen] = useState(false);
   const [cepLoading, setCepLoading] = useState(false);
   const [cepError, setCepError] = useState("");
   const cepTimeoutRef = useRef<number | null>(null);
@@ -89,6 +118,19 @@ export default function AdminUserDetails() {
   const user = isAdminRoute ? adminUser : selfUser;
   const isLoading = isAdminRoute ? adminUserLoading : selfUserLoading;
   const isEditingSelf = isSelfRoute && !isAdminRoute;
+  const authenticatedIsRootAdmin =
+    authenticatedUser?.role === "administrativo" &&
+    authenticatedUser?.registrationSource === "bootstrap";
+  const isViewingAdminAccount = user?.role === "administrativo";
+  const isOwnAdminAccount = user?.id === authenticatedUser?.id;
+  const isReadOnlyAdminAccount =
+    isAdminRoute && isViewingAdminAccount && !authenticatedIsRootAdmin && !isOwnAdminAccount;
+  const canValidateCreci =
+    isAdminRoute &&
+    authenticatedUser?.role === "administrativo" &&
+    user?.role === "corretor" &&
+    user?.creciStatus === "pending" &&
+    !!user?.creci;
   const isFromClientArea =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("from") === "area-cliente";
@@ -120,6 +162,17 @@ export default function AdminUserDetails() {
     },
   });
 
+  const validateCreci = trpc.admin.validateCreci.useMutation({
+    onSuccess: async () => {
+      toast.success("CRECI validado com sucesso");
+      await utils.admin.userById.invalidate({ id: userId });
+      await utils.admin.users.invalidate();
+    },
+    onError: error => {
+      toast.error(error.message || "Nao foi possivel validar o CRECI");
+    },
+  });
+
   useEffect(() => {
     if (!user) return;
 
@@ -130,6 +183,7 @@ export default function AdminUserDetails() {
       role: user.role,
       isActive: String(user.isActive) as "0" | "1",
       phone: user.phone || "",
+      creci: user.creci || "",
       birthDate: isoDateToDisplay(user.birthDate),
       profession: user.profession || "",
       grossMonthlyIncome:
@@ -217,6 +271,77 @@ export default function AdminUserDetails() {
     }, 500);
   };
 
+  const persistSave = () => {
+    if (!form) return;
+
+    const payload = {
+      name: form.name,
+      email: form.email,
+      cpf: normalizeCpf(form.cpf),
+      phone: form.phone || undefined,
+      creci: form.role === "corretor" ? formatCreci(form.creci) || undefined : undefined,
+      birthDate: displayDateToIso(form.birthDate) || null,
+      profession: form.profession || undefined,
+      grossMonthlyIncome: parseMoneyCentsInput(form.grossMonthlyIncome),
+      maritalStatus: form.maritalStatus || null,
+      householdIncome: parseMoneyCentsInput(form.householdIncome),
+      rg: form.rg || undefined,
+      nationality: form.nationality || undefined,
+      address: form.address || undefined,
+      neighborhood: form.neighborhood || undefined,
+      addressNumber: form.addressNumber || undefined,
+      city: form.city || undefined,
+      state: form.state || undefined,
+      zipCode: form.zipCode || undefined,
+      notes: form.notes || undefined,
+    };
+
+    if (isEditingSelf) {
+      updateOwnProfile.mutate(payload);
+      return;
+    }
+
+    updateUserDetails.mutate({
+      id: userId,
+      ...payload,
+      role: form.role,
+      isActive: Number(form.isActive) as 0 | 1,
+    });
+  };
+
+  const handleSave = () => {
+    if (!form) return;
+    if (isReadOnlyAdminAccount) {
+      toast.error(
+        "Apenas o proprio administrador ou o admin principal podem alterar esta conta administrativa."
+      );
+      return;
+    }
+
+    if (!isValidCpf(form.cpf)) {
+      toast.error("CPF invalido. Confira os digitos informados.");
+      return;
+    }
+
+    if (form.role === "corretor" && form.creci && !isValidCreci(form.creci)) {
+      toast.error("CRECI invalido. Use o formato numero/UF, por exemplo 123456/SP.");
+      return;
+    }
+
+    const isRemovingVerifiedCreci =
+      user?.role === "corretor" &&
+      user.creciStatus === "verified" &&
+      !!user.creci &&
+      (form.role !== "corretor" || !formatCreci(form.creci));
+
+    if (isRemovingVerifiedCreci) {
+      setConfirmCreciRemovalOpen(true);
+      return;
+    }
+
+    persistSave();
+  };
+
   return (
     <Layout>
       <div className="container py-8 space-y-6">
@@ -231,7 +356,7 @@ export default function AdminUserDetails() {
               </Link>
             </div>
             <h1 className="text-4xl font-bold">{"Ficha do Usu\u00E1rio"}</h1>
-            <p className="text-muted-foreground">
+            <p className="text-muted-foreground mt-2">
               Complete os dados pessoais e financeiros exigidos para contratos.
             </p>
           </div>
@@ -249,6 +374,13 @@ export default function AdminUserDetails() {
           </Card>
         ) : (
           <>
+            {isReadOnlyAdminAccount ? (
+              <Card className="border-amber-200 bg-amber-50">
+                <CardContent className="py-4 text-sm text-amber-900">
+                  Apenas o proprio administrador ou o admin principal podem alterar esta conta administrativa.
+                </CardContent>
+              </Card>
+            ) : null}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -262,25 +394,117 @@ export default function AdminUserDetails() {
               <CardContent className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label>Nome</Label>
-                  <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+                  <Input
+                    value={form.name}
+                    disabled={isReadOnlyAdminAccount}
+                    onChange={e => setForm({ ...form, name: e.target.value })}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>E-mail</Label>
-                  <Input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+                  <Input
+                    value={form.email}
+                    disabled={isReadOnlyAdminAccount}
+                    onChange={e => setForm({ ...form, email: e.target.value })}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>CPF</Label>
-                  <Input value={form.cpf} onChange={e => setForm({ ...form, cpf: e.target.value })} />
+                  <Input
+                    value={form.cpf}
+                    disabled={isReadOnlyAdminAccount}
+                    inputMode="numeric"
+                    maxLength={14}
+                    onChange={e => setForm({ ...form, cpf: formatCpf(e.target.value) })}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Telefone</Label>
-                  <Input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
+                  <Input
+                    value={form.phone}
+                    disabled={isReadOnlyAdminAccount}
+                    onChange={e => setForm({ ...form, phone: e.target.value })}
+                  />
                 </div>
-                {isEditingSelf ? null : (
-                  <>
+                {isEditingSelf ? (
+                  form.role === "corretor" ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <Label>CRECI</Label>
+                        {user?.creciStatus === "verified" ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
+                            <BadgeCheck className="h-4 w-4" />
+                            Validado
+                          </span>
+                        ) : user?.creciStatus === "pending" ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600">
+                            <Clock3 className="h-4 w-4" />
+                            Pendente
+                          </span>
+                        ) : null}
+                      </div>
+                      <Input
+                        value={form.creci}
+                        disabled={isReadOnlyAdminAccount}
+                        maxLength={10}
+                        placeholder="123456/SP"
+                        onChange={e => setForm({ ...form, creci: formatCreci(e.target.value) })}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Use o formato numero/UF, por exemplo `123456/SP`.
+                      </p>
+                    </div>
+                  ) : null
+                ) : form.role === "corretor" ? (
+                  <div className="grid gap-4 md:col-span-2 md:grid-cols-[minmax(0,1fr)_180px_180px]">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <Label>CRECI</Label>
+                        {user?.creciStatus === "verified" ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
+                            <BadgeCheck className="h-4 w-4" />
+                            Validado
+                          </span>
+                        ) : user?.creciStatus === "pending" ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600">
+                            <Clock3 className="h-4 w-4" />
+                            Pendente
+                          </span>
+                        ) : null}
+                      </div>
+                      <Input
+                        value={form.creci}
+                        disabled={isReadOnlyAdminAccount}
+                        maxLength={10}
+                        placeholder="123456/SP"
+                        onChange={e => setForm({ ...form, creci: formatCreci(e.target.value) })}
+                      />
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs text-muted-foreground">
+                          Use o formato numero/UF, por exemplo `123456/SP`.
+                        </p>
+                        {canValidateCreci ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="shrink-0 gap-2"
+                            disabled={validateCreci.isPending}
+                            onClick={() => validateCreci.mutate({ userId })}
+                          >
+                            <BadgeCheck className="h-4 w-4" />
+                            {validateCreci.isPending ? "Validando..." : "Validar"}
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
                     <div className="space-y-2">
                       <Label>Papel</Label>
-                      <Select value={form.role} onValueChange={value => setForm({ ...form, role: value as AppRole })}>
+                      <Select
+                        value={form.role}
+                        disabled={isReadOnlyAdminAccount}
+                        onValueChange={value => setForm({ ...form, role: value as AppRole })}
+                      >
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="cliente">Cliente</SelectItem>
@@ -291,7 +515,43 @@ export default function AdminUserDetails() {
                     </div>
                     <div className="space-y-2">
                       <Label>Status</Label>
-                      <Select value={form.isActive} onValueChange={value => setForm({ ...form, isActive: value as "0" | "1" })}>
+                      <Select
+                        value={form.isActive}
+                        disabled={isReadOnlyAdminAccount}
+                        onValueChange={value => setForm({ ...form, isActive: value as "0" | "1" })}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">Ativo</SelectItem>
+                          <SelectItem value="0">Inativo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Papel</Label>
+                      <Select
+                        value={form.role}
+                        disabled={isReadOnlyAdminAccount}
+                        onValueChange={value => setForm({ ...form, role: value as AppRole })}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cliente">Cliente</SelectItem>
+                          <SelectItem value="corretor">Corretor</SelectItem>
+                          <SelectItem value="administrativo">Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Status</Label>
+                      <Select
+                        value={form.isActive}
+                        disabled={isReadOnlyAdminAccount}
+                        onValueChange={value => setForm({ ...form, isActive: value as "0" | "1" })}
+                      >
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="1">Ativo</SelectItem>
@@ -315,17 +575,23 @@ export default function AdminUserDetails() {
                 <div className="space-y-2">
                   <Label>Data de nascimento</Label>
                   <DateInput
+                    disabled={isReadOnlyAdminAccount}
                     value={form.birthDate}
                     onValueChange={value => setForm({ ...form, birthDate: value })}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>Profissão</Label>
-                  <Input value={form.profession} onChange={e => setForm({ ...form, profession: e.target.value })} />
+                  <Input
+                    value={form.profession}
+                    disabled={isReadOnlyAdminAccount}
+                    onChange={e => setForm({ ...form, profession: e.target.value })}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Salário bruto mensal</Label>
                   <MoneyInput
+                    disabled={isReadOnlyAdminAccount}
                     value={form.grossMonthlyIncome}
                     onValueChange={value =>
                       setForm(current =>
@@ -334,10 +600,12 @@ export default function AdminUserDetails() {
                     }
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>Estado civil</Label>
+                <div className="grid gap-4 md:grid-cols-[220px_220px]">
+                  <div className="space-y-2">
+                    <Label>Estado civil</Label>
                   <Select
                     value={form.maritalStatus || "empty"}
+                    disabled={isReadOnlyAdminAccount}
                     onValueChange={value =>
                       setForm({
                         ...form,
@@ -354,11 +622,36 @@ export default function AdminUserDetails() {
                         </SelectItem>
                       ))}
                     </SelectContent>
-                  </Select>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Nacionalidade</Label>
+                  <Select
+                    value={form.nationality || "empty"}
+                    disabled={isReadOnlyAdminAccount}
+                    onValueChange={value =>
+                      setForm({
+                        ...form,
+                        nationality: value === "empty" ? "" : value,
+                      })
+                    }
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="empty">Nao informado</SelectItem>
+                      {SOUTH_AMERICAN_NATIONALITIES.map(nationality => (
+                        <SelectItem key={nationality} value={nationality}>
+                          {nationality}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Renda familiar conjunta</Label>
                   <MoneyInput
+                    disabled={isReadOnlyAdminAccount}
                     value={form.householdIncome}
                     onValueChange={value =>
                       setForm(current =>
@@ -369,11 +662,11 @@ export default function AdminUserDetails() {
                 </div>
                 <div className="space-y-2">
                   <Label>RG</Label>
-                  <Input value={form.rg} onChange={e => setForm({ ...form, rg: e.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Nacionalidade</Label>
-                  <Input value={form.nationality} onChange={e => setForm({ ...form, nationality: e.target.value })} />
+                  <Input
+                    value={form.rg}
+                    disabled={isReadOnlyAdminAccount}
+                    onChange={e => setForm({ ...form, rg: e.target.value })}
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -385,12 +678,17 @@ export default function AdminUserDetails() {
               <CardContent className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2 md:col-span-2">
                   <Label>Endereço</Label>
-                  <Input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} />
+                  <Input
+                    value={form.address}
+                    disabled={isReadOnlyAdminAccount}
+                    onChange={e => setForm({ ...form, address: e.target.value })}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Número</Label>
                   <Input
                     value={form.addressNumber}
+                    disabled={isReadOnlyAdminAccount}
                     onChange={e => setForm({ ...form, addressNumber: e.target.value })}
                   />
                 </div>
@@ -398,21 +696,31 @@ export default function AdminUserDetails() {
                   <Label>Bairro</Label>
                   <Input
                     value={form.neighborhood}
+                    disabled={isReadOnlyAdminAccount}
                     onChange={e => setForm({ ...form, neighborhood: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label>Cidade</Label>
-                  <Input value={form.city} onChange={e => setForm({ ...form, city: e.target.value })} />
+                  <Input
+                    value={form.city}
+                    disabled={isReadOnlyAdminAccount}
+                    onChange={e => setForm({ ...form, city: e.target.value })}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>UF</Label>
-                  <Input value={form.state} onChange={e => setForm({ ...form, state: e.target.value })} />
+                  <Input
+                    value={form.state}
+                    disabled={isReadOnlyAdminAccount}
+                    onChange={e => setForm({ ...form, state: e.target.value })}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>CEP</Label>
                   <Input
                     value={form.zipCode}
+                    disabled={isReadOnlyAdminAccount}
                     inputMode="numeric"
                     maxLength={9}
                     onChange={e => handleZipCodeChange(e.target.value)}
@@ -424,7 +732,12 @@ export default function AdminUserDetails() {
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label>Observações</Label>
-                  <Textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} rows={5} />
+                  <Textarea
+                    value={form.notes}
+                    disabled={isReadOnlyAdminAccount}
+                    onChange={e => setForm({ ...form, notes: e.target.value })}
+                    rows={5}
+                  />
                 </div>
               </CardContent>
             </Card>
@@ -432,58 +745,38 @@ export default function AdminUserDetails() {
             <div className="flex justify-end">
                 <Button
                   className="gap-2"
-                  disabled={updateUserDetails.isPending || updateOwnProfile.isPending}
-                  onClick={() =>
-                    isEditingSelf
-                      ? updateOwnProfile.mutate({
-                          name: form.name,
-                          email: form.email,
-                          cpf: form.cpf,
-                          phone: form.phone || undefined,
-                          birthDate: displayDateToIso(form.birthDate) || null,
-                          profession: form.profession || undefined,
-                          grossMonthlyIncome: parseMoneyCentsInput(form.grossMonthlyIncome),
-                          maritalStatus: form.maritalStatus || null,
-                          householdIncome: parseMoneyCentsInput(form.householdIncome),
-                          rg: form.rg || undefined,
-                          nationality: form.nationality || undefined,
-                          address: form.address || undefined,
-                          neighborhood: form.neighborhood || undefined,
-                          addressNumber: form.addressNumber || undefined,
-                          city: form.city || undefined,
-                          state: form.state || undefined,
-                          zipCode: form.zipCode || undefined,
-                          notes: form.notes || undefined,
-                        })
-                      : updateUserDetails.mutate({
-                          id: userId,
-                          name: form.name,
-                          email: form.email,
-                          cpf: form.cpf,
-                          role: form.role,
-                          isActive: Number(form.isActive) as 0 | 1,
-                          phone: form.phone || undefined,
-                          birthDate: displayDateToIso(form.birthDate) || null,
-                          profession: form.profession || undefined,
-                          grossMonthlyIncome: parseMoneyCentsInput(form.grossMonthlyIncome),
-                          maritalStatus: form.maritalStatus || null,
-                          householdIncome: parseMoneyCentsInput(form.householdIncome),
-                          rg: form.rg || undefined,
-                          nationality: form.nationality || undefined,
-                          address: form.address || undefined,
-                          neighborhood: form.neighborhood || undefined,
-                          addressNumber: form.addressNumber || undefined,
-                          city: form.city || undefined,
-                          state: form.state || undefined,
-                          zipCode: form.zipCode || undefined,
-                          notes: form.notes || undefined,
-                        })
-                  }
+                  disabled={isReadOnlyAdminAccount || updateUserDetails.isPending || updateOwnProfile.isPending}
+                  onClick={handleSave}
                 >
                   <Save className="h-4 w-4" />
                   {updateUserDetails.isPending || updateOwnProfile.isPending ? "Salvando..." : "Salvar ficha"}
                 </Button>
             </div>
+
+            <AlertDialog
+              open={confirmCreciRemovalOpen}
+              onOpenChange={setConfirmCreciRemovalOpen}
+            >
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Confirmar remoção do CRECI?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Essa operação está retirando o cadastro do CRECI desse corretor, deseja continuar?
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      setConfirmCreciRemovalOpen(false);
+                      persistSave();
+                    }}
+                  >
+                    Continuar
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </>
         )}
       </div>

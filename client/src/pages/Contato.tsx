@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { formatCpf, isValidCpf } from "@/lib/cpf";
 import { trpc } from "@/lib/trpc";
 import { Mail, Phone, MapPin, MessageCircle, Send, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
@@ -41,6 +42,7 @@ export default function Contato() {
   const [formData, setFormData] = useState({
     nome: "",
     email: "",
+    cpf: "",
     telefone: "",
     mensagem: "",
   });
@@ -79,7 +81,7 @@ export default function Contato() {
     onSuccess: () => {
       setSubmitted(true);
       toast.success("Mensagem enviada com sucesso! Entraremos em contato em breve.");
-      setFormData({ nome: "", email: "", telefone: "", mensagem: "" });
+      setFormData({ nome: "", email: "", cpf: "", telefone: "", mensagem: "" });
     },
     onError: (error) => {
       toast.error("Erro ao enviar mensagem. Tente novamente.");
@@ -95,9 +97,15 @@ export default function Contato() {
       return;
     }
 
+    if (!isClientUser && formData.cpf && !isValidCpf(formData.cpf)) {
+      toast.error("CPF invalido. Confira os digitos informados.");
+      return;
+    }
+
     createLead.mutate({
       nome: isClientUser ? user?.name || user?.email || "Cliente" : formData.nome,
       email: isClientUser ? user?.email || "" : formData.email,
+      cpf: isClientUser ? user?.cpf || undefined : formData.cpf || undefined,
       telefone: isClientUser ? user?.phone || "" : formData.telefone,
       origem: "site",
       interesse: formData.mensagem,
@@ -185,6 +193,17 @@ export default function Contato() {
                               value={formData.email}
                               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                               required
+                            />
+                          </div>
+
+                          <div>
+                            <Label className="py-2" htmlFor="cpf">CPF</Label>
+                            <Input
+                              id="cpf"
+                              value={formData.cpf}
+                              inputMode="numeric"
+                              maxLength={14}
+                              onChange={(e) => setFormData({ ...formData, cpf: formatCpf(e.target.value) })}
                             />
                           </div>
 

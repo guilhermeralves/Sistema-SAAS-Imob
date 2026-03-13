@@ -1,4 +1,4 @@
-import { APP_ROLES } from "@shared/auth";
+﻿import { APP_ROLES } from "@shared/auth";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import {
   CONTRACT_REQUIRED_USER_FIELDS,
@@ -8,7 +8,10 @@ import { TRPCError } from "@trpc/server";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import { normalizeCpf, isValidCpf } from "./_core/cpf";
+import { formatCreci, isValidCreci, normalizeCreci } from "./_core/creci";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { sendWelcomeEmail } from "./_core/email";
+import { ENV } from "./_core/env";
 import { hashPassword, verifyPassword } from "./_core/passwords";
 import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
@@ -29,7 +32,7 @@ const idSchema = z.object({
 const cpfSchema = z
   .string()
   .trim()
-  .refine(isValidCpf, "CPF inválido")
+  .refine(isValidCpf, "CPF invÃ¡lido")
   .transform(normalizeCpf);
 
 const registerSchema = z.object({
@@ -45,11 +48,18 @@ const loginSchema = z.object({
   password: z.string().min(8).max(72),
 });
 
+const creciSchema = z
+  .string()
+  .trim()
+  .transform(formatCreci)
+  .refine(value => value === "" || isValidCreci(value), "CRECI invalido");
+
 const adminCreateUserSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
   password: z.string().min(8).max(72),
   name: z.string().trim().min(2).max(120),
   cpf: cpfSchema,
+  creci: creciSchema.optional(),
   role: z.enum(APP_ROLES),
 });
 
@@ -69,6 +79,7 @@ const adminUserDetailsSchema = z.object({
   role: z.enum(APP_ROLES),
   isActive: z.number().int().min(0).max(1),
   phone: z.string().trim().max(20).optional(),
+  creci: creciSchema.optional(),
   birthDate: z.string().nullable().optional(),
   profession: z.string().trim().max(120).optional(),
   grossMonthlyIncome: z.number().int().min(0).nullable().optional(),
@@ -96,6 +107,23 @@ const assignLeadSchema = z.object({
   userId: z.number().int().positive().nullable(),
 });
 
+const adminLeadLinkPreviewSchema = z.object({
+  cpf: cpfSchema,
+});
+
+const adminDeleteUserPreviewSchema = z.object({
+  userId: z.number().int().positive(),
+});
+
+const adminDeleteUserSchema = z.object({
+  userId: z.number().int().positive(),
+  deleteLinkedLeads: z.boolean().default(false),
+});
+
+const adminValidateCreciSchema = z.object({
+  userId: z.number().int().positive(),
+});
+
 function setSessionCookie(ctx: { req: any; res: any }, sessionToken: string) {
   const cookieOptions = getSessionCookieOptions(ctx.req);
   ctx.res.cookie(COOKIE_NAME, sessionToken, {
@@ -104,12 +132,112 @@ function setSessionCookie(ctx: { req: any; res: any }, sessionToken: string) {
   });
 }
 
+function clearSessionCookie(ctx: { req: any; res: any }) {
+  const cookieOptions = getSessionCookieOptions(ctx.req);
+  ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+}
+
+function normalizeOptionalText(value: unknown) {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function normalizeOptionalCpf(value: unknown) {
+  const normalized = normalizeOptionalText(value);
+  if (!normalized) return undefined;
+
+  if (!isValidCpf(normalized)) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "CPF invalido" });
+  }
+
+  return normalizeCpf(normalized);
+}
+
+function normalizeOptionalCreci(value: unknown) {
+  const normalized = normalizeOptionalText(String(value ?? ""));
+  if (!normalized) return undefined;
+
+  const formatted = normalizeCreci(normalized);
+  if (!isValidCreci(formatted)) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "CRECI invalido" });
+  }
+
+  return formatted;
+}
+
+function isRootAdmin(user: {
+  role: "cliente" | "corretor" | "administrativo";
+  openId?: string | null;
+  registrationSource?: string | null;
+  email?: string | null;
+}) {
+  if (user.role !== "administrativo") {
+    return false;
+  }
+
+  const ownerEmail = ENV.ownerEmail.trim().toLowerCase();
+  return (
+    (ENV.ownerOpenId.trim().length > 0 && user.openId === ENV.ownerOpenId) ||
+    user.registrationSource === "bootstrap" ||
+    (ownerEmail.length > 0 && (user.email || "").toLowerCase() === ownerEmail)
+  );
+}
+
+type LeadLinkPreview = {
+  leadCount: number;
+  latestLeadId: number;
+  latestInterest: string | null;
+  latestOrigin: string | null;
+  latestCreatedAt: Date;
+};
+
+function buildLeadLinkPreview(
+  matchedLeads: Array<{
+    id: number;
+    interesse: string | null;
+    origem: string | null;
+    createdAt: Date;
+  }>
+): LeadLinkPreview | null {
+  if (matchedLeads.length === 0) {
+    return null;
+  }
+
+  const latestLead = matchedLeads[0];
+  return {
+    leadCount: matchedLeads.length,
+    latestLeadId: latestLead.id,
+    latestInterest: latestLead.interesse || null,
+    latestOrigin: latestLead.origem || null,
+    latestCreatedAt: latestLead.createdAt,
+  };
+}
+
+async function getLeadLinkPreviewByCpf(cpf: string) {
+  const { getLeadsByCpf } = await import("./db");
+  const matchedLeads = await getLeadsByCpf(cpf);
+  return buildLeadLinkPreview(matchedLeads);
+}
+
+async function linkUserToExistingLeadsByCpf(userId: number, cpf: string) {
+  const { getLeadsByCpf, linkLeadsToUserByCpf } = await import("./db");
+  const matchedLeads = await getLeadsByCpf(cpf);
+
+  if (matchedLeads.length === 0) {
+    return null;
+  }
+
+  await linkLeadsToUserByCpf(cpf, userId);
+  return buildLeadLinkPreview(matchedLeads);
+}
+
 async function ensurePropertyExists(id: number) {
   const { getPropertyById } = await import("./db");
   const property = await getPropertyById(id);
 
   if (!property) {
-    throw new TRPCError({ code: "NOT_FOUND", message: "Imóvel não encontrado" });
+    throw new TRPCError({ code: "NOT_FOUND", message: "ImÃ³vel nÃ£o encontrado" });
   }
 
   return property;
@@ -123,11 +251,11 @@ async function ensureLeadAccess(
   const lead = await getLeadById(leadId);
 
   if (!lead) {
-    throw new TRPCError({ code: "NOT_FOUND", message: "Lead não encontrado" });
+    throw new TRPCError({ code: "NOT_FOUND", message: "Lead nÃ£o encontrado" });
   }
 
   if (user.role === "corretor" && lead.idResponsavel !== user.id) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Você não tem acesso a este lead" });
+    throw new TRPCError({ code: "FORBIDDEN", message: "VocÃª nÃ£o tem acesso a este lead" });
   }
 
   return lead;
@@ -142,12 +270,12 @@ async function ensureUniqueUserIdentity(
 
   const userByEmail = await getUserByEmail(email);
   if (userByEmail && userByEmail.id !== currentUserId) {
-    throw new TRPCError({ code: "CONFLICT", message: "E-mail já cadastrado" });
+    throw new TRPCError({ code: "CONFLICT", message: "E-mail jÃ¡ cadastrado" });
   }
 
   const userByCpf = await getUserByCpf(cpf);
   if (userByCpf && userByCpf.id !== currentUserId) {
-    throw new TRPCError({ code: "CONFLICT", message: "CPF já cadastrado" });
+    throw new TRPCError({ code: "CONFLICT", message: "CPF jÃ¡ cadastrado" });
   }
 }
 
@@ -156,7 +284,7 @@ async function assertContractProfileIsComplete(userId: number) {
   const user = await getUserById(userId);
 
   if (!user) {
-    throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado" });
+    throw new TRPCError({ code: "NOT_FOUND", message: "Cliente nÃ£o encontrado" });
   }
 
   const missingFields = CONTRACT_REQUIRED_USER_FIELDS.filter(field => {
@@ -233,6 +361,7 @@ export const appRouter = router({
         isActive: 1,
         lastSignedIn: new Date(),
       });
+      const linkedLeadPreview = await linkUserToExistingLeadsByCpf(createdUser.id, input.cpf);
 
       const sessionToken = await sdk.createSessionToken(createdUser.openId, {
         name: createdUser.name || createdUser.email || createdUser.openId,
@@ -242,23 +371,33 @@ export const appRouter = router({
 
       setSessionCookie(ctx, sessionToken);
 
-      return toSafeUser(createdUser);
+      void sendWelcomeEmail({
+        user: createdUser,
+        req: ctx.req,
+      }).catch(error => {
+        console.error("[Email] Falha ao enviar boas-vindas para novo cliente", error);
+      });
+
+      return {
+        user: toSafeUser(createdUser),
+        linkedLeadPreview,
+      };
     }),
     login: publicProcedure.input(loginSchema).mutation(async ({ ctx, input }) => {
       const { getUserByEmail, upsertUser } = await import("./db");
       const user = await getUserByEmail(input.email);
 
       if (!user || !user.passwordHash) {
-        throw new TRPCError({ code: "UNAUTHORIZED", message: "E-mail ou senha inválidos" });
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "E-mail ou senha invÃ¡lidos" });
 
       }
       if (user.isActive !== 1) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Usuário desativado" });
+        throw new TRPCError({ code: "FORBIDDEN", message: "UsuÃ¡rio desativado" });
       }
 
       const isPasswordValid = await verifyPassword(input.password, user.passwordHash);
       if (!isPasswordValid) {
-        throw new TRPCError({ code: "UNAUTHORIZED", message: "E-mail ou senha inválidos" });
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "E-mail ou senha invÃ¡lidos" });
       }
 
       await upsertUser({
@@ -321,7 +460,7 @@ export const appRouter = router({
       const property = await ensurePropertyExists(id);
 
       if (ctx.user.role === "corretor" && property.idCorretor !== ctx.user.id) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Você não tem permissão para editar este imóvel" });
+        throw new TRPCError({ code: "FORBIDDEN", message: "VocÃª nÃ£o tem permissÃ£o para editar este imÃ³vel" });
       }
 
       if (ctx.user.role === "corretor") {
@@ -349,8 +488,18 @@ export const appRouter = router({
       return await ensureLeadAccess(ctx.user, input.id);
     }),
     create: publicProcedure.input(z.any()).mutation(async ({ ctx, input }) => {
-      const { createLead } = await import("./db");
+      const { createLead, getUserByCpf, getUserById } = await import("./db");
       const payload = { ...(input as any) };
+      const normalizedCpf = normalizeOptionalCpf(payload.cpf);
+
+      payload.nome = normalizeOptionalText(payload.nome);
+      payload.email = normalizeOptionalText(payload.email) || null;
+      payload.telefone = normalizeOptionalText(payload.telefone) || null;
+      payload.origem = normalizeOptionalText(payload.origem) || null;
+      payload.interesse = normalizeOptionalText(payload.interesse) || null;
+      payload.observacao = normalizeOptionalText(payload.observacao) || null;
+      payload.status = normalizeOptionalText(payload.status) || "novo";
+      payload.cpf = normalizedCpf || null;
 
       if (ctx.user && (ctx.user.role === "corretor" || ctx.user.role === "administrativo")) {
         payload.idResponsavel = ctx.user.id;
@@ -358,15 +507,48 @@ export const appRouter = router({
         delete payload.idResponsavel;
       }
 
+      if (ctx.user?.id) {
+        const currentUser = await getUserById(ctx.user.id);
+        if (currentUser?.cpf) {
+          payload.userId = currentUser.id;
+          payload.cpf = currentUser.cpf;
+          payload.nome = payload.nome || currentUser.name || currentUser.email || "Cliente";
+          payload.email = payload.email || currentUser.email || null;
+          payload.telefone = payload.telefone || currentUser.phone || null;
+        }
+      } else if (normalizedCpf) {
+        const matchedUser = await getUserByCpf(normalizedCpf);
+        if (matchedUser) {
+          payload.userId = matchedUser.id;
+        }
+      }
+
+      if (!payload.nome) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Nome do lead e obrigatorio" });
+      }
+
       return await createLead(payload);
     }),
     update: staffProcedure.input(z.any()).mutation(async ({ ctx, input }) => {
-      const { updateLead } = await import("./db");
+      const { getUserByCpf, updateLead } = await import("./db");
       const { id, ...data } = input as any;
       await ensureLeadAccess(ctx.user, id);
 
       if (ctx.user.role !== "administrativo") {
         delete data.idResponsavel;
+      }
+
+      if ("cpf" in data) {
+        const normalizedCpf = normalizeOptionalCpf(data.cpf);
+        data.cpf = normalizedCpf || null;
+        data.userId = null;
+
+        if (normalizedCpf) {
+          const matchedUser = await getUserByCpf(normalizedCpf);
+          if (matchedUser) {
+            data.userId = matchedUser.id;
+          }
+        }
       }
 
       return await updateLead(id, data);
@@ -456,17 +638,22 @@ export const appRouter = router({
       }
       /*
 
-        throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
+        throw new TRPCError({ code: "NOT_FOUND", message: "UsuÃ¡rio nÃ£o encontrado" });
       }
 
       */
       await ensureUniqueUserIdentity(input.email, input.cpf, ctx.user.id);
+      const normalizedCreci = user.role === "corretor" ? normalizeOptionalCreci(input.creci) : undefined;
 
       await updateUser(ctx.user.id, {
         name: input.name.trim(),
         email: input.email,
         cpf: input.cpf,
         phone: input.phone?.trim() || null,
+        creci: user.role === "corretor" ? normalizedCreci || null : null,
+        creciStatus: user.role === "corretor" && normalizedCreci ? "pending" : null,
+        creciVerifiedAt: null,
+        creciVerifiedByUserId: null,
         birthDate: input.birthDate ? new Date(`${input.birthDate}T00:00:00`) : null,
         profession: input.profession?.trim() || null,
         grossMonthlyIncome: input.grossMonthlyIncome ?? null,
@@ -482,10 +669,11 @@ export const appRouter = router({
         zipCode: input.zipCode?.trim() || null,
         notes: input.notes?.trim() || null,
       });
+      await linkUserToExistingLeadsByCpf(ctx.user.id, input.cpf);
 
       const updatedUser = await getUserById(ctx.user.id);
       if (!updatedUser) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
+        throw new TRPCError({ code: "NOT_FOUND", message: "UsuÃ¡rio nÃ£o encontrado" });
       }
 
       return toSafeUser(updatedUser);
@@ -496,18 +684,17 @@ export const appRouter = router({
     users: adminProcedure.query(async ({ ctx }) => {
       return await getAdminUsersWithFlags(ctx.user.id);
     }),
+    leadLinkPreviewByCpf: adminProcedure
+      .input(adminLeadLinkPreviewSchema)
+      .query(async ({ input }) => {
+        return await getLeadLinkPreviewByCpf(input.cpf);
+      }),
     hasNewUsers: adminProcedure.query(async ({ ctx }) => {
       const { hasNewPublicUsersForAdmin } = await import("./db");
       return await hasNewPublicUsersForAdmin(ctx.user.id);
     }),
     userById: adminProcedure.input(idSchema).query(async ({ ctx, input }) => {
       return await getAdminUserWithFlags(ctx.user.id, input.id);
-      /*
-
-        throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
-      }
-
-      */
     }),
     markAllNewUsersAsViewed: adminProcedure.mutation(async ({ ctx }) => {
       const { getAllUsers, getViewedUserIdsByAdmin, markUsersAsViewedByAdmin } = await import("./db");
@@ -526,35 +713,91 @@ export const appRouter = router({
 
       return { markedCount: newUserIds.length };
     }),
-    createUser: adminProcedure.input(adminCreateUserSchema).mutation(async ({ input }) => {
-      const { createUser } = await import("./db");
-      await ensureUniqueUserIdentity(input.email, input.cpf);
+    createUser: adminProcedure
+      .input(
+        adminCreateUserSchema.extend({
+          confirmedLeadLink: z.boolean().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { createUser } = await import("./db");
+        await ensureUniqueUserIdentity(input.email, input.cpf);
+        const leadLinkPreview = await getLeadLinkPreviewByCpf(input.cpf);
 
-      const passwordHash = await hashPassword(input.password);
-      const createdUser = await createUser({
-        openId: `local:${nanoid()}`,
-        name: input.name.trim(),
-        email: input.email,
-        cpf: input.cpf,
-        loginMethod: "password",
-        passwordHash,
-        registrationSource: "admin_created",
-        role: input.role,
-        isActive: 1,
-      });
+        if (leadLinkPreview && !input.confirmedLeadLink) {
+          const interestLabel = leadLinkPreview.latestInterest || "Interesse nao informado";
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Esse usuario ja e um lead e tem interesse em: ${interestLabel}. O sistema vinculara o acesso de usuario ao lead.`,
+          });
+        }
 
-      return toSafeUser(createdUser);
-    }),
+        const passwordHash = await hashPassword(input.password);
+        const normalizedCreci = input.role === "corretor" ? normalizeOptionalCreci(input.creci) : undefined;
+        const createdUser = await createUser({
+          openId: `local:${nanoid()}`,
+          name: input.name.trim(),
+          email: input.email,
+          cpf: input.cpf,
+          creci: normalizedCreci || null,
+          creciStatus: normalizedCreci ? "verified" : null,
+          creciVerifiedAt: normalizedCreci ? new Date() : null,
+          creciVerifiedByUserId: normalizedCreci ? ctx.user.id : null,
+          loginMethod: "password",
+          passwordHash,
+          registrationSource: "admin_created",
+          role: input.role,
+          isActive: 1,
+        });
+        const linkedLeadPreview = await linkUserToExistingLeadsByCpf(createdUser.id, input.cpf);
+
+        void sendWelcomeEmail({
+          user: createdUser,
+          req: ctx.req,
+        }).catch(error => {
+          console.error("[Email] Falha ao enviar boas-vindas para novo usuario criado pelo admin", error);
+        });
+
+        return {
+          user: toSafeUser(createdUser),
+          linkedLeadPreview,
+        };
+      }),
     updateUser: adminProcedure.input(adminUpdateUserSchema).mutation(async ({ ctx, input }) => {
       const { getUserById, updateUser } = await import("./db");
+      const actingUser = await getUserById(ctx.user.id);
       const targetUser = await getUserById(input.id);
 
+      if (!actingUser) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Usuario administrador nao encontrado" });
+      }
       if (!targetUser) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Usuario nao encontrado" });
       }
 
+      const actingIsRoot = isRootAdmin(actingUser);
+      const targetIsRoot = isRootAdmin(targetUser);
+
       if (ctx.user.id === targetUser.id && input.isActive === 0) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Você não pode desativar sua própria conta" });
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Voce nao pode desativar sua propria conta" });
+      }
+
+      if (targetIsRoot && ((input.role && input.role !== "administrativo") || input.isActive === 0)) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "O admin principal do sistema nao pode perder acesso ou permissao",
+        });
+      }
+
+      if (
+        targetUser.role === "administrativo" &&
+        targetUser.id !== ctx.user.id &&
+        !actingIsRoot
+      ) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Apenas o proprio administrador ou o admin principal podem editar contas administrativas",
+        });
       }
 
       const updatePayload: Record<string, unknown> = {};
@@ -577,22 +820,195 @@ export const appRouter = router({
 
       const updatedUser = await getUserById(input.id);
       if (!updatedUser) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Usuario nao encontrado" });
       }
 
       return toSafeUser(updatedUser);
     }),
-    updateUserDetails: adminProcedure
-      .input(adminUserDetailsSchema)
-      .mutation(async ({ input }) => {
+    validateCreci: adminProcedure
+      .input(adminValidateCreciSchema)
+      .mutation(async ({ ctx, input }) => {
         const { getUserById, updateUser } = await import("./db");
-        const user = await getUserById(input.id);
+        const user = await getUserById(input.userId);
 
         if (!user) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
+          throw new TRPCError({ code: "NOT_FOUND", message: "Usuario nao encontrado" });
+        }
+
+        if (user.role !== "corretor") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Somente corretores possuem CRECI" });
+        }
+
+        if (!user.creci || !isValidCreci(user.creci)) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Cadastre um CRECI valido antes de validar" });
+        }
+
+        await updateUser(input.userId, {
+          creci: normalizeCreci(user.creci),
+          creciStatus: "verified",
+          creciVerifiedAt: new Date(),
+          creciVerifiedByUserId: ctx.user.id,
+        });
+
+        const updatedUser = await getUserById(input.userId);
+        if (!updatedUser) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Usuario nao encontrado" });
+        }
+
+        return toSafeUser(updatedUser);
+      }),
+    deleteUserPreview: adminProcedure
+      .input(adminDeleteUserPreviewSchema)
+      .query(async ({ ctx, input }) => {
+        const { getLeadsByUserId, getUserById } = await import("./db");
+        const actingUser = await getUserById(ctx.user.id);
+        const targetUser = await getUserById(input.userId);
+
+        if (!actingUser) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Usuario administrador nao encontrado" });
+        }
+        if (!targetUser) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Usuario nao encontrado" });
+        }
+
+        const actingIsRoot = isRootAdmin(actingUser);
+        const targetIsRoot = isRootAdmin(targetUser);
+
+        if (targetIsRoot) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "O admin principal do sistema nao pode ser excluido",
+          });
+        }
+
+        if (targetUser.role === "administrativo" && targetUser.id !== ctx.user.id && !actingIsRoot) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Apenas o admin principal pode excluir outros administradores",
+          });
+        }
+
+        const linkedLeads = await getLeadsByUserId(targetUser.id);
+
+        return {
+          mode: targetUser.role === "administrativo" ? "revoke_access" : "delete_user",
+          isSelf: targetUser.id === ctx.user.id,
+          user: toSafeUser(targetUser),
+          linkedLeads: linkedLeads.map(lead => ({
+            id: lead.id,
+            nome: lead.nome,
+            interesse: lead.interesse,
+            origem: lead.origem,
+            status: lead.status,
+            createdAt: lead.createdAt,
+          })),
+        };
+      }),
+    deleteUser: adminProcedure.input(adminDeleteUserSchema).mutation(async ({ ctx, input }) => {
+      const {
+        deleteLeadsByUserId,
+        deleteUserById,
+        getLeadsByUserId,
+        getUserById,
+        revokeUserAccess,
+        unlinkLeadsFromUser,
+      } = await import("./db");
+      const actingUser = await getUserById(ctx.user.id);
+      const targetUser = await getUserById(input.userId);
+
+      if (!actingUser) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Usuario administrador nao encontrado" });
+      }
+      if (!targetUser) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Usuario nao encontrado" });
+      }
+
+      const actingIsRoot = isRootAdmin(actingUser);
+      const targetIsRoot = isRootAdmin(targetUser);
+
+      if (targetIsRoot) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "O admin principal do sistema nao pode ser excluido",
+        });
+      }
+
+      const linkedLeads = await getLeadsByUserId(targetUser.id);
+
+      if (targetUser.role === "administrativo") {
+        if (targetUser.id !== ctx.user.id && !actingIsRoot) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Apenas o admin principal pode excluir outros administradores",
+          });
+        }
+
+        await revokeUserAccess(targetUser.id);
+
+        if (targetUser.id === ctx.user.id) {
+          clearSessionCookie(ctx);
+        }
+
+        return {
+          mode: "revoke_access" as const,
+          isSelf: targetUser.id === ctx.user.id,
+          deletedLeadCount: 0,
+          unlinkedLeadCount: linkedLeads.length,
+        };
+      }
+
+      if (input.deleteLinkedLeads) {
+        await deleteLeadsByUserId(targetUser.id);
+      } else if (linkedLeads.length > 0) {
+        await unlinkLeadsFromUser(targetUser.id);
+      }
+
+      await deleteUserById(targetUser.id);
+
+      return {
+        mode: "delete_user" as const,
+        isSelf: targetUser.id === ctx.user.id,
+        deletedLeadCount: input.deleteLinkedLeads ? linkedLeads.length : 0,
+        unlinkedLeadCount: input.deleteLinkedLeads ? 0 : linkedLeads.length,
+      };
+    }),
+    updateUserDetails: adminProcedure
+      .input(adminUserDetailsSchema)
+      .mutation(async ({ ctx, input }) => {
+        const { getUserById, updateUser } = await import("./db");
+        const actingUser = await getUserById(ctx.user.id);
+        const user = await getUserById(input.id);
+
+        if (!actingUser) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Usuario administrador nao encontrado" });
+        }
+        if (!user) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Usuario nao encontrado" });
+        }
+
+        const actingIsRoot = isRootAdmin(actingUser);
+        const targetIsRoot = isRootAdmin(user);
+
+        if (targetIsRoot && (input.role !== "administrativo" || input.isActive !== 1)) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "O admin principal do sistema nao pode perder acesso ou permissao",
+          });
+        }
+
+        if (
+          user.role === "administrativo" &&
+          user.id !== ctx.user.id &&
+          !actingIsRoot
+        ) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Apenas o proprio administrador ou o admin principal podem editar contas administrativas",
+          });
         }
 
         await ensureUniqueUserIdentity(input.email, input.cpf, input.id);
+        const normalizedCreci = input.role === "corretor" ? normalizeOptionalCreci(input.creci) : undefined;
 
         await updateUser(input.id, {
           name: input.name.trim(),
@@ -601,6 +1017,11 @@ export const appRouter = router({
           role: input.role,
           isActive: input.isActive,
           phone: input.phone?.trim() || null,
+          creci: input.role === "corretor" ? normalizedCreci || null : null,
+          creciStatus: input.role === "corretor" && normalizedCreci ? "verified" : null,
+          creciVerifiedAt: input.role === "corretor" && normalizedCreci ? new Date() : null,
+          creciVerifiedByUserId:
+            input.role === "corretor" && normalizedCreci ? ctx.user.id : null,
           birthDate: input.birthDate ? new Date(`${input.birthDate}T00:00:00`) : null,
           profession: input.profession?.trim() || null,
           grossMonthlyIncome: input.grossMonthlyIncome ?? null,
@@ -616,10 +1037,11 @@ export const appRouter = router({
           zipCode: input.zipCode?.trim() || null,
           notes: input.notes?.trim() || null,
         });
+        await linkUserToExistingLeadsByCpf(input.id, input.cpf);
 
         const updatedUser = await getUserById(input.id);
         if (!updatedUser) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
+          throw new TRPCError({ code: "NOT_FOUND", message: "Usuario nao encontrado" });
         }
 
         return toSafeUser(updatedUser);
@@ -631,11 +1053,35 @@ export const appRouter = router({
           role: z.enum(APP_ROLES),
         })
       )
-      .mutation(async ({ input }) => {
-        const { updateUserRole } = await import("./db");
+      .mutation(async ({ ctx, input }) => {
+        const { getUserById, updateUserRole } = await import("./db");
+        const actingUser = await getUserById(ctx.user.id);
+        const targetUser = await getUserById(input.id);
+
+        if (!actingUser) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Usuario administrador nao encontrado" });
+        }
+        if (targetUser && isRootAdmin(targetUser) && input.role !== "administrativo") {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "O admin principal do sistema nao pode perder permissao",
+          });
+        }
+        if (
+          targetUser?.role === "administrativo" &&
+          targetUser.id !== ctx.user.id &&
+          !isRootAdmin(actingUser)
+        ) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Apenas o admin principal pode alterar outros administradores",
+          });
+        }
+
         return await updateUserRole(input.id, input.role);
       }),
   }),
 });
 
 export type AppRouter = typeof appRouter;
+

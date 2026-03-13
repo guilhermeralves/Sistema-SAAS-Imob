@@ -55,6 +55,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     "email",
     "cpf",
     "phone",
+    "creci",
     "profession",
     "maritalStatus",
     "rg",
@@ -146,6 +147,28 @@ export async function createUser(user: InsertUser) {
   }
 
   return createdUser;
+}
+
+export async function deleteUserById(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.delete(users).where(eq(users.id, id));
+}
+
+export async function revokeUserAccess(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(users)
+    .set({
+      isActive: 0,
+      loginMethod: null,
+      passwordHash: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, id));
 }
 
 export async function getViewedUserIdsByAdmin(adminUserId: number) {
@@ -351,11 +374,13 @@ export async function getAllLeads() {
       id: leads.id,
       nome: leads.nome,
       email: leads.email,
+      cpf: leads.cpf,
       telefone: leads.telefone,
       status: leads.status,
       interesse: leads.interesse,
       observacao: leads.observacao,
       origem: leads.origem,
+      userId: leads.userId,
       idResponsavel: leads.idResponsavel,
       idImovel: leads.idImovel,
       createdAt: leads.createdAt,
@@ -374,11 +399,13 @@ export async function getLeadsByResponsavel(idResponsavel: number) {
       id: leads.id,
       nome: leads.nome,
       email: leads.email,
+      cpf: leads.cpf,
       telefone: leads.telefone,
       status: leads.status,
       interesse: leads.interesse,
       observacao: leads.observacao,
       origem: leads.origem,
+      userId: leads.userId,
       idResponsavel: leads.idResponsavel,
       idImovel: leads.idImovel,
       createdAt: leads.createdAt,
@@ -394,6 +421,51 @@ export async function getLeadById(id: number) {
   if (!db) return undefined;
   const result = await db.select().from(leads).where(eq(leads.id, id)).limit(1);
   return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getLeadsByCpf(cpf: string) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db.select().from(leads).where(eq(leads.cpf, cpf)).orderBy(desc(leads.createdAt));
+}
+
+export async function getLeadsByUserId(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(leads)
+    .where(eq(leads.userId, userId))
+    .orderBy(desc(leads.createdAt));
+}
+
+export async function linkLeadsToUserByCpf(cpf: string, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(leads)
+    .set({
+      cpf,
+      userId,
+      updatedAt: new Date(),
+    })
+    .where(eq(leads.cpf, cpf));
+}
+
+export async function unlinkLeadsFromUser(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(leads)
+    .set({
+      userId: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(leads.userId, userId));
 }
 
 export async function createLead(data: InsertLead) {
@@ -417,6 +489,13 @@ export async function deleteLead(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.delete(leads).where(eq(leads.id, id));
+}
+
+export async function deleteLeadsByUserId(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.delete(leads).where(eq(leads.userId, userId));
 }
 
 export async function getLeadNotes(idLead: number) {

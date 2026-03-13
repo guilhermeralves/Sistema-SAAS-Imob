@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue,} from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,} from "@/components/ui/dialog";
+import { formatCpf, isValidCpf } from "@/lib/cpf";
 import { trpc } from "@/lib/trpc";
 import { Users, Plus, Phone, Mail, MessageSquare, Upload, FileText, ArrowRight, User, Calendar } from "lucide-react";
 import { toast, Toaster } from "sonner";
@@ -70,6 +71,7 @@ export default function CRM() {
   const [newLeadData, setNewLeadData] = useState({
     nome: "",
     email: "",
+    cpf: "",
     telefone: "",
     origem: "",
     interesse: "",
@@ -100,7 +102,7 @@ export default function CRM() {
       toast.success("Lead criado com sucesso!");
       refetch();
       setNewLeadOpen(false);
-      setNewLeadData({ nome: "", email: "", telefone: "", origem: "", interesse: "", observacao: "" });
+      setNewLeadData({ nome: "", email: "", cpf: "", telefone: "", origem: "", interesse: "", observacao: "" });
     },
     onError: () => {
       toast.error("Erro ao criar lead");
@@ -150,6 +152,11 @@ export default function CRM() {
 
     if (!isValidEmail(newLeadData.email)) {
       toast.error("E-mail inválido");
+      return;
+    }
+
+    if (newLeadData.cpf && !isValidCpf(newLeadData.cpf)) {
+      toast.error("CPF invalido. Confira os digitos informados.");
       return;
     }
 
@@ -296,6 +303,16 @@ export default function CRM() {
                     onChange={(e) =>
                       setNewLeadData({ ...newLeadData, email: e.target.value,})
                     }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cpf">CPF</Label>
+                  <Input
+                    id="cpf"
+                    value={newLeadData.cpf}
+                    inputMode="numeric"
+                    maxLength={14}
+                    onChange={(e) => setNewLeadData({ ...newLeadData, cpf: formatCpf(e.target.value) })}
                   />
                 </div>
                 <div className="space-y-2">

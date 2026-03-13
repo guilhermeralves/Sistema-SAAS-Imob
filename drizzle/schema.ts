@@ -17,6 +17,10 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 320 }),
   cpf: varchar("cpf", { length: 14 }).unique(),
   phone: varchar("phone", { length: 20 }),
+  creci: varchar("creci", { length: 32 }),
+  creciStatus: varchar("creciStatus", { length: 20 }).$type<"pending" | "verified">(),
+  creciVerifiedAt: timestamp("creciVerifiedAt", { mode: "date" }),
+  creciVerifiedByUserId: integer("creciVerifiedByUserId"),
   birthDate: date("birthDate", { mode: "date" }),
   profession: varchar("profession", { length: 120 }),
   grossMonthlyIncome: integer("grossMonthlyIncome"),
@@ -107,11 +111,13 @@ export const leads = pgTable("leads", {
   id: serial("id").primaryKey(),
   nome: varchar("nome", { length: 255 }).notNull(),
   email: varchar("email", { length: 320 }),
+  cpf: varchar("cpf", { length: 14 }),
   telefone: varchar("telefone", { length: 20 }),
   origem: varchar("origem", { length: 100 }), // site, whatsapp, indicacao, etc
   interesse: text("interesse"), // descricao do interesse
   observacao: text("observacao"), // observacoes sobre o lead
   status: varchar("status", { length: 50 }).default("novo").notNull(), // novo, atendimento, proposta, negociacao, fechado, perdidos
+  userId: integer("userId"), // conta vinculada por CPF quando existir
   idResponsavel: integer("idResponsavel"), // ID do corretor/admin responsavel
   idImovel: integer("idImovel"), // ID do imovel de interesse (opcional)
   createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),

@@ -1,4 +1,15 @@
+import { useAuth } from "@/_core/hooks/useAuth";
 import Layout from "@/components/Layout";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -33,9 +44,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatCreci, isValidCreci } from "@/lib/creci";
+import { formatCpf, isValidCpf, normalizeCpf } from "@/lib/cpf";
 import { trpc } from "@/lib/trpc";
 import { ROLE_LABELS, type AppRole } from "@shared/auth";
-import { MoreHorizontal, Plus, Search, Shield, UserCog } from "lucide-react";
+import { AlertTriangle, BadgeCheck, Clock3, MoreHorizontal, Plus, Search, Shield, Trash2, UserCog } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Link } from "wouter";
@@ -51,22 +64,39 @@ type EditState = {
   password: string;
 } | null;
 
+type DeleteState = {
+  userId: number;
+  deleteLinkedLeads: boolean;
+} | null;
+
 function formatDate(date: Date | string | null) {
   if (!date) return "-";
   return new Date(date).toLocaleDateString("pt-BR");
 }
 
-function formatCpf(value: string | null | undefined) {
-  if (!value) return "-";
-  const digits = value.replace(/\D/g, "");
-  if (digits.length !== 11) return value;
-  return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+function formatLeadInterest(interest: string | null | undefined) {
+  return interest?.trim() || "Interesse nao informado";
+}
+
+function getCreciStatusMessage(status: "pending" | "verified" | null | undefined) {
+  if (status === "verified") {
+    return "Numero do CRECI registrado!";
+  }
+
+  if (status === "pending") {
+    return "Numero do CRECI pendente de validacao por admin.";
+  }
+
+  return "";
 }
 
 export default function AdminUsers() {
+  const { user: authenticatedUser } = useAuth();
   const utils = trpc.useUtils();
   const [createOpen, setCreateOpen] = useState(false);
+  const [createConfirmOpen, setCreateConfirmOpen] = useState(false);
   const [editState, setEditState] = useState<EditState>(null);
+  const [deleteState, setDeleteState] = useState<DeleteState>(null);
   const [selectedFilter, setSelectedFilter] = useState<UserFilter | null>(null);
   const [showClientsWithContracts, setShowClientsWithContracts] = useState(false);
   const [search, setSearch] = useState("");
@@ -75,13 +105,36 @@ export default function AdminUsers() {
     cpf: "",
     email: "",
     password: "",
+    creci: "",
     role: "corretor" as AppRole,
   });
+  const normalizedCreateCpf = useMemo(
+    () => (isValidCpf(createForm.cpf) ? normalizeCpf(createForm.cpf) : null),
+    [createForm.cpf]
+  );
 
   const { data: users, isLoading } = trpc.admin.users.useQuery();
   const { data: contracts } = trpc.contracts.list.useQuery(undefined, {
     enabled: selectedFilter === "cliente" && showClientsWithContracts,
   });
+  const { data: leadLinkPreview } = trpc.admin.leadLinkPreviewByCpf.useQuery(
+    { cpf: normalizedCreateCpf ?? "00000000000" },
+    {
+      enabled: createOpen && normalizedCreateCpf !== null,
+      retry: false,
+    }
+  );
+  const {
+    data: deletePreview,
+    isLoading: deletePreviewLoading,
+    error: deletePreviewError,
+  } = trpc.admin.deleteUserPreview.useQuery(
+    { userId: deleteState?.userId ?? 0 },
+    {
+      enabled: deleteState !== null,
+      retry: false,
+    }
+  );
   const newUsersCount = useMemo(
     () => users?.filter(user => user.isNewForAdmin).length ?? 0,
     [users]
@@ -91,11 +144,21 @@ export default function AdminUsers() {
     [contracts]
   );
 
+  const resetCreateForm = () => {
+    setCreateOpen(false);
+    setCreateConfirmOpen(false);
+    setCreateForm({ name: "", cpf: "", email: "", password: "", creci: "", role: "corretor" });
+  };
+
   const createUser = trpc.admin.createUser.useMutation({
-    onSuccess: async () => {
-      toast.success("Usuario criado com sucesso");
-      setCreateOpen(false);
-      setCreateForm({ name: "", cpf: "", email: "", password: "", role: "corretor" });
+    onSuccess: async data => {
+      const linkedInterest = data.linkedLeadPreview?.latestInterest;
+      toast.success(
+        linkedInterest
+          ? `Usuario criado e vinculado ao lead com interesse em: ${formatLeadInterest(linkedInterest)}`
+          : "Usuario criado com sucesso"
+      );
+      resetCreateForm();
       await utils.admin.users.invalidate();
       await utils.admin.hasNewUsers.invalidate();
     },
@@ -127,6 +190,31 @@ export default function AdminUsers() {
     },
     onError: error => {
       toast.error(error.message || "Nao foi possivel atualizar o usuario");
+    },
+  });
+
+  const deleteUser = trpc.admin.deleteUser.useMutation({
+    onSuccess: async data => {
+      if (data.mode === "revoke_access") {
+        toast.success(
+          data.isSelf
+            ? "Seu acesso administrativo foi revogado"
+            : "Acesso do administrador revogado com sucesso"
+        );
+      } else {
+        toast.success("Usuario excluido com sucesso");
+      }
+
+      setDeleteState(null);
+      await utils.admin.users.invalidate();
+      await utils.admin.hasNewUsers.invalidate();
+
+      if (data.isSelf && typeof window !== "undefined") {
+        window.location.assign("/");
+      }
+    },
+    onError: error => {
+      toast.error(error.message || "Nao foi possivel concluir a exclusao");
     },
   });
 
@@ -205,18 +293,60 @@ export default function AdminUsers() {
     { key: "cliente", label: "Clientes", value: clienteCount },
   ];
 
+  const submitCreateUser = (confirmedLeadLink = false) => {
+    if (!isValidCpf(createForm.cpf)) {
+      toast.error("CPF invalido. Confira os digitos informados.");
+      return;
+    }
+
+    if (createForm.role === "corretor" && createForm.creci && !isValidCreci(createForm.creci)) {
+      toast.error("CRECI invalido. Use o formato numero/UF, por exemplo 123456/SP.");
+      return;
+    }
+
+    if (leadLinkPreview && !confirmedLeadLink) {
+      setCreateConfirmOpen(true);
+      return;
+    }
+
+    createUser.mutate({
+      name: createForm.name,
+      cpf: normalizeCpf(createForm.cpf),
+      email: createForm.email,
+      password: createForm.password,
+      creci: createForm.role === "corretor" ? formatCreci(createForm.creci) || undefined : undefined,
+      role: createForm.role,
+      confirmedLeadLink,
+    });
+  };
+
+  const currentDeleteTarget = useMemo(
+    () => users?.find(user => user.id === deleteState?.userId) ?? null,
+    [deleteState?.userId, users]
+  );
+
+  const isProtectedRootAdmin = currentDeleteTarget?.registrationSource === "bootstrap";
+
   return (
     <Layout>
       <div className="container py-8 space-y-6">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold">Usuarios</h1>
-            <p className="text-muted-foreground">
+            <h1 className="text-3xl font-bold text-foreground">Usuários</h1>
+            <p className="text-muted-foreground mt-2">
               Gerencie usuarios, ajuste permissoes e desative contas.
             </p>
           </div>
 
-          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <Dialog
+            open={createOpen}
+            onOpenChange={open => {
+              setCreateOpen(open);
+              if (!open) {
+                setCreateConfirmOpen(false);
+              }
+            }}
+          >
             <DialogTrigger asChild>
               <Button className="gap-2">
                 <Plus className="h-4 w-4" />
@@ -250,11 +380,32 @@ export default function AdminUsers() {
                   <Input
                     id="create-cpf"
                     value={createForm.cpf}
+                    inputMode="numeric"
+                    maxLength={14}
                     onChange={event =>
-                      setCreateForm(current => ({ ...current, cpf: event.target.value }))
+                      setCreateForm(current => ({ ...current, cpf: formatCpf(event.target.value) }))
                     }
                   />
                 </div>
+                {leadLinkPreview ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                    <div className="flex items-start gap-2">
+                      <AlertTriangle className="mt-0.5 h-4 w-4" />
+                      <div className="space-y-1">
+                        <p className="font-medium">
+                          Esse usuario ja e um lead e sera vinculado automaticamente.
+                        </p>
+                        <p>
+                          Interesse anterior: {formatLeadInterest(leadLinkPreview.latestInterest)}
+                        </p>
+                        <p>
+                          Origem: {leadLinkPreview.latestOrigin || "Nao informada"} •{" "}
+                          {leadLinkPreview.leadCount} lead(s)
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
                 <div className="space-y-2">
                   <Label htmlFor="create-email">E-mail</Label>
                   <Input
@@ -299,18 +450,31 @@ export default function AdminUsers() {
                     </SelectContent>
                   </Select>
                 </div>
+                {createForm.role === "corretor" ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="create-creci">CRECI</Label>
+                    <Input
+                      id="create-creci"
+                      value={createForm.creci}
+                      inputMode="text"
+                      maxLength={10}
+                      placeholder="123456/SP"
+                      onChange={event =>
+                        setCreateForm(current => ({
+                          ...current,
+                          creci: formatCreci(event.target.value),
+                        }))
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Cadastro feito por admin entra como validado automaticamente.
+                    </p>
+                  </div>
+                ) : null}
                 <Button
                   className="w-full"
                   disabled={createUser.isPending}
-                  onClick={() =>
-                    createUser.mutate({
-                      name: createForm.name,
-                      cpf: createForm.cpf,
-                      email: createForm.email,
-                      password: createForm.password,
-                      role: createForm.role,
-                    })
-                  }
+                  onClick={() => submitCreateUser(false)}
                 >
                   {createUser.isPending ? "Criando..." : "Criar usuario"}
                 </Button>
@@ -417,53 +581,113 @@ export default function AdminUsers() {
                       <TableHead>Status</TableHead>
                       <TableHead>Ultimo login</TableHead>
                       <TableHead className="w-28">Ficha</TableHead>
-                      <TableHead className="w-32">Acoes</TableHead>
+                      <TableHead className="w-44">Acoes</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredUsers.map(user => (
-                      <TableRow key={user.id}>
-                        <TableCell>{user.name || "-"}</TableCell>
-                        <TableCell>{user.email || "-"}</TableCell>
-                        <TableCell>{ROLE_LABELS[user.role]}</TableCell>
-                        <TableCell>{user.isActive === 1 ? "Ativo" : "Inativo"}</TableCell>
-                        <TableCell>
-                          {user.isNewForAdmin ? (
-                            <span className="inline-flex items-center rounded-full bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground">
-                              Novo
-                            </span>
-                          ) : (
-                            formatDate(user.lastSignedIn)
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Button variant="outline" size="sm" asChild>
-                            <Link href={`/admin/users/${user.id}`}>
-                              <a>Ver ficha</a>
-                            </Link>
-                          </Button>
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="gap-2"
-                            onClick={() =>
-                              setEditState({
-                                id: user.id,
-                                name: user.name || "",
-                                role: user.role,
-                                isActive: String(user.isActive) as "0" | "1",
-                                password: "",
-                              })
-                            }
-                          >
-                            <UserCog className="h-4 w-4" />
-                            Editar
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {filteredUsers.map(user => {
+                      const isBootstrapAdmin =
+                        user.role === "administrativo" && user.registrationSource === "bootstrap";
+                      const actingIsRootAdmin =
+                        authenticatedUser?.role === "administrativo" &&
+                        authenticatedUser?.registrationSource === "bootstrap";
+                      const canEditAdminTarget =
+                        user.role !== "administrativo" ||
+                        actingIsRootAdmin ||
+                        authenticatedUser?.id === user.id;
+
+                      return (
+                        <TableRow key={user.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <span>{user.name || "-"}</span>
+                              {user.role === "corretor" && user.creci && user.creciStatus === "verified" ? (
+                                <button
+                                  type="button"
+                                  className="inline-flex text-emerald-600"
+                                  title={getCreciStatusMessage(user.creciStatus)}
+                                  onClick={() => toast.info(getCreciStatusMessage(user.creciStatus))}
+                                >
+                                  <BadgeCheck className="h-4 w-4" />
+                                </button>
+                              ) : user.role === "corretor" && user.creci && user.creciStatus === "pending" ? (
+                                <button
+                                  type="button"
+                                  className="inline-flex text-amber-500"
+                                  title={getCreciStatusMessage(user.creciStatus)}
+                                  onClick={() => toast.info(getCreciStatusMessage(user.creciStatus))}
+                                >
+                                  <Clock3 className="h-4 w-4" />
+                                </button>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                          <TableCell>{user.email || "-"}</TableCell>
+                          <TableCell>{ROLE_LABELS[user.role]}</TableCell>
+                          <TableCell>{user.isActive === 1 ? "Ativo" : "Inativo"}</TableCell>
+                          <TableCell>
+                            {user.isNewForAdmin ? (
+                              <span className="inline-flex items-center rounded-full bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground">
+                                Novo
+                              </span>
+                            ) : (
+                              formatDate(user.lastSignedIn)
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Button variant="outline" size="sm" asChild>
+                              <Link href={`/admin/users/${user.id}`}>
+                                <a>Ver ficha</a>
+                              </Link>
+                            </Button>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-2"
+                                onClick={() => {
+                                  if (!canEditAdminTarget) {
+                                    toast.error(
+                                      "Apenas o proprio administrador ou o admin principal podem editar contas administrativas."
+                                    );
+                                    return;
+                                  }
+
+                                  setEditState({
+                                    id: user.id,
+                                    name: user.name || "",
+                                    role: user.role,
+                                    isActive: String(user.isActive) as "0" | "1",
+                                    password: "",
+                                  });
+                                }}
+                              >
+                                <UserCog className="h-4 w-4" />
+                                Editar
+                              </Button>
+                              {isBootstrapAdmin ? null : (
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8 text-red-600 hover:text-red-700"
+                                  aria-label="Excluir usuario"
+                                  onClick={() =>
+                                    setDeleteState({
+                                      userId: user.id,
+                                      deleteLinkedLeads: false,
+                                    })
+                                  }
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -580,6 +804,140 @@ export default function AdminUsers() {
                 </Button>
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        <AlertDialog open={createConfirmOpen} onOpenChange={setCreateConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirmar vinculacao com lead existente?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {leadLinkPreview
+                  ? `Esse usuario ja e um lead e tem interesse em: ${formatLeadInterest(leadLinkPreview.latestInterest)}. O sistema vinculara o acesso de usuario ao lead.`
+                  : "Nao ha lead para vincular."}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Voltar</AlertDialogCancel>
+              <AlertDialogAction onClick={() => submitCreateUser(true)}>
+                Confirmar e criar usuario
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <Dialog open={deleteState !== null} onOpenChange={open => !open && setDeleteState(null)}>
+          <DialogContent
+            className="sm:max-w-md lg:max-w-2xl"
+            onOpenAutoFocus={event => event.preventDefault()}
+          >
+            <DialogHeader>
+              <DialogTitle>
+                {deletePreview?.mode === "revoke_access"
+                  ? deletePreview.isSelf
+                    ? "Voce ira excluir o proprio acesso de usuario?"
+                    : "Revogar acesso deste administrador?"
+                  : "Excluir usuario?"}
+              </DialogTitle>
+              <DialogDescription>
+                {deletePreview?.mode === "revoke_access"
+                  ? "Os dados do perfil permanecerao no sistema. Apenas o acesso sera removido."
+                  : "A exclusao remove o cadastro de acesso do sistema. Se houver lead vinculado, voce pode manter ou apagar esse historico comercial."}
+              </DialogDescription>
+            </DialogHeader>
+
+            {deletePreviewLoading ? (
+              <div className="space-y-3">
+                {[1, 2].map(item => (
+                  <div key={item} className="h-16 rounded bg-muted animate-pulse" />
+                ))}
+              </div>
+            ) : deletePreviewError ? (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                {deletePreviewError.message}
+              </div>
+            ) : deletePreview ? (
+              <div className="space-y-4">
+                <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+                  <p><strong>Usuario:</strong> {deletePreview.user.name || "Sem nome"}</p>
+                  <p><strong>E-mail:</strong> {deletePreview.user.email || "Nao informado"}</p>
+                  <p><strong>Papel:</strong> {ROLE_LABELS[deletePreview.user.role]}</p>
+                  <p><strong>Status:</strong> {deletePreview.user.isActive === 1 ? "Ativo" : "Inativo"}</p>
+                </div>
+
+                {isProtectedRootAdmin ? (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                    O admin principal do sistema e protegido e nao pode ser excluido.
+                  </div>
+                ) : null}
+
+                {deletePreview.linkedLeads.length > 0 ? (
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm font-medium">Lead(s) vinculado(s)</p>
+                      <p className="text-sm text-muted-foreground">
+                        Encontramos {deletePreview.linkedLeads.length} lead(s) ligado(s) a este usuario.
+                      </p>
+                    </div>
+                    <div className="space-y-2 rounded-lg border p-3">
+                      {deletePreview.linkedLeads.map(lead => (
+                        <div key={lead.id} className="rounded-md border bg-background p-3 text-sm">
+                          <p><strong>Lead #{lead.id}:</strong> {lead.nome}</p>
+                          <p><strong>Interesse:</strong> {formatLeadInterest(lead.interesse)}</p>
+                          <p><strong>Origem:</strong> {lead.origem || "Nao informada"}</p>
+                          <p><strong>Status:</strong> {lead.status}</p>
+                        </div>
+                      ))}
+                    </div>
+                    {deletePreview.mode === "delete_user" ? (
+                      <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                        <Checkbox
+                          id="delete-linked-leads"
+                          checked={deleteState?.deleteLinkedLeads === true}
+                          onCheckedChange={checked =>
+                            setDeleteState(current =>
+                              current
+                                ? { ...current, deleteLinkedLeads: checked === true }
+                                : current
+                            )
+                          }
+                        />
+                        <div className="space-y-1">
+                          <Label htmlFor="delete-linked-leads" className="cursor-pointer font-medium">
+                            Apagar o lead junto com o usuario
+                          </Label>
+                          <p className="text-sm text-muted-foreground">
+                            Se esta opcao ficar desmarcada, o lead sera mantido no CRM e apenas perdera o vinculo com o usuario.
+                          </p>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => setDeleteState(null)}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    disabled={deleteUser.isPending || isProtectedRootAdmin}
+                    onClick={() =>
+                      deleteUser.mutate({
+                        userId: deleteState?.userId ?? 0,
+                        deleteLinkedLeads: deleteState?.deleteLinkedLeads === true,
+                      })
+                    }
+                  >
+                    {deleteUser.isPending
+                      ? "Processando..."
+                      : deletePreview.mode === "revoke_access"
+                        ? "Confirmar revogacao"
+                        : "Confirmar exclusao"}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </DialogContent>
         </Dialog>
       </div>
