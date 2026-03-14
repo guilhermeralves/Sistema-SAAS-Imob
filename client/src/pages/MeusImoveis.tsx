@@ -92,6 +92,11 @@ export default function MeusImoveis() {
   const [cepLoading, setCepLoading] = useState(false);
   const [cepError, setCepError] = useState("");
   const cepTimeoutRef = useRef<number | null>(null);
+  const highlightedPropertyId = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    const rawValue = new URLSearchParams(window.location.search).get("highlightProperty");
+    return rawValue ? Number(rawValue) : null;
+  }, []);
 
   const { data: imoveis, isLoading, refetch } = trpc.properties.myProperties.useQuery(undefined, {
     enabled: isAuthenticated && (user?.role === "corretor" || user?.role === "administrativo"),
@@ -132,6 +137,15 @@ export default function MeusImoveis() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!highlightedPropertyId || !imoveis?.length) return;
+
+    const row = document.querySelector(`[data-my-property-row="${highlightedPropertyId}"]`);
+    if (row instanceof HTMLElement) {
+      row.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }, [highlightedPropertyId, imoveis]);
 
   const closeEditDialog = () => {
     setEditingImovel(null);
@@ -396,7 +410,11 @@ export default function MeusImoveis() {
                   </TableHeader>
                   <TableBody>
                     {filteredImoveis.map(imovel => (
-                      <TableRow key={imovel.id}>
+                      <TableRow
+                        key={imovel.id}
+                        data-my-property-row={imovel.id}
+                        className={imovel.id === highlightedPropertyId ? "bg-primary/5 ring-1 ring-primary/20" : ""}
+                      >
                         <TableCell>
                           <div className="font-medium">{imovel.titulo}</div>
                           <div className="text-xs text-muted-foreground capitalize">{imovel.tipo}</div>

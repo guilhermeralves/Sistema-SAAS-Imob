@@ -185,7 +185,11 @@ export default function Home() {
               <p className="text-muted-foreground">Confira nossas melhores oportunidades</p>
             </div>
             <Link href="/imoveis">
-              <Button variant="outline" className="gap-2">
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => window.scrollTo({ top: 0, behavior: "auto" })}
+              >
                 Ver Todos
                 <ArrowRight className="h-4 w-4" />
               </Button>

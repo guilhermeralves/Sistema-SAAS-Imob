@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Layout from "@/components/Layout";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,11 @@ function formatDate(date: Date | string) {
 
 export default function Admin() {
   const { user, loading, isAuthenticated } = useAuth();
+  const highlightedPropertyId = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    const rawValue = new URLSearchParams(window.location.search).get("highlightProperty");
+    return rawValue ? Number(rawValue) : null;
+  }, []);
 
   const { data: users } = trpc.admin.users.useQuery(
     undefined,
@@ -123,6 +128,16 @@ export default function Admin() {
   const leadsFechados = leads?.filter((l) => l.status === "fechado").length || 0;
   const totalContratos = contracts?.length || 0;
   const contratosAtivos = contracts?.filter((c) => c.status === "ativo").length || 0;
+
+  useEffect(() => {
+    if (!highlightedPropertyId || !properties?.length) return;
+
+    const row = document.querySelector(`[data-property-row="${highlightedPropertyId}"]`);
+    if (row instanceof HTMLElement) {
+      row.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }, [highlightedPropertyId, properties]);
+
   return (
     <Layout>
       <div className="container py-8">
@@ -230,7 +245,11 @@ export default function Admin() {
                       </TableHeader>
                       <TableBody>
                         {properties.map((p) => (
-                          <TableRow key={p.id}>
+                          <TableRow
+                            key={p.id}
+                            data-property-row={p.id}
+                            className={p.id === highlightedPropertyId ? "bg-primary/5 ring-1 ring-primary/20" : ""}
+                          >
                             <TableCell className="font-medium">{p.titulo}</TableCell>
                             <TableCell className="capitalize">{p.tipo}</TableCell>
                             <TableCell>{p.cidade}/{p.estado}</TableCell>

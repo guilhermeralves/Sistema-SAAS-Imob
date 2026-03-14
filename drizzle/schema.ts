@@ -182,6 +182,24 @@ export type Contract = typeof contracts.$inferSelect;
 export type InsertContract = typeof contracts.$inferInsert;
 
 /**
+ * Tabela de documentos de imoveis
+ * Armazena PDFs relacionados a cada imovel
+ */
+export const propertyDocuments = pgTable("propertyDocuments", {
+  id: serial("id").primaryKey(),
+  idImovel: integer("idImovel").notNull(),
+  idUsuario: integer("idUsuario").notNull(),
+  nomeArquivo: varchar("nomeArquivo", { length: 255 }).notNull(),
+  urlArquivo: text("urlArquivo").notNull(),
+  tipoArquivo: varchar("tipoArquivo", { length: 120 }).notNull(),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export type PropertyDocument = typeof propertyDocuments.$inferSelect;
+export type InsertPropertyDocument = typeof propertyDocuments.$inferInsert;
+
+/**
  * Tabela de documentos de clientes
  * Armazena documentos enviados pelos clientes
  */

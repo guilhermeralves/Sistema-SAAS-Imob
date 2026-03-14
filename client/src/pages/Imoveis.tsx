@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import Layout from "@/components/Layout";
 import MoneyInput from "@/components/MoneyInput";
@@ -22,16 +22,12 @@ import { Link } from "wouter";
 import { toast } from "sonner";
 
 /**
- * Página de Listagem de Imóveis
- * 
- * Lista todos os imóveis disponíveis com sistema de filtros.
- * 
- * EDIÇÃO:
- * - Para adicionar novos filtros: adicione campos no estado filters
- * - Para modificar opções de filtro: edite os arrays TIPOS, FINALIDADES, etc.
+ * Pagina de listagem de imoveis.
+ *
+ * Lista todos os imoveis disponiveis com sistema de filtros.
  */
 
-// ========== ÁREA DE EDIÇÃO - OPÇÕES DE FILTRO ==========
+// ========== AREA DE EDICAO - OPCOES DE FILTRO ==========
 const TIPOS = [
   { value: "todos", label: "Todos os Tipos" },
   { value: "casa", label: "Casa" },
@@ -45,12 +41,56 @@ const FINALIDADES = [
   { value: "venda", label: "Venda" },
   { value: "locacao", label: "Locação" },
 ];
-// ========== FIM DA ÁREA DE EDIÇÃO ==========
+
+const NUMBER_FILTER_OPTIONS = [
+  { value: "todos", label: "Todos" },
+  { value: "1", label: "1" },
+  { value: "2", label: "2" },
+  { value: "3", label: "3" },
+  { value: "4", label: "4" },
+  { value: "5", label: "5" },
+];
+// ========== FIM DA AREA DE EDICAO ==========
 
 function formatZipCode(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 8);
   if (digits.length <= 5) return digits;
   return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+}
+
+function normalizeSearchValue(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function buildPropertySearchText(property: Record<string, unknown>) {
+  const rawValues = Object.entries(property)
+    .filter(([key]) => key !== "fotos")
+    .flatMap(([_, value]) => {
+      if (value === null || value === undefined) return [];
+      if (typeof value === "string" || typeof value === "number") {
+        return [String(value)];
+      }
+      return [];
+    });
+
+  if (typeof property.valor === "number") {
+    rawValues.push(formatMoneyFromCentsValue(property.valor));
+  }
+
+  if (typeof property.valorLocacao === "number") {
+    rawValues.push(formatMoneyFromCentsValue(property.valorLocacao));
+  }
+
+  if (property.finalidade === "locacao") {
+    rawValues.push("locacao", "locação");
+  } else if (property.finalidade === "venda") {
+    rawValues.push("venda");
+  }
+
+  return normalizeSearchValue(rawValues.join(" "));
 }
 
 export default function Imoveis() {
@@ -60,7 +100,7 @@ export default function Imoveis() {
     isAuthenticated && (user?.role === "corretor" || user?.role === "administrativo");
   // Estado para controlar o dialog (Aberto ou fechado)
   const [newPropertyOpen, setNewPropertyOpen] = useState(false);
-  //Estado para armazenar os dados do formulário
+  // Estado para armazenar os dados do formulario
   const [newPropertyData, setNewPropertyData] = useState({
     titulo: "",
     descricao: "",
@@ -91,13 +131,13 @@ export default function Imoveis() {
     };
   }, []);
 
-  // Mutation para criar imóvel
+  // Mutation para criar imovel
   const createProperty = trpc.properties.create.useMutation({
     onSuccess: () => {
       toast.success("Imóvel cadastrado com sucesso!");
       refetch();  // Atualiza a lista
       setNewPropertyOpen(false);  // Fecha o dialog
-      // Limpa o formulário
+      // Limpa o formulÃ¡rio
       setNewPropertyData({
         titulo: "",
         descricao: "",
@@ -121,9 +161,9 @@ export default function Imoveis() {
     },
   });
 
-  // Função para validar e criar o imóvel
+  // Funcao para validar e criar o imovel
   const handleCreateProperty = () => {
-    // Valida campos obrigatórios
+    // Valida campos obrigatorios
     if (!newPropertyData.titulo || !newPropertyData.valor || !newPropertyData.endereco) {
       toast.error("Preencha título, valor e endereço");
       return;
@@ -140,7 +180,7 @@ export default function Imoveis() {
     });
   };
 
-  // ========== FUNÇÃO PARA LIDAR COM CEP ==========
+  // ========== FUNCAO PARA LIDAR COM CEP ==========
   const handleCepChange = async (value: string) => {
     const formattedValue = formatZipCode(value);
     setNewPropertyData(current => ({ ...current, cep: formattedValue }));
@@ -150,7 +190,7 @@ export default function Imoveis() {
       window.clearTimeout(cepTimeoutRef.current);
     }
 
-    // Se o CEP tiver menos de 8 dígitos, não busca
+    // Se o CEP tiver menos de 8 digitos, nao busca
     if (formattedValue.replace(/\D/g, "").length < 8) {
       setCepLoading(false);
       return;
@@ -159,7 +199,7 @@ export default function Imoveis() {
     // Inicia o carregamento
     setCepLoading(true);
 
-    // Aguarda 500ms para o usuário terminar de digitar
+    // Aguarda 500ms para o usuario terminar de digitar
     cepTimeoutRef.current = window.setTimeout(async () => {
       const result = await lookupCep(formattedValue);
 
@@ -186,7 +226,7 @@ export default function Imoveis() {
       setCepLoading(false);
     }, 500);
   };
-  // ========== FIM DA FUNÇÃO ==========
+  // ========== FIM DA FUNCAO ==========
 
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({
@@ -194,18 +234,37 @@ export default function Imoveis() {
     finalidade: "todos",
     cidade: "",
     bairro: "",
+    quartos: "todos",
+    banheiros: "todos",
+    vagas: "todos",
     valorMin: "",
     valorMax: "",
+    search: "",
   });
 
   // Aplicar filtros
   const imoveisFiltrados = imoveis?.filter((imovel) => {
+    const normalizedCidade = normalizeSearchValue(filters.cidade);
+    const normalizedBairro = normalizeSearchValue(filters.bairro);
+    const searchTerms = normalizeSearchValue(filters.search)
+      .split(/\s+/)
+      .filter(Boolean);
+
     if (filters.tipo !== "todos" && imovel.tipo !== filters.tipo) return false;
     if (filters.finalidade !== "todos" && imovel.finalidade !== filters.finalidade) return false;
-    if (filters.cidade && !imovel.cidade.toLowerCase().includes(filters.cidade.toLowerCase())) return false;
-    if (filters.bairro && !imovel.bairro?.toLowerCase().includes(filters.bairro.toLowerCase())) return false;
+    if (filters.cidade && !normalizeSearchValue(imovel.cidade).includes(normalizedCidade)) return false;
+    if (filters.bairro && !normalizeSearchValue(imovel.bairro || "").includes(normalizedBairro)) return false;
+    if (filters.quartos !== "todos" && (imovel.quartos ?? 0) !== Number(filters.quartos)) return false;
+    if (filters.banheiros !== "todos" && (imovel.banheiros ?? 0) !== Number(filters.banheiros)) return false;
+    if (filters.vagas !== "todos" && (imovel.vagas ?? 0) !== Number(filters.vagas)) return false;
     if (filters.valorMin && imovel.valor < (parseMoneyCentsInput(filters.valorMin) ?? 0)) return false;
     if (filters.valorMax && imovel.valor > (parseMoneyCentsInput(filters.valorMax) ?? 0)) return false;
+
+    if (searchTerms.length > 0) {
+      const searchableText = buildPropertySearchText(imovel as Record<string, unknown>);
+      if (!searchTerms.every(term => searchableText.includes(term))) return false;
+    }
+
     return true;
   });
 
@@ -221,7 +280,7 @@ export default function Imoveis() {
             </p>
           </div>
 
-          {/* Botão que abre o dialog */}
+          {/* Botao que abre o dialog */}
           {canManageProperties ? (
           <Dialog open={newPropertyOpen} onOpenChange={setNewPropertyOpen}>
             <DialogTrigger asChild>
@@ -231,7 +290,7 @@ export default function Imoveis() {
               </Button>
             </DialogTrigger>
 
-            {/* Conteúdo do dialog */}
+            {/* Conteudo do dialog */}
             <DialogContent
               className="w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6"
               onOpenAutoFocus={event => event.preventDefault()}
@@ -244,7 +303,7 @@ export default function Imoveis() {
               </DialogHeader>
 
               <div className="space-y-4">
-                {/* Campo Título */}
+                {/* Campo Titulo */}
                 <div className="space-y-1 sm:space-y-2">
                   <Label htmlFor="titulo" className="text-sm sm:text-base">Título *</Label>
                   <Input
@@ -258,7 +317,7 @@ export default function Imoveis() {
                   />
                 </div>
 
-                {/* Campo Descrição */}
+                {/* Campo Descricao */}
                 <div className="space-y-1 sm:space-y-2">
                   <Label htmlFor="descricao" className="text-sm sm:text-base">Descrição</Label>
                   <textarea
@@ -322,7 +381,7 @@ export default function Imoveis() {
                   />
                 </div>
 
-                {/* Campos de Características (Grid) */}
+                {/* Campos de Caracteristicas (Grid) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div className="space-y-1 sm:space-y-2">
                     <Label htmlFor="area" className="text-sm sm:text-base">Área (m²)</Label>
@@ -374,7 +433,7 @@ export default function Imoveis() {
                   </div>
                 </div>
 
-                {/* Campos de Localização */}
+                {/* Campos de Localizacao */}
                 <div className="space-y-1 sm:space-y-2">
                   <Label htmlFor="endereco" className="text-sm sm:text-base">Endereço *</Label>
                   <Input
@@ -465,7 +524,7 @@ export default function Imoveis() {
                   </div>
                 </div>
 
-                {/* Botão de Criar */}
+                {/* Botao de Criar */}
                 <Button
                   onClick={handleCreateProperty}
                   className="w-full mt-2 sm:mt-4 text-sm sm:text-base py-2 sm:py-3"
@@ -482,8 +541,8 @@ export default function Imoveis() {
         {/* Filtros */}
         <Card className="mb-8">
           <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold flex items-center gap-2">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="flex items-center gap-2 text-lg font-semibold">
                 <SlidersHorizontal className="h-5 w-5" />
                 Filtros
               </h2>
@@ -497,15 +556,15 @@ export default function Imoveis() {
               </Button>
             </div>
 
-            <div className={`grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 ${showFilters ? "" : "hidden md:grid"}`}>
-              <div className="space-y-2">
+            <div className={`grid grid-cols-1 gap-3.5 md:grid-cols-2 xl:grid-cols-12 ${showFilters ? "" : "hidden md:grid"}`}>
+              <div className="space-y-1.5 xl:col-span-2">
                 <Label htmlFor="tipo">Tipo</Label>
-                <Select value={filters.tipo} onValueChange={(value) => setFilters({ ...filters, tipo: value })}>
-                  <SelectTrigger id="tipo">
+                <Select value={filters.tipo} onValueChange={value => setFilters({ ...filters, tipo: value })}>
+                  <SelectTrigger id="tipo" className="h-11">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {TIPOS.map((tipo) => (
+                    {TIPOS.map(tipo => (
                       <SelectItem key={tipo.value} value={tipo.value}>
                         {tipo.label}
                       </SelectItem>
@@ -514,14 +573,14 @@ export default function Imoveis() {
                 </Select>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1.5 xl:col-span-2">
                 <Label htmlFor="finalidade">Finalidade</Label>
-                <Select value={filters.finalidade} onValueChange={(value) => setFilters({ ...filters, finalidade: value })}>
-                  <SelectTrigger id="finalidade">
+                <Select value={filters.finalidade} onValueChange={value => setFilters({ ...filters, finalidade: value })}>
+                  <SelectTrigger id="finalidade" className="h-11">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {FINALIDADES.map((finalidade) => (
+                    {FINALIDADES.map(finalidade => (
                       <SelectItem key={finalidade.value} value={finalidade.value}>
                         {finalidade.label}
                       </SelectItem>
@@ -530,9 +589,10 @@ export default function Imoveis() {
                 </Select>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1.5 xl:col-span-4">
                 <Label htmlFor="cidade">Cidade</Label>
                 <Input
+                  className="h-11"
                   id="cidade"
                   placeholder="Ex: São Paulo"
                   value={filters.cidade}
@@ -540,9 +600,10 @@ export default function Imoveis() {
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1.5 xl:col-span-4">
                 <Label htmlFor="bairro">Bairro</Label>
                 <Input
+                  className="h-11"
                   id="bairro"
                   placeholder="Ex: Centro"
                   value={filters.bairro}
@@ -550,26 +611,95 @@ export default function Imoveis() {
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1.5 xl:col-span-3">
                 <Label htmlFor="valorMin">Valor Mínimo</Label>
                 <MoneyInput
+                  className="h-11"
                   id="valorMin"
                   value={filters.valorMin}
                   onValueChange={(value) => setFilters({ ...filters, valorMin: value })}
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1.5 xl:col-span-3">
                 <Label htmlFor="valorMax">Valor Máximo</Label>
                 <MoneyInput
+                  className="h-11"
                   id="valorMax"
                   value={filters.valorMax}
                   onValueChange={(value) => setFilters({ ...filters, valorMax: value })}
                 />
               </div>
+
+              <div className="space-y-1.5 xl:col-span-2">
+                <Label htmlFor="quartos-filtro">Quartos</Label>
+                <Select value={filters.quartos} onValueChange={value => setFilters({ ...filters, quartos: value })}>
+                  <SelectTrigger id="quartos-filtro" className="h-11">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {NUMBER_FILTER_OPTIONS.map(option => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5 xl:col-span-2">
+                <Label htmlFor="banheiros-filtro">Banheiros</Label>
+                <Select value={filters.banheiros} onValueChange={value => setFilters({ ...filters, banheiros: value })}>
+                  <SelectTrigger id="banheiros-filtro" className="h-11">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {NUMBER_FILTER_OPTIONS.map(option => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5 xl:col-span-2">
+                <Label htmlFor="vagas-filtro">Vagas</Label>
+                <Select value={filters.vagas} onValueChange={value => setFilters({ ...filters, vagas: value })}>
+                  <SelectTrigger id="vagas-filtro" className="h-11">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {NUMBER_FILTER_OPTIONS.map(option => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            {(filters.tipo !== "todos" || filters.finalidade !== "todos" || filters.cidade || filters.bairro || filters.valorMin || filters.valorMax) && (
+            <div className={`relative mt-4 ${showFilters ? "" : "hidden md:block"}`}>
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={filters.search}
+                onChange={event => setFilters({ ...filters, search: event.target.value })}
+                placeholder="Pesquisa de Imóveis"
+                className="h-11 pl-9"
+              />
+            </div>
+
+            {(filters.tipo !== "todos" ||
+              filters.finalidade !== "todos" ||
+              filters.cidade ||
+              filters.bairro ||
+              filters.quartos !== "todos" ||
+              filters.banheiros !== "todos" ||
+              filters.vagas !== "todos" ||
+              filters.valorMin ||
+              filters.valorMax ||
+              filters.search) && (
               <Button
                 variant="outline"
                 size="sm"
@@ -578,8 +708,12 @@ export default function Imoveis() {
                   finalidade: "todos",
                   cidade: "",
                   bairro: "",
+                  quartos: "todos",
+                  banheiros: "todos",
+                  vagas: "todos",
                   valorMin: "",
                   valorMax: "",
+                  search: "",
                 })}
                 className="mt-4"
               >
@@ -591,7 +725,7 @@ export default function Imoveis() {
 
         {/* Resultados */}
         <div className="mb-4 text-sm text-muted-foreground">
-          {imoveisFiltrados?.length || 0} imóve{imoveisFiltrados?.length === 1 ? "l encontrado" : "is encontrados"}
+          {imoveisFiltrados?.length || 0} {imoveisFiltrados?.length === 1 ? "imóvel encontrado" : "imóveis encontrados"}
         </div>
 
         {isLoading ? (
@@ -681,8 +815,12 @@ export default function Imoveis() {
                 finalidade: "todos",
                 cidade: "",
                 bairro: "",
+                quartos: "todos",
+                banheiros: "todos",
+                vagas: "todos",
                 valorMin: "",
                 valorMax: "",
+                search: "",
               })}
             >
               Limpar Filtros
@@ -693,3 +831,4 @@ export default function Imoveis() {
     </Layout>
   );
 }
+

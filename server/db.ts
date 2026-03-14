@@ -8,6 +8,7 @@ import {
   InsertLead,
   InsertLeadFile,
   InsertLeadNote,
+  InsertPropertyDocument,
   InsertProperty,
   InsertUser,
   contracts,
@@ -15,6 +16,7 @@ import {
   leadFiles,
   leadNotes,
   leads,
+  propertyDocuments,
   properties,
   users,
 } from "../drizzle/schema";
@@ -578,6 +580,35 @@ export async function updateDocument(id: number, data: Partial<InsertDocument>) 
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(documents).set(data).where(eq(documents.id, id));
+}
+
+export async function getPropertyDocuments(idImovel: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
+    .select()
+    .from(propertyDocuments)
+    .where(eq(propertyDocuments.idImovel, idImovel))
+    .orderBy(desc(propertyDocuments.createdAt));
+}
+
+export async function createPropertyDocument(data: InsertPropertyDocument) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return await db.insert(propertyDocuments).values(data);
+}
+
+export async function getPropertyDocumentById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(propertyDocuments).where(eq(propertyDocuments.id, id)).limit(1);
+  return result[0];
+}
+
+export async function deletePropertyDocument(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(propertyDocuments).where(eq(propertyDocuments.id, id));
 }
 
 export async function getAllUsers() {

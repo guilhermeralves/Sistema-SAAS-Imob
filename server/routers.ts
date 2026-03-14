@@ -124,6 +124,21 @@ const adminValidateCreciSchema = z.object({
   userId: z.number().int().positive(),
 });
 
+const propertyDocumentsSchema = z.object({
+  idImovel: z.number().int().positive(),
+});
+
+const createPropertyDocumentSchema = z.object({
+  idImovel: z.number().int().positive(),
+  nomeArquivo: z.string().trim().min(1).max(255),
+  urlArquivo: z.string().trim().min(1),
+  tipoArquivo: z.string().trim().min(1).max(120),
+});
+
+const deletePropertyDocumentSchema = z.object({
+  id: z.number().int().positive(),
+});
+
 function setSessionCookie(ctx: { req: any; res: any }, sessionToken: string) {
   const cookieOptions = getSessionCookieOptions(ctx.req);
   ctx.res.cookie(COOKIE_NAME, sessionToken, {
@@ -238,6 +253,23 @@ async function ensurePropertyExists(id: number) {
 
   if (!property) {
     throw new TRPCError({ code: "NOT_FOUND", message: "ImÃ³vel nÃ£o encontrado" });
+  }
+
+  return property;
+}
+
+async function ensurePropertyManagementAccess(
+  user: { id: number; role: "cliente" | "corretor" | "administrativo" },
+  propertyId: number
+) {
+  const property = await ensurePropertyExists(propertyId);
+
+  if (user.role === "cliente") {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Voce nao tem acesso a este imovel" });
+  }
+
+  if (user.role === "corretor" && property.idCorretor !== user.id) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Voce nao tem permissao para gerenciar este imovel" });
   }
 
   return property;
@@ -474,6 +506,51 @@ export const appRouter = router({
       await ensurePropertyExists(input.id);
       return await deleteProperty(input.id);
     }),
+    documents: staffProcedure
+      .input(propertyDocumentsSchema)
+      .query(async ({ ctx, input }) => {
+        const { getPropertyDocuments } = await import("./db");
+        await ensurePropertyManagementAccess(ctx.user, input.idImovel);
+        return await getPropertyDocuments(input.idImovel);
+      }),
+    addDocument: staffProcedure
+      .input(createPropertyDocumentSchema)
+      .mutation(async ({ ctx, input }) => {
+        const { createPropertyDocument } = await import("./db");
+        await ensurePropertyManagementAccess(ctx.user, input.idImovel);
+
+        const normalizedMimeType = input.tipoArquivo.trim().toLowerCase();
+        if (normalizedMimeType !== "application/pdf") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Apenas documentos PDF sao permitidos" });
+        }
+
+        if (!input.urlArquivo.startsWith("data:application/pdf")) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Arquivo PDF invalido" });
+        }
+
+        return await createPropertyDocument({
+          idImovel: input.idImovel,
+          idUsuario: ctx.user.id,
+          nomeArquivo: input.nomeArquivo.trim(),
+          urlArquivo: input.urlArquivo.trim(),
+          tipoArquivo: normalizedMimeType,
+        });
+      }),
+    deleteDocument: staffProcedure
+      .input(deletePropertyDocumentSchema)
+      .mutation(async ({ ctx, input }) => {
+        const { deletePropertyDocument, getPropertyDocumentById } = await import("./db");
+        const document = await getPropertyDocumentById(input.id);
+
+        if (!document) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Documento nao encontrado" });
+        }
+
+        await ensurePropertyManagementAccess(ctx.user, document.idImovel);
+        await deletePropertyDocument(input.id);
+
+        return { success: true } as const;
+      }),
   }),
 
   leads: router({
