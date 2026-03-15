@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/table";
 import { formatCreci, isValidCreci } from "@/lib/creci";
 import { formatCpf, isValidCpf, normalizeCpf } from "@/lib/cpf";
+import { formatStoredDate } from "@/lib/date";
 import { trpc } from "@/lib/trpc";
 import { ROLE_LABELS, type AppRole } from "@shared/auth";
 import { AlertTriangle, BadgeCheck, Clock3, MoreHorizontal, Plus, Search, Shield, Trash2, UserCog } from "lucide-react";
@@ -71,7 +72,7 @@ type DeleteState = {
 
 function formatDate(date: Date | string | null) {
   if (!date) return "-";
-  return new Date(date).toLocaleDateString("pt-BR");
+  return formatStoredDate(date);
 }
 
 function formatLeadInterest(interest: string | null | undefined) {
@@ -600,6 +601,15 @@ export default function AdminUsers() {
                         <TableRow key={user.id}>
                           <TableCell>
                             <div className="flex items-center gap-2">
+                              {user.role === "administrativo" ? (
+                                <Shield
+                                  className={`h-4 w-4 ${
+                                    isBootstrapAdmin
+                                      ? "fill-black text-black"
+                                      : "text-slate-700"
+                                  }`}
+                                />
+                              ) : null}
                               <span>{user.name || "-"}</span>
                               {user.role === "corretor" && user.creci && user.creciStatus === "verified" ? (
                                 <button

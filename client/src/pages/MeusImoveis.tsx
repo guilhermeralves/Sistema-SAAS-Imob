@@ -1,4 +1,4 @@
-import { useAuth } from "@/_core/hooks/useAuth";
+﻿import { useAuth } from "@/_core/hooks/useAuth";
 import MoneyInput from "@/components/MoneyInput";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { getLoginUrl } from "@/const";
 import { lookupCep } from "@/lib/cep";
+import { formatCpf, isValidCpf, normalizeCpf } from "@/lib/cpf";
 import { formatMoneyFromCentsValue, parseMoneyCentsInput } from "@/lib/money";
+import { formatPhoneNumber } from "@/lib/phone";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
 import { Building2, Edit, MapPin, Search, Trash2, User } from "lucide-react";
@@ -38,6 +40,7 @@ type PropertyFormState = {
   descricao: string;
   tipo: string;
   finalidade: string;
+  idCorretor: string;
   valor: string;
   valorLocacao: string;
   area: string;
@@ -51,7 +54,13 @@ type PropertyFormState = {
   estado: string;
   cep: string;
   destaque: string;
+  ownerName: string;
+  ownerEmail: string;
+  ownerCpf: string;
+  ownerPhone: string;
 };
+
+const OWNER_EMAIL_CONFLICT_PREFIX = "OWNER_EMAIL_CONFLICT::";
 
 function createEmptyForm(): PropertyFormState {
   return {
@@ -59,6 +68,7 @@ function createEmptyForm(): PropertyFormState {
     descricao: "",
     tipo: "apartamento",
     finalidade: "venda",
+    idCorretor: "",
     valor: "",
     valorLocacao: "",
     area: "",
@@ -72,6 +82,10 @@ function createEmptyForm(): PropertyFormState {
     estado: "",
     cep: "",
     destaque: "0",
+    ownerName: "",
+    ownerEmail: "",
+    ownerCpf: "",
+    ownerPhone: "",
   };
 }
 
@@ -102,21 +116,36 @@ export default function MeusImoveis() {
     enabled: isAuthenticated && (user?.role === "corretor" || user?.role === "administrativo"),
   });
 
+  const { data: adminUsers } = trpc.admin.users.useQuery(undefined, {
+    enabled: user?.role === "administrativo",
+  });
+
+  const activeBrokers =
+    adminUsers?.filter((broker) => broker.role === "corretor" && broker.isActive === 1) || [];
+
   const updateProperty = trpc.properties.update.useMutation({
     onSuccess: async () => {
-      toast.success("Imóvel atualizado com sucesso!");
+      toast.success("Im?vel atualizado com sucesso!");
       closeEditDialog();
       await refetch();
       await utils.properties.myProperties.invalidate();
     },
-    onError: () => {
-      toast.error("Erro ao atualizar imóvel");
+    onError: error => {
+      if (error.message.startsWith(OWNER_EMAIL_CONFLICT_PREFIX)) {
+        const warningMessage = error.message.replace(OWNER_EMAIL_CONFLICT_PREFIX, "");
+        if (window.confirm(warningMessage)) {
+          handleSubmit(true);
+        }
+        return;
+      }
+
+      toast.error(error.message || "Erro ao atualizar imóvel");
     },
   });
 
   const deleteProperty = trpc.properties.delete.useMutation({
     onSuccess: async () => {
-      toast.success("Imóvel removido com sucesso!");
+      toast.success("Im?vel removido com sucesso!");
       await refetch();
       await utils.properties.myProperties.invalidate();
     },
@@ -161,6 +190,7 @@ export default function MeusImoveis() {
       descricao: imovel.descricao || "",
       tipo: imovel.tipo || "apartamento",
       finalidade: imovel.finalidade || "venda",
+      idCorretor: imovel.idCorretor ? String(imovel.idCorretor) : "",
       valor: imovel.valor ? String(imovel.valor) : "",
       valorLocacao: imovel.valorLocacao ? String(imovel.valorLocacao) : "",
       area: imovel.area?.toString() || "",
@@ -174,6 +204,10 @@ export default function MeusImoveis() {
       estado: imovel.estado || "",
       cep: imovel.cep || "",
       destaque: String(imovel.destaque ?? 0),
+      ownerName: imovel.proprietario?.name || "",
+      ownerEmail: imovel.proprietario?.email || "",
+      ownerCpf: imovel.proprietario?.cpf || "",
+      ownerPhone: imovel.proprietario?.phone || "",
     });
   };
 
@@ -219,11 +253,26 @@ export default function MeusImoveis() {
     }, 500);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = (confirmedOwnerEmailConflict = false) => {
     if (!editingImovel) return;
 
     if (!formData.titulo || !formData.valor || !formData.endereco || !formData.cidade || !formData.estado) {
-      toast.error("Preencha todos os campos obrigatórios");
+      toast.error("Preencha todos os campos obrigat?rios");
+      return;
+    }
+
+    if (user?.role === "administrativo" && !formData.idCorretor) {
+      toast.error("Selecione o corretor responsável pelo imóvel.");
+      return;
+    }
+
+    if (!formData.ownerName || !formData.ownerEmail || !formData.ownerCpf || !formData.ownerPhone) {
+      toast.error("Preencha os dados obrigatórios do proprietário.");
+      return;
+    }
+
+    if (!isValidCpf(formData.ownerCpf)) {
+      toast.error("CPF do proprietário inválido. Confira os dígitos informados.");
       return;
     }
 
@@ -246,7 +295,15 @@ export default function MeusImoveis() {
       estado: formData.estado,
       cep: formData.cep,
       destaque: parseInt(formData.destaque, 10),
+      idCorretor: formData.idCorretor ? parseInt(formData.idCorretor, 10) : undefined,
       fotos: editingImovel.fotos || "[]",
+      confirmedOwnerEmailConflict,
+      owner: {
+        name: formData.ownerName,
+        email: formData.ownerEmail.trim().toLowerCase(),
+        cpf: normalizeCpf(formData.ownerCpf),
+        phone: formData.ownerPhone,
+      },
     });
   };
 
@@ -324,7 +381,7 @@ export default function MeusImoveis() {
           <Building2 className="mx-auto mb-4 h-16 w-16 text-muted-foreground" />
           <h1 className="mb-2 text-2xl font-bold">Acesso Negado</h1>
           <p className="mb-6 text-muted-foreground">
-            Esta área é exclusiva para corretores e administradores.
+            Esta ?rea ? exclusiva para corretores e administradores.
           </p>
           <Button asChild>
             <a href="/">Voltar para Home</a>
@@ -338,7 +395,7 @@ export default function MeusImoveis() {
     <Layout>
       <div className="container space-y-6 py-8">
         <div>
-          <h1 className="mb-2 text-4xl font-bold">Meus Imóveis</h1>
+          <h1 className="mb-2 text-4xl font-bold">Meus Im?veis</h1>
           <p className="text-muted-foreground">
             Consulte e atualize os imóveis já cadastrados.
           </p>
@@ -346,8 +403,8 @@ export default function MeusImoveis() {
 
         <div className="grid gap-4 md:grid-cols-2">
           {[
-            { key: "all" as PropertyFilter, label: "Total de Imóveis", value: totalImoveis },
-            { key: "active" as PropertyFilter, label: "Imóveis Ativos", value: activeCount },
+            { key: "all" as PropertyFilter, label: "Total de Im?veis", value: totalImoveis },
+            { key: "active" as PropertyFilter, label: "Im?veis Ativos", value: activeCount },
           ].map(card => {
             const isSelected = selectedFilter === card.key;
 
@@ -400,12 +457,12 @@ export default function MeusImoveis() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Imóvel</TableHead>
-                      <TableHead>Localização</TableHead>
+                      <TableHead>Im?vel</TableHead>
+                      <TableHead>Localiza??o</TableHead>
                       <TableHead>Finalidade</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Valor</TableHead>
-                      <TableHead className="w-32">Ações</TableHead>
+                      <TableHead className="w-32">A??es</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -466,13 +523,13 @@ export default function MeusImoveis() {
             onOpenAutoFocus={event => event.preventDefault()}
           >
             <DialogHeader>
-              <DialogTitle>Editar Imóvel</DialogTitle>
+              <DialogTitle>Editar Im?vel</DialogTitle>
               <DialogDescription>Atualize as informações do imóvel.</DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4">
               <div className="space-y-1 sm:space-y-2">
-                <Label htmlFor="titulo" className="text-sm sm:text-base">Título *</Label>
+                <Label htmlFor="titulo" className="text-sm sm:text-base">T?tulo *</Label>
                 <Input
                   id="titulo"
                   value={formData.titulo}
@@ -483,7 +540,7 @@ export default function MeusImoveis() {
               </div>
 
               <div className="space-y-1 sm:space-y-2">
-                <Label htmlFor="descricao" className="text-sm sm:text-base">Descrição</Label>
+                <Label htmlFor="descricao" className="text-sm sm:text-base">Descri??o</Label>
                 <Textarea
                   id="descricao"
                   value={formData.descricao}
@@ -517,11 +574,32 @@ export default function MeusImoveis() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="venda">Venda</SelectItem>
-                      <SelectItem value="locacao">Locação</SelectItem>
+                      <SelectItem value="locacao">Loca??o</SelectItem>
                       <SelectItem value="ambos">Ambos</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              <div className="space-y-1 sm:space-y-2">
+                <Label htmlFor="idCorretor" className="text-sm sm:text-base">Corretor responsável *</Label>
+                {user?.role === "administrativo" ? (
+                  <Select value={formData.idCorretor || "empty"} onValueChange={value => setFormData({ ...formData, idCorretor: value === "empty" ? "" : value })}>
+                    <SelectTrigger id="idCorretor">
+                      <SelectValue placeholder="Selecione o corretor responsável" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="empty">Selecione</SelectItem>
+                      {activeBrokers.map(broker => (
+                        <SelectItem key={broker.id} value={String(broker.id)}>
+                          {broker.name || broker.email}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input value={user?.name || user?.email || "Corretor"} disabled className="text-sm sm:text-base" />
+                )}
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
@@ -536,7 +614,7 @@ export default function MeusImoveis() {
                   />
                 </div>
                 <div className="space-y-1 sm:space-y-2">
-                  <Label htmlFor="valorLocacao" className="text-sm sm:text-base">Valor Locação (R$)</Label>
+                  <Label htmlFor="valorLocacao" className="text-sm sm:text-base">Valor Loca??o (R$)</Label>
                   <MoneyInput
                     id="valorLocacao"
                     value={formData.valorLocacao}
@@ -549,7 +627,7 @@ export default function MeusImoveis() {
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
                 <div className="space-y-1 sm:space-y-2">
-                  <Label htmlFor="area" className="text-sm sm:text-base">Área (m²)</Label>
+                  <Label htmlFor="area" className="text-sm sm:text-base">?rea (m?)</Label>
                   <Input
                     id="area"
                     type="number"
@@ -590,8 +668,59 @@ export default function MeusImoveis() {
                 </div>
               </div>
 
+              <div className="rounded-xl border border-border/70 bg-muted/20 p-4">
+                <div className="mb-3">
+                  <h3 className="text-base font-semibold">Proprietário do imóvel</h3>
+                  <p className="text-sm text-muted-foreground">
+                    O CPF do proprietário é obrigatório e será reaproveitado se já existir cadastro para a mesma pessoa.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+                  <div className="space-y-1 sm:space-y-2 sm:col-span-2">
+                    <Label htmlFor="ownerName" className="text-sm sm:text-base">Nome e sobrenome *</Label>
+                    <Input
+                      id="ownerName"
+                      value={formData.ownerName}
+                      onChange={event => setFormData({ ...formData, ownerName: event.target.value })}
+                      className="text-sm sm:text-base"
+                    />
+                  </div>
+                  <div className="space-y-1 sm:space-y-2">
+                    <Label htmlFor="ownerEmail" className="text-sm sm:text-base">E-mail *</Label>
+                    <Input
+                      id="ownerEmail"
+                      type="email"
+                      value={formData.ownerEmail}
+                      onChange={event => setFormData({ ...formData, ownerEmail: event.target.value })}
+                      className="text-sm sm:text-base"
+                    />
+                  </div>
+                  <div className="space-y-1 sm:space-y-2">
+                    <Label htmlFor="ownerPhone" className="text-sm sm:text-base">Telefone *</Label>
+                    <Input
+                      id="ownerPhone"
+                      value={formData.ownerPhone}
+                      onChange={event => setFormData({ ...formData, ownerPhone: formatPhoneNumber(event.target.value) })}
+                      className="text-sm sm:text-base"
+                    />
+                  </div>
+                  <div className="space-y-1 sm:space-y-2">
+                    <Label htmlFor="ownerCpf" className="text-sm sm:text-base">CPF *</Label>
+                    <Input
+                      id="ownerCpf"
+                      inputMode="numeric"
+                      maxLength={14}
+                      value={formData.ownerCpf}
+                      onChange={event => setFormData({ ...formData, ownerCpf: formatCpf(event.target.value) })}
+                      className="text-sm sm:text-base"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-1 sm:space-y-2">
-                <Label htmlFor="endereco" className="text-sm sm:text-base">Endereço *</Label>
+                <Label htmlFor="endereco" className="text-sm sm:text-base">Endere?o *</Label>
                 <Input
                   id="endereco"
                   value={formData.endereco}
@@ -603,7 +732,7 @@ export default function MeusImoveis() {
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
                 <div className="space-y-1 sm:space-y-2">
-                  <Label htmlFor="numero" className="text-sm sm:text-base">Número</Label>
+                  <Label htmlFor="numero" className="text-sm sm:text-base">N?mero</Label>
                   <Input
                     id="numero"
                     value={formData.numero}
@@ -662,7 +791,7 @@ export default function MeusImoveis() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="0">Não</SelectItem>
+                      <SelectItem value="0">N?o</SelectItem>
                       <SelectItem value="1">Sim</SelectItem>
                     </SelectContent>
                   </Select>
@@ -670,11 +799,11 @@ export default function MeusImoveis() {
               </div>
 
               <Button
-                onClick={handleSubmit}
+                onClick={() => handleSubmit()}
                 className="mt-2 w-full py-2 text-sm sm:mt-4 sm:py-3 sm:text-base"
                 disabled={updateProperty.isPending}
               >
-                {updateProperty.isPending ? "Salvando..." : "Atualizar Imóvel"}
+                {updateProperty.isPending ? "Salvando..." : "Atualizar Im?vel"}
               </Button>
             </div>
           </DialogContent>
@@ -689,7 +818,7 @@ export default function MeusImoveis() {
             </p>
             <Button asChild>
               <Link href="/imoveis">
-                <a>Ir para Imóveis</a>
+                <a>Ir para Im?veis</a>
               </Link>
             </Button>
           </Card>
@@ -698,3 +827,4 @@ export default function MeusImoveis() {
     </Layout>
   );
 }
+

@@ -1,4 +1,4 @@
-import { useAuth } from "@/_core/hooks/useAuth";
+﻿import { useAuth } from "@/_core/hooks/useAuth";
 import DateInput from "@/components/DateInput";
 import Layout from "@/components/Layout";
 import MoneyInput from "@/components/MoneyInput";
@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { parseMoneyCentsInput } from "@/lib/money";
+import { formatPhoneNumber } from "@/lib/phone";
 import { trpc } from "@/lib/trpc";
 import { type AppRole } from "@shared/auth";
 import { USER_PROFILE_MARITAL_STATUSES, type UserProfileMaritalStatus } from "@shared/user-profile";
@@ -97,8 +98,10 @@ const SOUTH_AMERICAN_NATIONALITIES = [
 export default function AdminUserDetails() {
   const { user: authenticatedUser } = useAuth();
   const [isAdminRoute, params] = useRoute("/admin/users/:id");
+  const [isOwnerRoute, ownerParams] = useRoute("/admin/proprietarios/:id");
   const [isSelfRoute] = useRoute("/minha-ficha");
   const userId = isAdminRoute ? Number(params?.id) : authenticatedUser?.id ?? NaN;
+  const ownerId = isOwnerRoute ? Number(ownerParams?.id) : NaN;
   const utils = trpc.useUtils();
   const [form, setForm] = useState<UserDetailsForm | null>(null);
   const [confirmCreciRemovalOpen, setConfirmCreciRemovalOpen] = useState(false);
@@ -115,8 +118,18 @@ export default function AdminUserDetails() {
     enabled: isSelfRoute,
   });
 
+  const { data: propertyOwner, isLoading: propertyOwnerLoading } = trpc.admin.propertyOwnerById.useQuery(
+    { id: ownerId },
+    { enabled: isOwnerRoute && Number.isFinite(ownerId) }
+  );
+
   const user = isAdminRoute ? adminUser : selfUser;
-  const isLoading = isAdminRoute ? adminUserLoading : selfUserLoading;
+  const isOwnerDetails = isOwnerRoute;
+  const isLoading = isOwnerRoute
+    ? propertyOwnerLoading
+    : isAdminRoute
+      ? adminUserLoading
+      : selfUserLoading;
   const isEditingSelf = isSelfRoute && !isAdminRoute;
   const authenticatedIsRootAdmin =
     authenticatedUser?.role === "administrativo" &&
@@ -134,12 +147,26 @@ export default function AdminUserDetails() {
   const isFromClientArea =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("from") === "area-cliente";
-  const backHref = isEditingSelf ? (isFromClientArea ? "/area-cliente" : "/") : "/admin/users";
-  const backLabel = isEditingSelf
-    ? isFromClientArea
-      ? "Voltar para \u00C1rea do Cliente"
-      : "Voltar para Home"
-    : "Voltar para usu\u00E1rios";
+  const fromPropertyId =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("fromProperty")
+      : null;
+  const backHref = fromPropertyId
+    ? `/imoveis/${fromPropertyId}`
+    : isEditingSelf
+      ? (isFromClientArea ? "/area-cliente" : "/")
+      : isOwnerDetails
+        ? "/admin"
+        : "/admin/users";
+  const backLabel = fromPropertyId
+    ? "Voltar para imovel"
+    : isEditingSelf
+      ? isFromClientArea
+        ? "Voltar para \u00C1rea do Cliente"
+        : "Voltar para Home"
+      : isOwnerDetails
+        ? "Voltar para painel admin"
+        : "Voltar para usu\u00E1rios";
 
   const updateUserDetails = trpc.admin.updateUserDetails.useMutation({
     onSuccess: async () => {
@@ -173,7 +200,50 @@ export default function AdminUserDetails() {
     },
   });
 
+  const updatePropertyOwnerDetails = trpc.admin.updatePropertyOwnerDetails.useMutation({
+    onSuccess: async () => {
+      toast.success("Ficha do proprietario atualizada");
+      await utils.admin.propertyOwnerById.invalidate({ id: ownerId });
+    },
+    onError: error => {
+      if (error.message.startsWith("OWNER_EMAIL_CONFLICT::")) {
+        toast.error(error.message.replace("OWNER_EMAIL_CONFLICT::", ""));
+        return;
+      }
+      toast.error(error.message || "Nao foi possivel salvar a ficha do proprietario");
+    },
+  });
+
   useEffect(() => {
+    if (isOwnerDetails) {
+      if (!propertyOwner) return;
+
+      setForm({
+        name: propertyOwner.name || "",
+        email: propertyOwner.email || "",
+        cpf: propertyOwner.cpf || "",
+        role: "cliente",
+        isActive: "1",
+        phone: propertyOwner.phone || "",
+        creci: "",
+        birthDate: "",
+        profession: "",
+        grossMonthlyIncome: "",
+        maritalStatus: "",
+        householdIncome: "",
+        rg: "",
+        nationality: "",
+        address: "",
+        neighborhood: "",
+        addressNumber: "",
+        city: "",
+        state: "",
+        zipCode: "",
+        notes: propertyOwner.notes || "",
+      });
+      return;
+    }
+
     if (!user) return;
 
     setForm({
@@ -205,7 +275,7 @@ export default function AdminUserDetails() {
       zipCode: user.zipCode || "",
       notes: user.notes || "",
     });
-  }, [user]);
+  }, [isOwnerDetails, propertyOwner, user]);
 
   useEffect(() => {
     if (!isAdminRoute || !adminUser) return;
@@ -274,6 +344,18 @@ export default function AdminUserDetails() {
   const persistSave = () => {
     if (!form) return;
 
+    if (isOwnerDetails) {
+      updatePropertyOwnerDetails.mutate({
+        id: ownerId,
+        name: form.name,
+        email: form.email,
+        cpf: normalizeCpf(form.cpf),
+        phone: form.phone,
+        notes: form.notes || undefined,
+      });
+      return;
+    }
+
     const payload = {
       name: form.name,
       email: form.email,
@@ -323,6 +405,11 @@ export default function AdminUserDetails() {
       return;
     }
 
+    if (isOwnerDetails) {
+      persistSave();
+      return;
+    }
+
     if (form.role === "corretor" && form.creci && !isValidCreci(form.creci)) {
       toast.error("CRECI invalido. Use o formato numero/UF, por exemplo 123456/SP.");
       return;
@@ -355,9 +442,13 @@ export default function AdminUserDetails() {
                 </a>
               </Link>
             </div>
-            <h1 className="text-4xl font-bold">{"Ficha do Usu\u00E1rio"}</h1>
+            <h1 className="text-4xl font-bold">
+              {isOwnerDetails ? "Ficha do Proprietario" : "Ficha do Usuário"}
+            </h1>
             <p className="text-muted-foreground mt-2">
-              Complete os dados pessoais e financeiros exigidos para contratos.
+              {isOwnerDetails
+                ? "Gerencie os dados do proprietario vinculado ao imovel."
+                : "Complete os dados pessoais e financeiros exigidos para contratos."}
             </p>
           </div>
         </div>
@@ -385,10 +476,12 @@ export default function AdminUserDetails() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <UserRoundSearch className="h-5 w-5" />
-                  Dados obrigatórios
+                  {isOwnerDetails ? "Dados do proprietario" : "Dados obrigatórios"}
                 </CardTitle>
                 <CardDescription>
-                  Nome, e-mail, CPF e senha são obrigatórios para cadastro. Os demais campos podem ser preenchidos aqui.
+                  {isOwnerDetails
+                    ? "Nome, e-mail, CPF e telefone identificam o proprietario vinculado a este imovel."
+                    : "Nome, e-mail, CPF e senha são obrigatórios para cadastro. Os demais campos podem ser preenchidos aqui."}
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2">
@@ -423,10 +516,33 @@ export default function AdminUserDetails() {
                   <Input
                     value={form.phone}
                     disabled={isReadOnlyAdminAccount}
-                    onChange={e => setForm({ ...form, phone: e.target.value })}
+                    onChange={e => setForm({ ...form, phone: formatPhoneNumber(e.target.value) })}
                   />
                 </div>
-                {isEditingSelf ? (
+                {isOwnerDetails ? (
+                  propertyOwner?.linkedUser ? (
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Conta vinculada</Label>
+                      <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm">
+                        <Link href={`/admin/users/${propertyOwner.linkedUser.id}`}>
+                          <a className="font-medium text-primary underline">
+                            {propertyOwner.linkedUser.name || propertyOwner.linkedUser.email}
+                          </a>
+                        </Link>
+                        <p className="mt-1 text-muted-foreground">
+                          Este proprietario ja possui um usuario vinculado pelo CPF.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Conta vinculada</Label>
+                      <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+                        Este proprietario ainda nao possui login vinculado. Essa ficha permanece acessivel a partir do imovel.
+                      </div>
+                    </div>
+                  )
+                ) : isEditingSelf ? (
                   form.role === "corretor" ? (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between gap-3">
@@ -564,6 +680,7 @@ export default function AdminUserDetails() {
               </CardContent>
             </Card>
 
+            {!isOwnerDetails ? (
             <Card>
               <CardHeader>
                 <CardTitle>Informações para contratos</CardTitle>
@@ -581,7 +698,7 @@ export default function AdminUserDetails() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Profissão</Label>
+                  <Label>Profiss?o</Label>
                   <Input
                     value={form.profession}
                     disabled={isReadOnlyAdminAccount}
@@ -589,7 +706,7 @@ export default function AdminUserDetails() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Salário bruto mensal</Label>
+                  <Label>Sal?rio bruto mensal</Label>
                   <MoneyInput
                     disabled={isReadOnlyAdminAccount}
                     value={form.grossMonthlyIncome}
@@ -615,7 +732,7 @@ export default function AdminUserDetails() {
                   >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="empty">Não informado</SelectItem>
+                      <SelectItem value="empty">N?o informado</SelectItem>
                       {USER_PROFILE_MARITAL_STATUSES.map(status => (
                         <SelectItem key={status} value={status}>
                           {getMaritalStatusLabel(status)}
@@ -670,66 +787,71 @@ export default function AdminUserDetails() {
                 </div>
               </CardContent>
             </Card>
+            ) : null}
 
             <Card>
               <CardHeader>
-                <CardTitle>Endereço Atual e Observações</CardTitle>
+                <CardTitle>{isOwnerDetails ? "Observações do proprietário" : "Endereço Atual e Observações"}</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2 md:col-span-2">
-                  <Label>Endereço</Label>
-                  <Input
-                    value={form.address}
-                    disabled={isReadOnlyAdminAccount}
-                    onChange={e => setForm({ ...form, address: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Número</Label>
-                  <Input
-                    value={form.addressNumber}
-                    disabled={isReadOnlyAdminAccount}
-                    onChange={e => setForm({ ...form, addressNumber: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Bairro</Label>
-                  <Input
-                    value={form.neighborhood}
-                    disabled={isReadOnlyAdminAccount}
-                    onChange={e => setForm({ ...form, neighborhood: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Cidade</Label>
-                  <Input
-                    value={form.city}
-                    disabled={isReadOnlyAdminAccount}
-                    onChange={e => setForm({ ...form, city: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>UF</Label>
-                  <Input
-                    value={form.state}
-                    disabled={isReadOnlyAdminAccount}
-                    onChange={e => setForm({ ...form, state: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>CEP</Label>
-                  <Input
-                    value={form.zipCode}
-                    disabled={isReadOnlyAdminAccount}
-                    inputMode="numeric"
-                    maxLength={9}
-                    onChange={e => handleZipCodeChange(e.target.value)}
-                  />
-                  {cepLoading ? (
-                    <p className="text-xs text-muted-foreground">Buscando CEP...</p>
-                  ) : null}
-                  {cepError ? <p className="text-xs text-red-500">{cepError}</p> : null}
-                </div>
+                {!isOwnerDetails ? (
+                  <>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Endere?o</Label>
+                      <Input
+                        value={form.address}
+                        disabled={isReadOnlyAdminAccount}
+                        onChange={e => setForm({ ...form, address: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>N?mero</Label>
+                      <Input
+                        value={form.addressNumber}
+                        disabled={isReadOnlyAdminAccount}
+                        onChange={e => setForm({ ...form, addressNumber: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Bairro</Label>
+                      <Input
+                        value={form.neighborhood}
+                        disabled={isReadOnlyAdminAccount}
+                        onChange={e => setForm({ ...form, neighborhood: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Cidade</Label>
+                      <Input
+                        value={form.city}
+                        disabled={isReadOnlyAdminAccount}
+                        onChange={e => setForm({ ...form, city: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>UF</Label>
+                      <Input
+                        value={form.state}
+                        disabled={isReadOnlyAdminAccount}
+                        onChange={e => setForm({ ...form, state: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>CEP</Label>
+                      <Input
+                        value={form.zipCode}
+                        disabled={isReadOnlyAdminAccount}
+                        inputMode="numeric"
+                        maxLength={9}
+                        onChange={e => handleZipCodeChange(e.target.value)}
+                      />
+                      {cepLoading ? (
+                        <p className="text-xs text-muted-foreground">Buscando CEP...</p>
+                      ) : null}
+                      {cepError ? <p className="text-xs text-red-500">{cepError}</p> : null}
+                    </div>
+                  </>
+                ) : null}
                 <div className="space-y-2 md:col-span-2">
                   <Label>Observações</Label>
                   <Textarea
@@ -745,11 +867,18 @@ export default function AdminUserDetails() {
             <div className="flex justify-end">
                 <Button
                   className="gap-2"
-                  disabled={isReadOnlyAdminAccount || updateUserDetails.isPending || updateOwnProfile.isPending}
+                  disabled={
+                    isReadOnlyAdminAccount ||
+                    updateUserDetails.isPending ||
+                    updateOwnProfile.isPending ||
+                    updatePropertyOwnerDetails.isPending
+                  }
                   onClick={handleSave}
                 >
                   <Save className="h-4 w-4" />
-                  {updateUserDetails.isPending || updateOwnProfile.isPending ? "Salvando..." : "Salvar ficha"}
+                  {updateUserDetails.isPending || updateOwnProfile.isPending || updatePropertyOwnerDetails.isPending
+                    ? "Salvando..."
+                    : "Salvar ficha"}
                 </Button>
             </div>
 
@@ -759,7 +888,7 @@ export default function AdminUserDetails() {
             >
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Confirmar remoção do CRECI?</AlertDialogTitle>
+                  <AlertDialogTitle>Confirmar remo??o do CRECI?</AlertDialogTitle>
                   <AlertDialogDescription>
                     Essa operação está retirando o cadastro do CRECI desse corretor, deseja continuar?
                   </AlertDialogDescription>
@@ -783,3 +912,5 @@ export default function AdminUserDetails() {
     </Layout>
   );
 }
+
+

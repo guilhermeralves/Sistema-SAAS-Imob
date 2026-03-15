@@ -1,5 +1,5 @@
 ﻿-- Execute este arquivo no pgAdmin ja conectado ao banco "afg_imobiliaria".
--- Este script cria a estrutura esperada atualmente pelo projeto AFG_SITE em PostgreSQL.
+-- Este script cria a estrutura atual esperada pelo projeto AFG_SITE em PostgreSQL.
 
 CREATE TABLE "contracts" (
     "id" serial PRIMARY KEY NOT NULL,
@@ -62,6 +62,21 @@ CREATE TABLE "leads" (
     "updatedAt" timestamp DEFAULT now() NOT NULL
 );
 
+CREATE TABLE "propertyOwners" (
+    "id" serial PRIMARY KEY NOT NULL,
+    "userId" integer,
+    "name" varchar(120) NOT NULL,
+    "email" varchar(255) NOT NULL,
+    "cpf" varchar(14) NOT NULL,
+    "phone" varchar(20) NOT NULL,
+    "notes" text,
+    "createdAt" timestamp DEFAULT now() NOT NULL,
+    "updatedAt" timestamp DEFAULT now() NOT NULL
+);
+
+CREATE UNIQUE INDEX "propertyOwners_cpf_idx"
+ON "propertyOwners" ("cpf");
+
 CREATE TABLE "properties" (
     "id" serial PRIMARY KEY NOT NULL,
     "titulo" varchar(255) NOT NULL,
@@ -86,11 +101,24 @@ CREATE TABLE "properties" (
     "destaque" integer DEFAULT 0 NOT NULL,
     "status" varchar(20) DEFAULT 'ativo' NOT NULL,
     "idCorretor" integer NOT NULL,
+    "idProprietario" integer,
+    "createdByUserId" integer NOT NULL,
     "createdAt" timestamp DEFAULT now() NOT NULL,
     "updatedAt" timestamp DEFAULT now() NOT NULL
 );
 
-CREATE TABLE "propertyDocuments" (`r`n    "id" serial PRIMARY KEY NOT NULL,`r`n    "idImovel" integer NOT NULL,`r`n    "idUsuario" integer NOT NULL,`r`n    "nomeArquivo" varchar(255) NOT NULL,`r`n    "urlArquivo" text NOT NULL,`r`n    "tipoArquivo" varchar(120) NOT NULL,`r`n    "createdAt" timestamp DEFAULT now() NOT NULL,`r`n    "updatedAt" timestamp DEFAULT now() NOT NULL`r`n);`r`n`r`nCREATE TABLE "users" (
+CREATE TABLE "propertyDocuments" (
+    "id" serial PRIMARY KEY NOT NULL,
+    "idImovel" integer NOT NULL,
+    "idUsuario" integer NOT NULL,
+    "nomeArquivo" varchar(255) NOT NULL,
+    "urlArquivo" text NOT NULL,
+    "tipoArquivo" varchar(120) NOT NULL,
+    "createdAt" timestamp DEFAULT now() NOT NULL,
+    "updatedAt" timestamp DEFAULT now() NOT NULL
+);
+
+CREATE TABLE "users" (
     "id" serial PRIMARY KEY NOT NULL,
     "openId" varchar(64) NOT NULL,
     "name" text,
@@ -143,7 +171,7 @@ BEGIN
     NEW."updatedAt" = now();
     RETURN NEW;
 END;
-$$ language 'plpgsql';
+$$ LANGUAGE plpgsql;
 
 CREATE TRIGGER users_set_updated_at
 BEFORE UPDATE ON "users"
@@ -155,7 +183,17 @@ BEFORE UPDATE ON "properties"
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
-CREATE TRIGGER property_documents_set_updated_at`r`nBEFORE UPDATE ON "propertyDocuments"`r`nFOR EACH ROW`r`nEXECUTE FUNCTION set_updated_at();`r`n`r`nCREATE TRIGGER leads_set_updated_at
+CREATE TRIGGER property_owners_set_updated_at
+BEFORE UPDATE ON "propertyOwners"
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+CREATE TRIGGER property_documents_set_updated_at
+BEFORE UPDATE ON "propertyDocuments"
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+CREATE TRIGGER leads_set_updated_at
 BEFORE UPDATE ON "leads"
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
@@ -169,4 +207,3 @@ CREATE TRIGGER documents_set_updated_at
 BEFORE UPDATE ON "documents"
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
-

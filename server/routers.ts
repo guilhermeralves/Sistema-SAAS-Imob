@@ -32,7 +32,7 @@ const idSchema = z.object({
 const cpfSchema = z
   .string()
   .trim()
-  .refine(isValidCpf, "CPF invÃ¡lido")
+  .refine(isValidCpf, "CPF inválido")
   .transform(normalizeCpf);
 
 const registerSchema = z.object({
@@ -137,6 +137,56 @@ const createPropertyDocumentSchema = z.object({
 
 const deletePropertyDocumentSchema = z.object({
   id: z.number().int().positive(),
+});
+
+const propertyOwnerInputSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  email: z.string().trim().toLowerCase().email(),
+  cpf: cpfSchema,
+  phone: z.string().trim().min(14).max(20),
+  notes: z.string().trim().max(2000).optional(),
+});
+
+const propertyMutationSchema = z.object({
+  titulo: z.string().trim().min(2).max(255),
+  descricao: z.string().trim().max(5000).nullable().optional(),
+  tipo: z.string().trim().min(2).max(50),
+  finalidade: z.string().trim().min(2).max(20),
+  valor: z.number().int().min(0),
+  valorLocacao: z.number().int().min(0).nullable().optional(),
+  area: z.number().int().min(0).nullable().optional(),
+  quartos: z.number().int().min(0).nullable().optional(),
+  banheiros: z.number().int().min(0).nullable().optional(),
+  vagas: z.number().int().min(0).nullable().optional(),
+  endereco: z.string().trim().min(2).max(255),
+  numero: z.string().trim().max(20).nullable().optional(),
+  bairro: z.string().trim().max(100).nullable().optional(),
+  cidade: z.string().trim().min(2).max(100),
+  estado: z.string().trim().min(2).max(2),
+  cep: z.string().trim().max(10).nullable().optional(),
+  latitude: z.string().trim().max(20).nullable().optional(),
+  longitude: z.string().trim().max(20).nullable().optional(),
+  fotos: z.string().trim().nullable().optional(),
+  destaque: z.number().int().min(0).max(1).optional(),
+  status: z.string().trim().max(20).optional(),
+  idCorretor: z.number().int().positive().optional(),
+  owner: propertyOwnerInputSchema,
+  confirmedOwnerEmailConflict: z.boolean().optional(),
+});
+
+const createPropertySchema = propertyMutationSchema;
+
+const updatePropertySchema = propertyMutationSchema.extend({
+  id: z.number().int().positive(),
+});
+
+const propertyOwnerDetailsSchema = z.object({
+  id: z.number().int().positive(),
+  name: z.string().trim().min(2).max(120),
+  email: z.string().trim().toLowerCase().email(),
+  cpf: cpfSchema,
+  phone: z.string().trim().min(14).max(20),
+  notes: z.string().trim().max(2000).optional(),
 });
 
 function setSessionCookie(ctx: { req: any; res: any }, sessionToken: string) {
@@ -252,7 +302,7 @@ async function ensurePropertyExists(id: number) {
   const property = await getPropertyById(id);
 
   if (!property) {
-    throw new TRPCError({ code: "NOT_FOUND", message: "ImÃ³vel nÃ£o encontrado" });
+    throw new TRPCError({ code: "NOT_FOUND", message: "Imóvel não encontrado" });
   }
 
   return property;
@@ -283,11 +333,11 @@ async function ensureLeadAccess(
   const lead = await getLeadById(leadId);
 
   if (!lead) {
-    throw new TRPCError({ code: "NOT_FOUND", message: "Lead nÃ£o encontrado" });
+    throw new TRPCError({ code: "NOT_FOUND", message: "Lead não encontrado" });
   }
 
   if (user.role === "corretor" && lead.idResponsavel !== user.id) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "VocÃª nÃ£o tem acesso a este lead" });
+    throw new TRPCError({ code: "FORBIDDEN", message: "Você não tem acesso a este lead" });
   }
 
   return lead;
@@ -302,13 +352,81 @@ async function ensureUniqueUserIdentity(
 
   const userByEmail = await getUserByEmail(email);
   if (userByEmail && userByEmail.id !== currentUserId) {
-    throw new TRPCError({ code: "CONFLICT", message: "E-mail jÃ¡ cadastrado" });
+    throw new TRPCError({ code: "CONFLICT", message: "E-mail já cadastrado" });
   }
 
   const userByCpf = await getUserByCpf(cpf);
   if (userByCpf && userByCpf.id !== currentUserId) {
-    throw new TRPCError({ code: "CONFLICT", message: "CPF jÃ¡ cadastrado" });
+    throw new TRPCError({ code: "CONFLICT", message: "CPF já cadastrado" });
   }
+}
+
+async function ensureBrokerUser(userId: number) {
+  const { getUserById } = await import("./db");
+  const broker = await getUserById(userId);
+
+  if (!broker || broker.role !== "corretor") {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "Selecione um corretor responsavel valido" });
+  }
+
+  if (broker.isActive !== 1) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "O corretor responsavel precisa estar ativo" });
+  }
+
+  return broker;
+}
+
+async function upsertPropertyOwnerFromInput(
+  ownerInput: z.infer<typeof propertyOwnerInputSchema>,
+  options?: {
+    currentOwnerId?: number;
+    confirmedEmailConflict?: boolean;
+  }
+) {
+  const {
+    createPropertyOwner,
+    getPropertyOwnerByCpf,
+    getPropertyOwnersByEmail,
+    getUserByCpf,
+    updatePropertyOwner,
+  } = await import("./db");
+
+  const normalizedOwner = {
+    name: ownerInput.name.trim(),
+    email: ownerInput.email.trim().toLowerCase(),
+    cpf: ownerInput.cpf,
+    phone: ownerInput.phone.trim(),
+    notes: ownerInput.notes?.trim() || null,
+  };
+
+  const ownersWithSameEmail = await getPropertyOwnersByEmail(normalizedOwner.email);
+  const emailConflict = ownersWithSameEmail.find(
+    owner => owner.cpf !== normalizedOwner.cpf && owner.id !== options?.currentOwnerId
+  );
+
+  if (emailConflict && !options?.confirmedEmailConflict) {
+    throw new TRPCError({
+      code: "CONFLICT",
+      message:
+        `OWNER_EMAIL_CONFLICT::Ja existe um proprietario com este e-mail vinculado a outro CPF: ` +
+        `${emailConflict.name} (${emailConflict.cpf}). Deseja continuar mesmo assim?`,
+    });
+  }
+
+  const matchedUser = await getUserByCpf(normalizedOwner.cpf);
+  const matchedOwner = await getPropertyOwnerByCpf(normalizedOwner.cpf);
+
+  if (matchedOwner) {
+    return await updatePropertyOwner(matchedOwner.id, {
+      ...normalizedOwner,
+      userId: matchedUser?.id ?? matchedOwner.userId ?? null,
+    });
+  }
+
+  return await createPropertyOwner({
+    ...normalizedOwner,
+    userId: matchedUser?.id ?? null,
+  });
 }
 
 async function assertContractProfileIsComplete(userId: number) {
@@ -316,7 +434,7 @@ async function assertContractProfileIsComplete(userId: number) {
   const user = await getUserById(userId);
 
   if (!user) {
-    throw new TRPCError({ code: "NOT_FOUND", message: "Cliente nÃ£o encontrado" });
+    throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado" });
   }
 
   const missingFields = CONTRACT_REQUIRED_USER_FIELDS.filter(field => {
@@ -376,7 +494,7 @@ export const appRouter = router({
   system: systemRouter,
   auth: router({
     register: publicProcedure.input(registerSchema).mutation(async ({ ctx, input }) => {
-      const { createUser } = await import("./db");
+      const { createUser, linkPropertyOwnersToUserByCpf } = await import("./db");
       await ensureUniqueUserIdentity(input.email, input.cpf);
 
       const passwordHash = await hashPassword(input.password);
@@ -394,6 +512,7 @@ export const appRouter = router({
         lastSignedIn: new Date(),
       });
       const linkedLeadPreview = await linkUserToExistingLeadsByCpf(createdUser.id, input.cpf);
+      await linkPropertyOwnersToUserByCpf(createdUser.id, input.cpf);
 
       const sessionToken = await sdk.createSessionToken(createdUser.openId, {
         name: createdUser.name || createdUser.email || createdUser.openId,
@@ -420,16 +539,16 @@ export const appRouter = router({
       const user = await getUserByEmail(input.email);
 
       if (!user || !user.passwordHash) {
-        throw new TRPCError({ code: "UNAUTHORIZED", message: "E-mail ou senha invÃ¡lidos" });
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "E-mail ou senha inválidos" });
 
       }
       if (user.isActive !== 1) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "UsuÃ¡rio desativado" });
+        throw new TRPCError({ code: "FORBIDDEN", message: "Usu?rio desativado" });
       }
 
       const isPasswordValid = await verifyPassword(input.password, user.passwordHash);
       if (!isPasswordValid) {
-        throw new TRPCError({ code: "UNAUTHORIZED", message: "E-mail ou senha invÃ¡lidos" });
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "E-mail ou senha inválidos" });
       }
 
       await upsertUser({
@@ -460,8 +579,11 @@ export const appRouter = router({
       const { getAllProperties } = await import("./db");
       return await getAllProperties();
     }),
-    getById: publicProcedure.input(idSchema).query(async ({ input }) => {
-      const { getPropertyById } = await import("./db");
+    getById: publicProcedure.input(idSchema).query(async ({ ctx, input }) => {
+      const { getPropertyById, getPropertyByIdWithRelations } = await import("./db");
+      if (ctx.user?.role === "administrativo") {
+        return await getPropertyByIdWithRelations(input.id);
+      }
       return await getPropertyById(input.id);
     }),
     getDestacados: publicProcedure.query(async () => {
@@ -469,37 +591,111 @@ export const appRouter = router({
       return await getDestacados();
     }),
     myProperties: staffProcedure.query(async ({ ctx }) => {
-      const { getAllProperties, getPropertiesByCorretor } = await import("./db");
+      const { getAllPropertiesWithRelations, getPropertiesByCorretor } = await import("./db");
       if (ctx.user.role === "administrativo") {
-        return await getAllProperties();
+        return await getAllPropertiesWithRelations();
       }
       return await getPropertiesByCorretor(ctx.user.id);
     }),
-    create: staffProcedure.input(z.any()).mutation(async ({ ctx, input }) => {
+    create: staffProcedure.input(createPropertySchema).mutation(async ({ ctx, input }) => {
       const { createProperty } = await import("./db");
-      const payload = { ...(input as any) };
 
-      payload.idCorretor =
-        ctx.user.role === "administrativo" && typeof payload.idCorretor === "number"
-          ? payload.idCorretor
+      const idCorretor =
+        ctx.user.role === "administrativo"
+          ? input.idCorretor
           : ctx.user.id;
 
-      return await createProperty(payload);
+      if (!idCorretor) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Selecione o corretor responsavel antes de cadastrar o imovel",
+        });
+      }
+
+      await ensureBrokerUser(idCorretor);
+      const owner = await upsertPropertyOwnerFromInput(input.owner, {
+        confirmedEmailConflict: input.confirmedOwnerEmailConflict,
+      });
+
+      return await createProperty({
+        titulo: input.titulo,
+        descricao: input.descricao ?? null,
+        tipo: input.tipo,
+        finalidade: input.finalidade,
+        valor: input.valor,
+        valorLocacao: input.valorLocacao ?? null,
+        area: input.area ?? null,
+        quartos: input.quartos ?? null,
+        banheiros: input.banheiros ?? null,
+        vagas: input.vagas ?? null,
+        endereco: input.endereco,
+        numero: input.numero ?? null,
+        bairro: input.bairro ?? null,
+        cidade: input.cidade,
+        estado: input.estado,
+        cep: input.cep ?? null,
+        latitude: input.latitude ?? null,
+        longitude: input.longitude ?? null,
+        fotos: input.fotos ?? null,
+        destaque: input.destaque ?? 0,
+        status: input.status ?? "ativo",
+        idCorretor,
+        idProprietario: owner.id,
+        createdByUserId: ctx.user.id,
+      });
     }),
-    update: staffProcedure.input(z.any()).mutation(async ({ ctx, input }) => {
+    update: staffProcedure.input(updatePropertySchema).mutation(async ({ ctx, input }) => {
       const { updateProperty } = await import("./db");
-      const { id, ...data } = input as any;
+      const { id, owner: ownerInput, confirmedOwnerEmailConflict, ...data } = input;
       const property = await ensurePropertyExists(id);
 
       if (ctx.user.role === "corretor" && property.idCorretor !== ctx.user.id) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "VocÃª nÃ£o tem permissÃ£o para editar este imÃ³vel" });
+        throw new TRPCError({ code: "FORBIDDEN", message: "Você não tem permissão para editar este imóvel" });
       }
 
-      if (ctx.user.role === "corretor") {
-        data.idCorretor = ctx.user.id;
+      const idCorretor =
+        ctx.user.role === "corretor"
+          ? ctx.user.id
+          : data.idCorretor;
+
+      if (!idCorretor) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Selecione o corretor responsavel antes de salvar o imovel",
+        });
       }
 
-      return await updateProperty(id, data);
+      await ensureBrokerUser(idCorretor);
+      const owner = await upsertPropertyOwnerFromInput(ownerInput, {
+        currentOwnerId: property.idProprietario ?? undefined,
+        confirmedEmailConflict: confirmedOwnerEmailConflict,
+      });
+
+      return await updateProperty(id, {
+        titulo: data.titulo,
+        descricao: data.descricao ?? null,
+        tipo: data.tipo,
+        finalidade: data.finalidade,
+        valor: data.valor,
+        valorLocacao: data.valorLocacao ?? null,
+        area: data.area ?? null,
+        quartos: data.quartos ?? null,
+        banheiros: data.banheiros ?? null,
+        vagas: data.vagas ?? null,
+        endereco: data.endereco,
+        numero: data.numero ?? null,
+        bairro: data.bairro ?? null,
+        cidade: data.cidade,
+        estado: data.estado,
+        cep: data.cep ?? null,
+        latitude: data.latitude ?? null,
+        longitude: data.longitude ?? null,
+        fotos: data.fotos ?? null,
+        destaque: data.destaque ?? 0,
+        status: data.status ?? property.status,
+        idCorretor,
+        idProprietario: owner.id,
+      });
     }),
     delete: adminProcedure.input(idSchema).mutation(async ({ input }) => {
       const { deleteProperty } = await import("./db");
@@ -708,14 +904,14 @@ export const appRouter = router({
 
   profile: router({
     update: protectedProcedure.input(profileDetailsSchema).mutation(async ({ ctx, input }) => {
-      const { getUserById, updateUser } = await import("./db");
+      const { getUserById, linkPropertyOwnersToUserByCpf, updateUser } = await import("./db");
       const user = await getUserById(ctx.user.id);
       if (!user) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Usuario nao encontrado" });
       }
       /*
 
-        throw new TRPCError({ code: "NOT_FOUND", message: "UsuÃ¡rio nÃ£o encontrado" });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
       }
 
       */
@@ -747,10 +943,11 @@ export const appRouter = router({
         notes: input.notes?.trim() || null,
       });
       await linkUserToExistingLeadsByCpf(ctx.user.id, input.cpf);
+      await linkPropertyOwnersToUserByCpf(ctx.user.id, input.cpf);
 
       const updatedUser = await getUserById(ctx.user.id);
       if (!updatedUser) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "UsuÃ¡rio nÃ£o encontrado" });
+        throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
       }
 
       return toSafeUser(updatedUser);
@@ -772,6 +969,21 @@ export const appRouter = router({
     }),
     userById: adminProcedure.input(idSchema).query(async ({ ctx, input }) => {
       return await getAdminUserWithFlags(ctx.user.id, input.id);
+    }),
+    propertyOwnerById: adminProcedure.input(idSchema).query(async ({ input }) => {
+      const { getPropertyOwnerById, getUserById } = await import("./db");
+      const owner = await getPropertyOwnerById(input.id);
+
+      if (!owner) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Proprietario nao encontrado" });
+      }
+
+      const linkedUser = owner.userId ? await getUserById(owner.userId) : null;
+
+      return {
+        ...owner,
+        linkedUser: linkedUser ? toSafeUser(linkedUser) : null,
+      };
     }),
     markAllNewUsersAsViewed: adminProcedure.mutation(async ({ ctx }) => {
       const { getAllUsers, getViewedUserIdsByAdmin, markUsersAsViewedByAdmin } = await import("./db");
@@ -797,7 +1009,7 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-        const { createUser } = await import("./db");
+        const { createUser, linkPropertyOwnersToUserByCpf } = await import("./db");
         await ensureUniqueUserIdentity(input.email, input.cpf);
         const leadLinkPreview = await getLeadLinkPreviewByCpf(input.cpf);
 
@@ -827,6 +1039,7 @@ export const appRouter = router({
           isActive: 1,
         });
         const linkedLeadPreview = await linkUserToExistingLeadsByCpf(createdUser.id, input.cpf);
+        await linkPropertyOwnersToUserByCpf(createdUser.id, input.cpf);
 
         void sendWelcomeEmail({
           user: createdUser,
@@ -1052,7 +1265,7 @@ export const appRouter = router({
     updateUserDetails: adminProcedure
       .input(adminUserDetailsSchema)
       .mutation(async ({ ctx, input }) => {
-        const { getUserById, updateUser } = await import("./db");
+        const { getUserById, linkPropertyOwnersToUserByCpf, updateUser } = await import("./db");
         const actingUser = await getUserById(ctx.user.id);
         const user = await getUserById(input.id);
 
@@ -1115,6 +1328,7 @@ export const appRouter = router({
           notes: input.notes?.trim() || null,
         });
         await linkUserToExistingLeadsByCpf(input.id, input.cpf);
+        await linkPropertyOwnersToUserByCpf(input.id, input.cpf);
 
         const updatedUser = await getUserById(input.id);
         if (!updatedUser) {
@@ -1122,6 +1336,39 @@ export const appRouter = router({
         }
 
         return toSafeUser(updatedUser);
+      }),
+    updatePropertyOwnerDetails: adminProcedure
+      .input(propertyOwnerDetailsSchema)
+      .mutation(async ({ input }) => {
+        const { getPropertyOwnerByCpf, getPropertyOwnersByEmail, getUserByCpf, updatePropertyOwner } = await import("./db");
+        const duplicatedOwner = await getPropertyOwnerByCpf(input.cpf);
+
+        if (duplicatedOwner && duplicatedOwner.id !== input.id) {
+          throw new TRPCError({ code: "CONFLICT", message: "CPF ja cadastrado para outro proprietario" });
+        }
+
+        const ownersWithSameEmail = await getPropertyOwnersByEmail(input.email);
+        const emailConflict = ownersWithSameEmail.find(owner => owner.id !== input.id && owner.cpf !== input.cpf);
+
+        if (emailConflict) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message:
+              `OWNER_EMAIL_CONFLICT::Ja existe um proprietario com este e-mail vinculado a outro CPF: ` +
+              `${emailConflict.name} (${emailConflict.cpf}).`,
+          });
+        }
+
+        const linkedUser = await getUserByCpf(input.cpf);
+
+        return await updatePropertyOwner(input.id, {
+          name: input.name.trim(),
+          email: input.email,
+          cpf: input.cpf,
+          phone: input.phone.trim(),
+          notes: input.notes?.trim() || null,
+          userId: linkedUser?.id ?? null,
+        });
       }),
     updateUserRole: adminProcedure
       .input(

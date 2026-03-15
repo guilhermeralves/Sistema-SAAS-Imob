@@ -1,4 +1,4 @@
-﻿{
+{
     "version":  "7",
     "dialect":  "postgresql",
     "entries":  [
@@ -42,6 +42,13 @@
                         "version":  "7",
                         "when":  1773523200000,
                         "tag":  "0005_property_documents",
+                        "breakpoints":  true
+                    },
+                    {
+                        "idx":  6,
+                        "version":  "7",
+                        "when":  1773526800000,
+                        "tag":  "0006_chilly_eddie_brock",
                         "breakpoints":  true
                     }
                 ]

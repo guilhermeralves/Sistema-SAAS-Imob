@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { formatStoredDate } from "@/lib/date";
 import { trpc } from "@/lib/trpc";
 import { FileText, Upload, Download, CheckCircle2, Clock, XCircle, Building2, User } from "lucide-react";
 import { toast } from "sonner";
@@ -27,10 +28,6 @@ function formatCurrency(value: number) {
     style: "currency",
     currency: "BRL",
   }).format(value / 100);
-}
-
-function formatDate(date: Date | string) {
-  return new Date(date).toLocaleDateString("pt-BR");
 }
 
 export default function AreaCliente() {
@@ -205,8 +202,8 @@ export default function AreaCliente() {
                                 Valor: {formatCurrency(contrato.valor)}
                               </p>
                               <p className="text-sm text-muted-foreground">
-                                Período: {formatDate(contrato.dataInicio)}
-                                {contrato.dataFim && ` até ${formatDate(contrato.dataFim)}`}
+                                Período: {formatStoredDate(contrato.dataInicio)}
+                                {contrato.dataFim && ` até ${formatStoredDate(contrato.dataFim)}`}
                               </p>
                             </div>
                             {contrato.urlContrato && (
@@ -283,7 +280,7 @@ export default function AreaCliente() {
                             <div>
                               <p className="font-medium">{doc.tipo}</p>
                               <p className="text-sm text-muted-foreground">
-                                Enviado em {formatDate(doc.createdAt)}
+                                Enviado em {formatStoredDate(doc.createdAt)}
                               </p>
                             </div>
                           </div>

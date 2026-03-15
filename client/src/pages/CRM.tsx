@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import Layout from "@/components/Layout";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -33,31 +33,59 @@ const PIPELINE_STATUS = [
   { value: "fechado", label: "Fechado", color: "bg-green-100 text-green-700" },
   { value: "perdidos", label: "Perdidos", color: "bg-red-100 text-red-700" },
 ];
+
+const MANUAL_ORIGIN_OPTIONS = [
+  { value: "indicacao", label: "Indicação" },
+  { value: "cliente_presencial", label: "Cliente Presencial" },
+  { value: "outros", label: "Outros" },
+];
 // ========== FIM DA ÁREA DE EDIÇÃO ==========
 
 function formatDateTime(date: Date | string | null) {
-  if (!date) return 'Data não disponível';
-  
-  try {
-    const parsedDate = new Date(date);
-    return isNaN(parsedDate.getTime()) 
-      ? 'Data inválida' 
-      : parsedDate.toLocaleDateString("pt-BR", { 
-          timeZone: "America/Sao_Paulo" 
-        }) + ' às ' + 
-        parsedDate.toLocaleTimeString("pt-BR", { 
-          hour: '2-digit', 
-          minute: '2-digit',
-          timeZone: "America/Sao_Paulo"
-        });
-  } catch {
-    return 'Data inválida';
+  if (!date) return "Data não disponível";
+
+  const parsedDate = new Date(date);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "Data inválida";
   }
+
+  return (
+    parsedDate.toLocaleDateString("pt-BR", {
+      timeZone: "America/Sao_Paulo",
+    }) +
+    " às " +
+    parsedDate.toLocaleTimeString("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "America/Sao_Paulo",
+    })
+  );
 }
 
 function getStatusColor(status: string) {
   const statusConfig = PIPELINE_STATUS.find((s) => s.value === status);
   return statusConfig?.color || "bg-gray-100 text-gray-700";
+}
+
+function getLeadOriginLabel(origin: string | null | undefined) {
+  switch (origin) {
+    case "site":
+      return "Site";
+    case "whatsapp":
+      return "WhatsApp";
+    case "trafego_pago":
+      return "Tráfego Pago";
+    case "indicacao":
+      return "Cadastro manual • Indicação";
+    case "cliente_presencial":
+      return "Cadastro manual • Cliente Presencial";
+    case "outros":
+      return "Cadastro manual • Outros";
+    case "manual":
+      return "Cadastro manual";
+    default:
+      return origin?.trim() || "Não informada";
+  }
 }
 
 export default function CRM() {
@@ -109,7 +137,7 @@ export default function CRM() {
     },
   });
 
-  //Regra que formata telefone conforme usuário digita
+  // Regra que formata telefone conforme o usuário digita
   const formatPhone = (value: string) => {
     return value
       .replace(/\D/g, "")
@@ -139,11 +167,11 @@ export default function CRM() {
     },
   });
 
-//Regra que valida o email digitado antes de cadastrar o lead
+  // Regra que valida o email digitado antes de cadastrar o lead
   const isValidEmail = (v: string) => 
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
-//Mensagem informando que os campos estão vazios ao tentar cadastrar um lead
+  // Mensagem informando que os campos estão vazios ao tentar cadastrar um lead
   const handleCreateLead = () => {
     if (!newLeadData.nome || !newLeadData.email) {
       toast.error("Preencha nome e email");
@@ -156,11 +184,11 @@ export default function CRM() {
     }
 
     if (newLeadData.cpf && !isValidCpf(newLeadData.cpf)) {
-      toast.error("CPF invalido. Confira os digitos informados.");
+      toast.error("CPF inválido. Confira os dígitos informados.");
       return;
     }
 
-    //Formata nome digitado
+    // Formata o nome digitado
     const formattedData = {
       ...newLeadData,
       nome: newLeadData.nome
@@ -170,8 +198,8 @@ export default function CRM() {
         .join(' ')
     };
 
-    // CORREÇÃO: Passe os dados corretamente
-    createLead.mutate(formattedData); // ← Passe newLeadData, não {}
+    // Envia os dados formatados corretamente para o backend.
+    createLead.mutate(formattedData);
   };
 
   const handleStatusChange = (leadId: number, newStatus: string) => {
@@ -181,10 +209,10 @@ export default function CRM() {
         onSuccess: () => {
           refetch();
           
-          // delay ao fechar o dialog para melhor sensação de usabilidade
+          // Delay ao fechar o dialog para uma sensação melhor de usabilidade.
           setTimeout(() => {
             setLeadDetailsOpen(false);
-            setSelectedLead(null); // ← Limpa o lead selecionado também
+            setSelectedLead(null); // Limpa o lead selecionado também.
           }, 350);
         },
         onError: () => {
@@ -194,7 +222,7 @@ export default function CRM() {
     );
   };
 
-  //Mensagem Informando que não possível adicionar anotação vazia nos detalhes do lead
+  // Mensagem informando que não é possível adicionar anotação vazia nos detalhes do lead
   const handleAddNote = () => {
     if (!newNote.trim()) {
       toast.warning("Digite algo antes de adicionar.");
@@ -275,14 +303,14 @@ export default function CRM() {
             </DialogTrigger>
 
             <DialogContent
-              className="w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6"
+              className="sm:max-w-md lg:max-w-xl"
               onOpenAutoFocus={event => event.preventDefault()}
             >
               <DialogHeader>
                 <DialogTitle>Cadastrar Novo Lead</DialogTitle>
-                <DialogDescription>
-                  Preencha as informações do lead
-                </DialogDescription>
+                  <DialogDescription>
+                    Preencha as informações do lead.
+                  </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="space-y-2">
@@ -291,87 +319,98 @@ export default function CRM() {
                     id="nome"
                     value={newLeadData.nome}
                     maxLength={40}
-                    onChange={(e) => setNewLeadData({ ...newLeadData, nome: e.target.value })}
+                    onChange={event => setNewLeadData({ ...newLeadData, nome: event.target.value })}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">E-mail *</Label>
-                  <Input
-                    type="email"
-                    value={newLeadData.email}
-                    maxLength={35}
-                    onChange={(e) =>
-                      setNewLeadData({ ...newLeadData, email: e.target.value,})
-                    }
-                  />
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">E-mail *</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={newLeadData.email}
+                      maxLength={35}
+                      onChange={event => setNewLeadData({ ...newLeadData, email: event.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="telefone">Telefone</Label>
+                    <Input
+                      id="telefone"
+                      value={newLeadData.telefone}
+                      onChange={event =>
+                        setNewLeadData({ ...newLeadData, telefone: formatPhone(event.target.value) })
+                      }
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="cpf">CPF</Label>
-                  <Input
-                    id="cpf"
-                    value={newLeadData.cpf}
-                    inputMode="numeric"
-                    maxLength={14}
-                    onChange={(e) => setNewLeadData({ ...newLeadData, cpf: formatCpf(e.target.value) })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="telefone">Telefone</Label>
-                  <Input
-                    id="telefone"
-                    value={newLeadData.telefone}
-                    onChange={(e) => setNewLeadData({ ...newLeadData, telefone: formatPhone(e.target.value)})}
-                  />
-                </div>
-                <div className="flex">
-                  <div className="flex-1 space-y-2">
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="cpf">CPF</Label>
+                    <Input
+                      id="cpf"
+                      value={newLeadData.cpf}
+                      inputMode="numeric"
+                      maxLength={14}
+                      onChange={event =>
+                        setNewLeadData({ ...newLeadData, cpf: formatCpf(event.target.value) })
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-2">
                     <Label htmlFor="origem">Origem</Label>
                     <Select
                       value={newLeadData.origem}
-                      onValueChange={(value) => setNewLeadData({ ...newLeadData, origem: value })}
+                      onValueChange={value => setNewLeadData({ ...newLeadData, origem: value })}
                     >
                       <SelectTrigger id="origem">
-                        <SelectValue />
+                        <SelectValue placeholder="Selecione a origem" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="manual">Manual</SelectItem>
-                        <SelectItem value="site">Site</SelectItem>
-                        <SelectItem value="trafego_pago">Tráfego Pago</SelectItem>
-                        <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                        <SelectItem value="indicacao">Indicação</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="flex-1 space-y-2">
-                    <Label htmlFor="interesse">Interesse</Label>
-                    <Select
-                      value={newLeadData.interesse}
-                      onValueChange={(value) => setNewLeadData({ ...newLeadData, interesse: value })}
-                    >
-                      <SelectTrigger id="interesse">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Locação">Locação</SelectItem>
-                        <SelectItem value="Aquisição Imóvel na Planta">Aquisição Imóvel na Planta</SelectItem>
-                        <SelectItem value="Aquisição de Imóvel">Aquisição de Imóvel</SelectItem>
-                        <SelectItem value="Avaliação de Imóvel">Avaliação de Imóvel</SelectItem>
+                        {MANUAL_ORIGIN_OPTIONS.map(option => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="interesse">Interesse</Label>
+                  <Select
+                    value={newLeadData.interesse}
+                    onValueChange={value => setNewLeadData({ ...newLeadData, interesse: value })}
+                  >
+                    <SelectTrigger id="interesse">
+                      <SelectValue placeholder="Selecione o interesse" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Locação">Locação</SelectItem>
+                      <SelectItem value="Aquisição Imóvel na Planta">Aquisição Imóvel na Planta</SelectItem>
+                      <SelectItem value="Aquisição de Imóvel">Aquisição de Imóvel</SelectItem>
+                      <SelectItem value="Avaliação de Imóvel">Avaliação de Imóvel</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="observacao">Observação</Label>
                   <Textarea
                     id="observacao"
                     maxLength={400}
-                    className="break-words resize-none break-all"
+                    className="resize-none"
                     value={newLeadData.observacao}
-                    onChange={(e) => setNewLeadData({ ...newLeadData, observacao: e.target.value })}
-                    rows={3}
+                    onChange={event => setNewLeadData({ ...newLeadData, observacao: event.target.value })}
+                    rows={4}
                   />
                 </div>
+
                 <Button onClick={handleCreateLead} className="w-full" disabled={createLead.isPending}>
                   {createLead.isPending ? "Criando..." : "Criar Lead"}
                 </Button>
@@ -482,7 +521,7 @@ export default function CRM() {
                     Lead #{selectedLead.id} • Criado em {
                       selectedLead.createdAt
                         ? formatDateTime(selectedLead.createdAt)
-                        : 'Data não disponível'
+                        : "Data não disponível"
                     }
                   </DialogDescription>
                 </DialogHeader>
@@ -505,6 +544,12 @@ export default function CRM() {
                           <span className="text-sm">{selectedLead.telefone}</span>
                         </div>
                       )}
+                      <div>
+                        <Label>Origem</Label>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {getLeadOriginLabel(selectedLead.origem)}
+                        </p>
+                      </div>
                       <div className="space-y-2">
                         <Label>Status</Label>
                         <Select
@@ -631,3 +676,6 @@ export default function CRM() {
     </Layout>
   );
 }
+
+
+

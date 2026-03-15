@@ -92,7 +92,7 @@ function formatCurrency(value: number) {
 }
 
 export default function Home() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const [index, setIndex] = React.useState(0);
 
   React.useEffect(() => {
@@ -110,6 +110,8 @@ export default function Home() {
     : getLoginUrl();
   const announceTarget = isAuthenticated ? "_blank" : undefined;
   const announceRel = isAuthenticated ? "noopener noreferrer" : undefined;
+  const shouldShowOwnerLeadCard =
+    !user || (user.role !== "administrativo" && user.role !== "corretor");
 
   return (
     <Layout>
@@ -272,36 +274,39 @@ export default function Home() {
       </section>
 
       {/* Captação de Imóveis */}
-      <section className="py-16 md:py-24 bg-gradient-to-br from-primary/5 to-accent/5">
-        <div className="container">
-          <Card className="border-2 border-primary/20">
-            <CardContent className="p-8 md:p-12 text-center">
-              <Building2 className="h-16 w-16 mx-auto mb-6 text-primary" />
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">{CAPTACAO_CONFIG.title}</h2>
-              <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
-                {CAPTACAO_CONFIG.description}
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Button
-                  size="lg"
-                  asChild
-                  className="gap-2"
-                >
-                  <a href={announceHref} target={announceTarget} rel={announceRel}>
-                    {CAPTACAO_CONFIG.ctaText}
-                    <ArrowRight className="h-5 w-5" />
-                  </a>
-                </Button>
-                <Link href="/contato#contato-topo">
-                  <Button size="lg" variant="outline">
-                    Fale Conosco
+      {shouldShowOwnerLeadCard && (
+        <section className="py-16 md:py-24 bg-gradient-to-br from-primary/5 to-accent/5">
+          <div className="container">
+            <Card className="border-2 border-primary/20">
+              <CardContent className="p-8 md:p-12 text-center">
+                <Building2 className="h-16 w-16 mx-auto mb-6 text-primary" />
+                <h2 className="text-3xl md:text-4xl font-bold mb-4">{CAPTACAO_CONFIG.title}</h2>
+                <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
+                  {CAPTACAO_CONFIG.description}
+                </p>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  <Button
+                    size="lg"
+                    asChild
+                    className="gap-2"
+                  >
+                    <a href={announceHref} target={announceTarget} rel={announceRel}>
+                      {CAPTACAO_CONFIG.ctaText}
+                      <ArrowRight className="h-5 w-5" />
+                    </a>
                   </Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </section>
+                  <Link href="/contato#contato-topo">
+                    <Button size="lg" variant="outline">
+                      Fale Conosco
+                    </Button>
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+      )}
     </Layout>
   );
 }
+

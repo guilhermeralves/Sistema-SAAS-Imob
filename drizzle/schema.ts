@@ -68,6 +68,25 @@ export const adminUserViews = pgTable(
 export type AdminUserView = typeof adminUserViews.$inferSelect;
 export type InsertAdminUserView = typeof adminUserViews.$inferInsert;
 
+export const propertyOwners = pgTable(
+  "propertyOwners",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("userId"),
+    name: varchar("name", { length: 120 }).notNull(),
+    email: varchar("email", { length: 255 }).notNull(),
+    cpf: varchar("cpf", { length: 14 }).notNull(),
+    phone: varchar("phone", { length: 20 }).notNull(),
+    notes: text("notes"),
+    createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+  },
+  table => [uniqueIndex("propertyOwners_cpf_idx").on(table.cpf)]
+);
+
+export type PropertyOwner = typeof propertyOwners.$inferSelect;
+export type InsertPropertyOwner = typeof propertyOwners.$inferInsert;
+
 /**
  * Tabela de imoveis
  * Armazena informacoes sobre os imoveis cadastrados no sistema
@@ -96,6 +115,8 @@ export const properties = pgTable("properties", {
   destaque: integer("destaque").default(0).notNull(), // 0 = nao, 1 = sim
   status: varchar("status", { length: 20 }).default("ativo").notNull(), // ativo, vendido, alugado, inativo
   idCorretor: integer("idCorretor").notNull(), // ID do corretor responsavel
+  idProprietario: integer("idProprietario"),
+  createdByUserId: integer("createdByUserId").notNull(),
   createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
 });

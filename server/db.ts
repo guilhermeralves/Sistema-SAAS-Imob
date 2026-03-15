@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import {
   adminUserViews,
@@ -9,6 +9,7 @@ import {
   InsertLeadFile,
   InsertLeadNote,
   InsertPropertyDocument,
+  InsertPropertyOwner,
   InsertProperty,
   InsertUser,
   contracts,
@@ -17,6 +18,7 @@ import {
   leadNotes,
   leads,
   propertyDocuments,
+  propertyOwners,
   properties,
   users,
 } from "../drizzle/schema";
@@ -311,6 +313,102 @@ export async function getUserByCpf(cpf: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+export async function getPropertyOwnerById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db.select().from(propertyOwners).where(eq(propertyOwners.id, id)).limit(1);
+  return result[0];
+}
+
+export async function getPropertyOwnerByCpf(cpf: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const result = await db.select().from(propertyOwners).where(eq(propertyOwners.cpf, cpf)).limit(2);
+
+  if (result.length > 1) {
+    throw new Error("Multiple property owners found for the same cpf");
+  }
+
+  return result[0];
+}
+
+export async function getPropertyOwnersByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(propertyOwners)
+    .where(eq(propertyOwners.email, email))
+    .orderBy(desc(propertyOwners.createdAt));
+}
+
+export async function createPropertyOwner(data: InsertPropertyOwner) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [createdOwner] = await db.insert(propertyOwners).values(data).returning();
+  return createdOwner;
+}
+
+export async function updatePropertyOwner(id: number, data: Partial<InsertPropertyOwner>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [updatedOwner] = await db
+    .update(propertyOwners)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(propertyOwners.id, id))
+    .returning();
+
+  return updatedOwner;
+}
+
+export async function linkPropertyOwnersToUserByCpf(userId: number, cpf: string) {
+  const db = await getDb();
+  if (!db) return;
+
+  await db
+    .update(propertyOwners)
+    .set({ userId, updatedAt: new Date() })
+    .where(and(eq(propertyOwners.cpf, cpf), isNull(propertyOwners.userId)));
+}
+
+async function enrichPropertiesWithRelations(propertyRows: Array<any>) {
+  const db = await getDb();
+  if (!db || propertyRows.length === 0) return propertyRows;
+
+  const ownerIds = Array.from(
+    new Set(
+      propertyRows
+        .map(property => property.idProprietario)
+        .filter((ownerId): ownerId is number => typeof ownerId === "number")
+    )
+  );
+  const userIds = Array.from(
+    new Set(propertyRows.flatMap(property => [property.idCorretor, property.createdByUserId]))
+  );
+
+  const owners = ownerIds.length > 0
+    ? await db.select().from(propertyOwners).where(inArray(propertyOwners.id, ownerIds))
+    : [];
+  const relatedUsers = userIds.length > 0
+    ? await db.select().from(users).where(inArray(users.id, userIds))
+    : [];
+
+  const ownersById = new Map(owners.map(owner => [owner.id, owner]));
+  const usersById = new Map(relatedUsers.map(user => [user.id, user]));
+
+  return propertyRows.map(property => ({
+    ...property,
+    proprietario: ownersById.get(property.idProprietario) ?? null,
+    corretorResponsavel: usersById.get(property.idCorretor) ?? null,
+    cadastradoPor: usersById.get(property.createdByUserId) ?? null,
+  }));
+}
+
 export async function getAllProperties() {
   const db = await getDb();
   if (!db) return [];
@@ -328,14 +426,31 @@ export async function getPropertyById(id: number) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+export async function getPropertyByIdWithRelations(id: number) {
+  const property = await getPropertyById(id);
+  if (!property) return undefined;
+
+  const [enrichedProperty] = await enrichPropertiesWithRelations([property]);
+  return enrichedProperty;
+}
+
 export async function getPropertiesByCorretor(idCorretor: number) {
   const db = await getDb();
   if (!db) return [];
-  return await db
+  const result = await db
     .select()
     .from(properties)
     .where(eq(properties.idCorretor, idCorretor))
     .orderBy(desc(properties.createdAt));
+  return await enrichPropertiesWithRelations(result);
+}
+
+export async function getAllPropertiesWithRelations() {
+  const db = await getDb();
+  if (!db) return [];
+
+  const result = await db.select().from(properties).orderBy(desc(properties.createdAt));
+  return await enrichPropertiesWithRelations(result);
 }
 
 export async function getDestacados() {

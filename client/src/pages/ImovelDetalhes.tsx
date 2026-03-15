@@ -20,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { formatStoredDate, formatStoredDateTime } from "@/lib/date";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,10 +53,6 @@ function formatCurrency(value: number) {
     style: "currency",
     currency: "BRL",
   }).format(value / 100);
-}
-
-function formatDate(date: Date | string) {
-  return new Date(date).toLocaleDateString("pt-BR");
 }
 
 function getPropertyStatusPresentation(status: string | null | undefined) {
@@ -105,6 +102,7 @@ export default function ImovelDetalhes() {
     user &&
     imovel &&
     (user.role === "administrativo" || (user.role === "corretor" && user.id === imovel.idCorretor));
+  const isAdminViewer = user?.role === "administrativo";
 
   const propertyDocuments = trpc.properties.documents.useQuery(
     { idImovel: id },
@@ -279,7 +277,7 @@ export default function ImovelDetalhes() {
           <Link href="/imoveis">
             <Button variant="ghost" size="sm" className="mb-4 gap-2 lg:mb-3">
               <ArrowLeft className="h-4 w-4" />
-              Voltar para Imoveis
+              Voltar para Imóveis
             </Button>
           </Link>
         </div>
@@ -352,7 +350,7 @@ export default function ImovelDetalhes() {
               <CardContent className="space-y-4 px-4 py-3 md:px-5 md:py-3.5">
                 <div>
                   <p className="mb-1 text-sm font-medium text-muted-foreground">
-                    {imovel.finalidade === "locacao" ? "Valor da locacao" : "Valor do imovel"}
+                    {imovel.finalidade === "locacao" ? "Valor da locacao" : "Valor do Imóvel"}
                   </p>
                   <p className="text-[1.85rem] font-bold leading-none text-primary xl:text-[2.05rem]">
                     {formatCurrency(imovel.valor)}
@@ -469,6 +467,70 @@ export default function ImovelDetalhes() {
               </CardContent>
             </Card>
 
+            {isAdminViewer && (imovel.proprietario || imovel.cadastradoPor || imovel.corretorResponsavel) ? (
+              <Card className="shadow-sm">
+                <CardContent className="space-y-5 p-6">
+                  <div>
+                    <p className="text-sm font-medium uppercase tracking-[0.18em] text-primary/80">
+                      Vinculos do imovel
+                    </p>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2 rounded-2xl bg-slate-50 p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Proprietario</p>
+                      {imovel.proprietario ? (
+                        <>
+                          <Link href={`/admin/proprietarios/${imovel.proprietario.id}?fromProperty=${imovel.id}`}>
+                            <a className="text-base font-semibold text-primary underline">
+                              {imovel.proprietario.name}
+                            </a>
+                          </Link>
+                          <p className="text-sm text-muted-foreground">{imovel.proprietario.email}</p>
+                          <p className="text-sm text-muted-foreground">{imovel.proprietario.phone}</p>
+                        </>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Nao informado</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2 rounded-2xl bg-slate-50 p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Corretor Responsável</p>
+                      {imovel.corretorResponsavel ? (
+                        <Link href={`/admin/users/${imovel.corretorResponsavel.id}?fromProperty=${imovel.id}`}>
+                          <a className="text-base font-semibold text-primary underline">
+                            {imovel.corretorResponsavel.name || imovel.corretorResponsavel.email}
+                          </a>
+                        </Link>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Nao informado</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2 rounded-2xl bg-slate-50 p-4 md:col-span-2">
+                      <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Cadastrado por</p>
+                      {imovel.cadastradoPor ? (
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <Link href={`/admin/users/${imovel.cadastradoPor.id}?fromProperty=${imovel.id}`}>
+                            <a className="text-base font-semibold text-primary underline">
+                              {imovel.cadastradoPor.name || imovel.cadastradoPor.email}
+                            </a>
+                          </Link>
+                          {imovel.createdAt ? (
+                            <span className="text-sm text-muted-foreground">
+                              {formatStoredDateTime(imovel.createdAt)}
+                            </span>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Nao informado</p>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
+
             <Card className="shadow-sm">
               <CardContent className="space-y-4 p-6">
                 <div>
@@ -555,7 +617,7 @@ export default function ImovelDetalhes() {
                         <div>
                           <p className="font-medium">{document.nomeArquivo}</p>
                           <p className="text-sm text-muted-foreground">
-                            Enviado em {formatDate(document.createdAt)}
+                            Enviado em {formatStoredDate(document.createdAt)}
                           </p>
                         </div>
                       </div>

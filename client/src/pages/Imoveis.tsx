@@ -7,7 +7,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { lookupCep } from "@/lib/cep";
+import { formatCpf, isValidCpf, normalizeCpf } from "@/lib/cpf";
 import { formatMoneyFromCentsValue, parseMoneyCentsInput } from "@/lib/money";
+import { formatPhoneNumber } from "@/lib/phone";
 import {
   Select,
   SelectContent,
@@ -51,6 +53,8 @@ const NUMBER_FILTER_OPTIONS = [
   { value: "5", label: "5" },
 ];
 // ========== FIM DA AREA DE EDICAO ==========
+
+const OWNER_EMAIL_CONFLICT_PREFIX = "OWNER_EMAIL_CONFLICT::";
 
 function formatZipCode(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 8);
@@ -106,6 +110,7 @@ export default function Imoveis() {
     descricao: "",
     tipo: "apartamento",
     finalidade: "venda",
+    idCorretor: "",
     valor: "",
     area: "",
     quartos: "",
@@ -117,6 +122,10 @@ export default function Imoveis() {
     cidade: "",
     estado: "",
     cep: "",
+    ownerName: "",
+    ownerEmail: "",
+    ownerCpf: "",
+    ownerPhone: "",
   });
 
   const [cepLoading, setCepLoading] = useState(false);
@@ -131,18 +140,25 @@ export default function Imoveis() {
     };
   }, []);
 
+  const { data: adminUsers } = trpc.admin.users.useQuery(undefined, {
+    enabled: user?.role === "administrativo",
+  });
+
+  const activeBrokers = adminUsers?.filter(candidate => candidate.role === "corretor" && candidate.isActive === 1) || [];
+
   // Mutation para criar imovel
   const createProperty = trpc.properties.create.useMutation({
     onSuccess: () => {
       toast.success("Imóvel cadastrado com sucesso!");
       refetch();  // Atualiza a lista
       setNewPropertyOpen(false);  // Fecha o dialog
-      // Limpa o formulÃ¡rio
+      // Limpa o formul?rio
       setNewPropertyData({
         titulo: "",
         descricao: "",
         tipo: "apartamento",
         finalidade: "venda",
+        idCorretor: "",
         valor: "",
         area: "",
         quartos: "",
@@ -154,18 +170,49 @@ export default function Imoveis() {
         cidade: "",
         estado: "",
         cep: "",
+        ownerName: "",
+        ownerEmail: "",
+        ownerCpf: "",
+        ownerPhone: "",
       });
     },
-    onError: () => {
-      toast.error("Erro ao cadastrar imóvel");
+    onError: error => {
+      if (error.message.startsWith(OWNER_EMAIL_CONFLICT_PREFIX)) {
+        const warningMessage = error.message.replace(OWNER_EMAIL_CONFLICT_PREFIX, "");
+        if (window.confirm(warningMessage)) {
+          submitCreateProperty(true);
+        }
+        return;
+      }
+
+      toast.error(error.message || "Erro ao cadastrar imóvel");
     },
   });
 
-  // Funcao para validar e criar o imovel
-  const handleCreateProperty = () => {
+  const submitCreateProperty = (confirmedOwnerEmailConflict = false) => {
     // Valida campos obrigatorios
     if (!newPropertyData.titulo || !newPropertyData.valor || !newPropertyData.endereco) {
       toast.error("Preencha título, valor e endereço");
+      return;
+    }
+
+    if (user?.role === "administrativo" && !newPropertyData.idCorretor) {
+      toast.error("Selecione o corretor responsável pelo imóvel.");
+      return;
+    }
+
+    if (
+      !newPropertyData.ownerName ||
+      !newPropertyData.ownerEmail ||
+      !newPropertyData.ownerPhone ||
+      !newPropertyData.ownerCpf
+    ) {
+      toast.error("Preencha os dados obrigatórios do proprietário.");
+      return;
+    }
+
+    if (!isValidCpf(newPropertyData.ownerCpf)) {
+      toast.error("CPF do proprietário inválido. Confira os dígitos informados.");
       return;
     }
 
@@ -173,11 +220,24 @@ export default function Imoveis() {
     createProperty.mutate({
       ...newPropertyData,
       valor: parseMoneyCentsInput(newPropertyData.valor) ?? 0,
-      area: parseFloat(newPropertyData.area),
-      quartos: parseInt(newPropertyData.quartos),
-      banheiros: parseInt(newPropertyData.banheiros),
-      vagas: parseInt(newPropertyData.vagas),
+      area: newPropertyData.area ? parseInt(newPropertyData.area, 10) : null,
+      quartos: newPropertyData.quartos ? parseInt(newPropertyData.quartos, 10) : null,
+      banheiros: newPropertyData.banheiros ? parseInt(newPropertyData.banheiros, 10) : null,
+      vagas: newPropertyData.vagas ? parseInt(newPropertyData.vagas, 10) : null,
+      idCorretor: newPropertyData.idCorretor ? Number(newPropertyData.idCorretor) : undefined,
+      confirmedOwnerEmailConflict,
+      owner: {
+        name: newPropertyData.ownerName,
+        email: newPropertyData.ownerEmail.trim().toLowerCase(),
+        cpf: normalizeCpf(newPropertyData.ownerCpf),
+        phone: newPropertyData.ownerPhone,
+      },
     });
+  };
+
+  // Funcao para validar e criar o imovel
+  const handleCreateProperty = () => {
+    submitCreateProperty(false);
   };
 
   // ========== FUNCAO PARA LIDAR COM CEP ==========
@@ -367,6 +427,35 @@ export default function Imoveis() {
                   </div>
                 </div>
 
+                <div className="space-y-1 sm:space-y-2">
+                  <Label htmlFor="idCorretor" className="text-sm sm:text-base">Corretor responsável *</Label>
+                  {user?.role === "administrativo" ? (
+                    <Select
+                      value={newPropertyData.idCorretor || "empty"}
+                      onValueChange={value =>
+                        setNewPropertyData({
+                          ...newPropertyData,
+                          idCorretor: value === "empty" ? "" : value,
+                        })
+                      }
+                    >
+                      <SelectTrigger id="idCorretor" className="text-sm sm:text-base">
+                        <SelectValue placeholder="Selecione o corretor responsável" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="empty">Selecione</SelectItem>
+                        {activeBrokers.map(broker => (
+                          <SelectItem key={broker.id} value={String(broker.id)}>
+                            {broker.name || broker.email}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input value={user?.name || user?.email || "Corretor"} disabled className="text-sm sm:text-base" />
+                  )}
+                </div>
+
                 {/* Campo Valor */}
                 <div className="space-y-1 sm:space-y-2">
                   <Label htmlFor="valor" className="text-sm sm:text-base">Valor (R$) *</Label>
@@ -521,6 +610,71 @@ export default function Imoveis() {
                     {cepError && (
                       <p className="text-red-500 text-xs sm:text-sm mt-1">{cepError}</p>
                     )}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-border/70 bg-muted/20 p-4">
+                  <div className="mb-3">
+                    <h3 className="text-base font-semibold">Proprietário do imóvel</h3>
+                    <p className="text-sm text-muted-foreground">
+                      O CPF do proprietário é obrigatório e evita duplicidade de cadastro.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+                    <div className="space-y-1 sm:space-y-2 sm:col-span-2">
+                      <Label htmlFor="ownerName" className="text-sm sm:text-base">Nome e sobrenome *</Label>
+                      <Input
+                        id="ownerName"
+                        value={newPropertyData.ownerName}
+                        onChange={e =>
+                          setNewPropertyData({ ...newPropertyData, ownerName: e.target.value })
+                        }
+                        className="text-sm sm:text-base"
+                      />
+                    </div>
+                    <div className="space-y-1 sm:space-y-2">
+                      <Label htmlFor="ownerEmail" className="text-sm sm:text-base">E-mail *</Label>
+                      <Input
+                        id="ownerEmail"
+                        type="email"
+                        value={newPropertyData.ownerEmail}
+                        onChange={e =>
+                          setNewPropertyData({ ...newPropertyData, ownerEmail: e.target.value })
+                        }
+                        className="text-sm sm:text-base"
+                      />
+                    </div>
+                    <div className="space-y-1 sm:space-y-2">
+                      <Label htmlFor="ownerPhone" className="text-sm sm:text-base">Telefone *</Label>
+                      <Input
+                        id="ownerPhone"
+                        value={newPropertyData.ownerPhone}
+                        onChange={e =>
+                          setNewPropertyData({
+                            ...newPropertyData,
+                            ownerPhone: formatPhoneNumber(e.target.value),
+                          })
+                        }
+                        className="text-sm sm:text-base"
+                      />
+                    </div>
+                    <div className="space-y-1 sm:space-y-2">
+                      <Label htmlFor="ownerCpf" className="text-sm sm:text-base">CPF *</Label>
+                      <Input
+                        id="ownerCpf"
+                        inputMode="numeric"
+                        maxLength={14}
+                        value={newPropertyData.ownerCpf}
+                        onChange={e =>
+                          setNewPropertyData({
+                            ...newPropertyData,
+                            ownerCpf: formatCpf(e.target.value),
+                          })
+                        }
+                        className="text-sm sm:text-base"
+                      />
+                    </div>
                   </div>
                 </div>
 

@@ -50,6 +50,9 @@ function Router() {
       <Route path={"/admin/users/:id"}>
         <ProtectedRoute component={AdminUserDetails} roles={["administrativo"]} />
       </Route>
+      <Route path={"/admin/proprietarios/:id"}>
+        <ProtectedRoute component={AdminUserDetails} roles={["administrativo"]} />
+      </Route>
       <Route path={"/admin"}>
         <ProtectedRoute component={Admin} roles={["administrativo"]} />
       </Route>

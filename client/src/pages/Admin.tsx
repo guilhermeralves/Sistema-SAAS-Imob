@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
+import { Link } from "wouter";
 import Layout from "@/components/Layout";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -19,49 +21,73 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { formatStoredDate } from "@/lib/date";
 import { trpc } from "@/lib/trpc";
-import { Building2, FileText, TrendingUp, User, Shield } from "lucide-react";
-import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
-import { Link } from "wouter";
+import { Building2, FileText, Search, Shield, TrendingUp, User } from "lucide-react";
+import { toast } from "sonner";
 
-/**
- * Painel Administrativo
- * 
- * Página exclusiva para administradores gerenciarem usuários, imóveis e visualizarem métricas.
- */
+function normalizeSearchValue(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
 
-function formatDate(date: Date | string) {
-  return new Date(date).toLocaleDateString("pt-BR");
+function buildSearchText(
+  item: Record<string, unknown>,
+  extraValues: Array<string | number | null | undefined> = []
+) {
+  const values = Object.entries(item)
+    .filter(([key, value]) => key !== "fotos" && value !== null && value !== undefined)
+    .flatMap(([, value]) => {
+      if (typeof value === "string" || typeof value === "number") {
+        return [String(value)];
+      }
+
+      if (value instanceof Date) {
+        return [formatStoredDate(value)];
+      }
+
+      return [];
+    });
+
+  const allValues = [
+    ...values,
+    ...extraValues
+      .filter(value => value !== null && value !== undefined)
+      .map(value => String(value)),
+  ];
+
+  return normalizeSearchValue(allValues.join(" "));
 }
 
 export default function Admin() {
   const { user, loading, isAuthenticated } = useAuth();
+  const [activeTab, setActiveTab] = useState("imoveis");
+  const [searchTerm, setSearchTerm] = useState("");
+
   const highlightedPropertyId = useMemo(() => {
     if (typeof window === "undefined") return null;
     const rawValue = new URLSearchParams(window.location.search).get("highlightProperty");
     return rawValue ? Number(rawValue) : null;
   }, []);
 
-  const { data: users } = trpc.admin.users.useQuery(
-    undefined,
-    { enabled: isAuthenticated && user?.role === "administrativo" }
-  );
+  const { data: users } = trpc.admin.users.useQuery(undefined, {
+    enabled: isAuthenticated && user?.role === "administrativo",
+  });
 
-  const { data: properties, isLoading: loadingProperties } = trpc.properties.list.useQuery(
-    undefined,
-    { enabled: isAuthenticated && user?.role === "administrativo" }
-  );
+  const { data: properties, isLoading: loadingProperties } = trpc.properties.list.useQuery(undefined, {
+    enabled: isAuthenticated && user?.role === "administrativo",
+  });
 
-  const { data: leads, isLoading: loadingLeads } = trpc.leads.list.useQuery(
-    undefined,
-    { enabled: isAuthenticated && user?.role === "administrativo" }
-  );
+  const { data: leads, isLoading: loadingLeads } = trpc.leads.list.useQuery(undefined, {
+    enabled: isAuthenticated && user?.role === "administrativo",
+  });
 
-  const { data: contracts, isLoading: loadingContracts } = trpc.contracts.list.useQuery(
-    undefined,
-    { enabled: isAuthenticated && user?.role === "administrativo" }
-  );
+  const { data: contracts, isLoading: loadingContracts } = trpc.contracts.list.useQuery(undefined, {
+    enabled: isAuthenticated && user?.role === "administrativo",
+  });
 
   const assignLead = trpc.leads.assign.useMutation({
     onSuccess: () => {
@@ -72,15 +98,79 @@ export default function Admin() {
     },
   });
 
-  const corretoresAtivos = users?.filter((u) => u.role === "corretor" && u.isActive === 1) || [];
+  const corretoresAtivos = users?.filter(candidate => candidate.role === "corretor" && candidate.isActive === 1) || [];
+  const normalizedSearchTerm = normalizeSearchValue(searchTerm.trim());
+
+  const filteredProperties = useMemo(() => {
+    if (!properties) return [];
+    if (!normalizedSearchTerm) return properties;
+
+    return properties.filter(property =>
+      buildSearchText(property as Record<string, unknown>, [
+        formatStoredDate(property.createdAt),
+        property.cidade,
+        property.estado,
+      ]).includes(normalizedSearchTerm)
+    );
+  }, [properties, normalizedSearchTerm]);
+
+  const filteredLeads = useMemo(() => {
+    if (!leads) return [];
+    if (!normalizedSearchTerm) return leads;
+
+    return leads.filter(lead =>
+      buildSearchText(lead as Record<string, unknown>, [formatStoredDate(lead.createdAt)]).includes(normalizedSearchTerm)
+    );
+  }, [leads, normalizedSearchTerm]);
+
+  const filteredContracts = useMemo(() => {
+    if (!contracts) return [];
+    if (!normalizedSearchTerm) return contracts;
+
+    return contracts.filter(contract =>
+      buildSearchText(contract as Record<string, unknown>, [
+        formatStoredDate(contract.createdAt),
+        formatStoredDate(contract.dataInicio),
+        contract.dataFim ? formatStoredDate(contract.dataFim) : null,
+      ]).includes(normalizedSearchTerm)
+    );
+  }, [contracts, normalizedSearchTerm]);
+
+  const totalImoveis = properties?.length || 0;
+  const imoveisAtivos = properties?.filter(property => property.status === "ativo").length || 0;
+  const totalLeads = leads?.length || 0;
+  const leadsFechados = leads?.filter(lead => lead.status === "fechado").length || 0;
+  const totalContratos = contracts?.length || 0;
+  const contratosAtivos = contracts?.filter(contract => contract.status === "ativo").length || 0;
+
+  useEffect(() => {
+    if (!highlightedPropertyId || !properties?.length || activeTab !== "imoveis") return;
+
+    const row = document.querySelector(`[data-property-row="${highlightedPropertyId}"]`);
+    if (row instanceof HTMLElement) {
+      row.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }, [activeTab, highlightedPropertyId, properties]);
+
+  const renderSearchInput = (placeholder: string) => (
+    <div className="relative mt-2 max-w-xl">
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <Input
+        value={searchTerm}
+        onChange={event => setSearchTerm(event.target.value)}
+        placeholder={placeholder}
+        className="pl-9"
+      />
+    </div>
+  );
 
   if (loading) {
     return (
       <Layout>
         <div className="container py-8">
           <div className="animate-pulse space-y-4">
-            <div className="h-8 bg-muted rounded w-1/3" />
-            <div className="h-64 bg-muted rounded" />
+            <div className="h-8 w-1/3 rounded bg-muted" />
+            <div className="h-64 rounded bg-muted" />
           </div>
         </div>
       </Layout>
@@ -91,9 +181,9 @@ export default function Admin() {
     return (
       <Layout>
         <div className="container py-16 text-center">
-          <User className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-          <h1 className="text-2xl font-bold mb-2">Acesso Restrito</h1>
-          <p className="text-muted-foreground mb-6">
+          <User className="mx-auto mb-4 h-16 w-16 text-muted-foreground" />
+          <h1 className="mb-2 text-2xl font-bold">Acesso Restrito</h1>
+          <p className="mb-6 text-muted-foreground">
             Você precisa estar autenticado para acessar o painel administrativo.
           </p>
           <Button asChild>
@@ -108,11 +198,9 @@ export default function Admin() {
     return (
       <Layout>
         <div className="container py-16 text-center">
-          <Shield className="h-16 w-16 mx-auto mb-4 text-destructive" />
-          <h1 className="text-2xl font-bold mb-2">Acesso Negado</h1>
-          <p className="text-muted-foreground mb-6">
-            Esta área é exclusiva para administradores.
-          </p>
+          <Shield className="mx-auto mb-4 h-16 w-16 text-destructive" />
+          <h1 className="mb-2 text-2xl font-bold">Acesso Negado</h1>
+          <p className="mb-6 text-muted-foreground">Esta área é exclusiva para administradores.</p>
           <Button asChild>
             <a href="/">Voltar para Home</a>
           </Button>
@@ -121,84 +209,55 @@ export default function Admin() {
     );
   }
 
-  // Cálculo de métricas
-  const totalImoveis = properties?.length || 0;
-  const imoveisAtivos = properties?.filter((p) => p.status === "ativo").length || 0;
-  const totalLeads = leads?.length || 0;
-  const leadsFechados = leads?.filter((l) => l.status === "fechado").length || 0;
-  const totalContratos = contracts?.length || 0;
-  const contratosAtivos = contracts?.filter((c) => c.status === "ativo").length || 0;
-
-  useEffect(() => {
-    if (!highlightedPropertyId || !properties?.length) return;
-
-    const row = document.querySelector(`[data-property-row="${highlightedPropertyId}"]`);
-    if (row instanceof HTMLElement) {
-      row.scrollIntoView({ block: "center", behavior: "smooth" });
-    }
-  }, [highlightedPropertyId, properties]);
-
   return (
     <Layout>
       <div className="container py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Painel Administrativo</h1>
-          <p className="text-muted-foreground">
-            Gerencie imóveis, leads e contratos do sistema
-          </p>
+          <h1 className="mb-2 text-3xl font-bold">Painel Administrativo</h1>
+          <p className="text-muted-foreground">Gerencie imóveis, leads e contratos do sistema</p>
           <div className="mt-4">
-            <Link href="/admin/users">
-              <a className="text-sm font-medium text-primary underline">
-                Abrir painel completo de usuários
-              </a>
+            <Link href="/admin/users" className="text-sm font-medium text-primary underline">
+              Abrir painel completo de usuários
             </Link>
           </div>
         </div>
 
-        {/* Métricas */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           <Card className="min-h-[124px] rounded-2xl border border-border/80 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between px-6 pt-5 pb-2">
+            <CardHeader className="flex flex-row items-center justify-between px-6 pb-2 pt-5">
               <CardTitle className="text-sm font-medium">Imóveis</CardTitle>
               <Building2 className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent className="px-6 pb-5 pt-0">
               <div className="text-3xl font-bold tracking-tight">{totalImoveis}</div>
-              <p className="text-xs text-muted-foreground">
-                {imoveisAtivos} ativos
-              </p>
+              <p className="text-xs text-muted-foreground">{imoveisAtivos} ativos</p>
             </CardContent>
           </Card>
 
           <Card className="min-h-[124px] rounded-2xl border border-border/80 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between px-6 pt-5 pb-2">
+            <CardHeader className="flex flex-row items-center justify-between px-6 pb-2 pt-5">
               <CardTitle className="text-sm font-medium">Leads</CardTitle>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent className="px-6 pb-5 pt-0">
               <div className="text-3xl font-bold tracking-tight">{totalLeads}</div>
-              <p className="text-xs text-muted-foreground">
-                {leadsFechados} fechados
-              </p>
+              <p className="text-xs text-muted-foreground">{leadsFechados} fechados</p>
             </CardContent>
           </Card>
 
           <Card className="min-h-[124px] rounded-2xl border border-border/80 shadow-sm">
-            <CardHeader className="flex flex-row items-center justify-between px-6 pt-5 pb-2">
+            <CardHeader className="flex flex-row items-center justify-between px-6 pb-2 pt-5">
               <CardTitle className="text-sm font-medium">Contratos</CardTitle>
               <FileText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent className="px-6 pb-5 pt-0">
               <div className="text-3xl font-bold tracking-tight">{totalContratos}</div>
-              <p className="text-xs text-muted-foreground">
-                {contratosAtivos} ativos
-              </p>
+              <p className="text-xs text-muted-foreground">{contratosAtivos} ativos</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Tabs de Gestão */}
-        <Tabs defaultValue="imoveis" className="space-y-6">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList>
             <TabsTrigger value="imoveis" className="gap-2">
               <Building2 className="h-4 w-4" />
@@ -214,23 +273,21 @@ export default function Admin() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Gestão de Imóveis */}
           <TabsContent value="imoveis">
             <Card>
               <CardHeader>
                 <CardTitle>Todos os Imóveis</CardTitle>
-                <CardDescription>
-                  Visualize todos os imóveis cadastrados no sistema
-                </CardDescription>
+                <CardDescription>Visualize todos os imóveis cadastrados no sistema</CardDescription>
+                {renderSearchInput("Pesquisar imóveis")}
               </CardHeader>
               <CardContent>
                 {loadingProperties ? (
                   <div className="space-y-3">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="h-16 bg-muted rounded animate-pulse" />
+                    {[1, 2, 3].map(item => (
+                      <div key={item} className="h-16 animate-pulse rounded bg-muted" />
                     ))}
                   </div>
-                ) : properties && properties.length > 0 ? (
+                ) : filteredProperties.length > 0 ? (
                   <div className="rounded-md border">
                     <Table>
                       <TableHeader>
@@ -244,60 +301,60 @@ export default function Admin() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {properties.map((p) => (
+                        {filteredProperties.map(property => (
                           <TableRow
-                            key={p.id}
-                            data-property-row={p.id}
-                            className={p.id === highlightedPropertyId ? "bg-primary/5 ring-1 ring-primary/20" : ""}
+                            key={property.id}
+                            data-property-row={property.id}
+                            className={property.id === highlightedPropertyId ? "bg-primary/5 ring-1 ring-primary/20" : ""}
                           >
-                            <TableCell className="font-medium">{p.titulo}</TableCell>
-                            <TableCell className="capitalize">{p.tipo}</TableCell>
-                            <TableCell>{p.cidade}/{p.estado}</TableCell>
+                            <TableCell className="font-medium">{property.titulo}</TableCell>
+                            <TableCell className="capitalize">{property.tipo}</TableCell>
+                            <TableCell>{property.cidade}/{property.estado}</TableCell>
                             <TableCell>
                               <span
-                                className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                  p.status === "ativo"
+                                className={`rounded-full px-2 py-1 text-xs font-medium ${
+                                  property.status === "ativo"
                                     ? "bg-green-100 text-green-700"
                                     : "bg-gray-100 text-gray-700"
                                 }`}
                               >
-                                {p.status}
+                                {property.status}
                               </span>
                             </TableCell>
-                            <TableCell>ID {p.idCorretor}</TableCell>
-                            <TableCell>{formatDate(p.createdAt)}</TableCell>
+                            <TableCell>ID {property.idCorretor}</TableCell>
+                            <TableCell>{formatStoredDate(property.createdAt)}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
                     </Table>
                   </div>
                 ) : (
-                  <div className="text-center py-12">
-                    <Building2 className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                    <p className="text-muted-foreground">Nenhum imóvel cadastrado</p>
+                  <div className="py-12 text-center">
+                    <Building2 className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+                    <p className="text-muted-foreground">
+                      {searchTerm ? "Nenhum imóvel encontrado para essa pesquisa" : "Nenhum imóvel cadastrado"}
+                    </p>
                   </div>
                 )}
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Gestão de Leads */}
           <TabsContent value="leads">
             <Card>
               <CardHeader>
                 <CardTitle>Todos os Leads</CardTitle>
-                <CardDescription>
-                  Visualize todos os leads do sistema
-                </CardDescription>
+                <CardDescription>Visualize todos os leads do sistema</CardDescription>
+                {renderSearchInput("Pesquisar leads")}
               </CardHeader>
               <CardContent>
                 {loadingLeads ? (
                   <div className="space-y-3">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="h-16 bg-muted rounded animate-pulse" />
+                    {[1, 2, 3].map(item => (
+                      <div key={item} className="h-16 animate-pulse rounded bg-muted" />
                     ))}
                   </div>
-                ) : leads && leads.length > 0 ? (
+                ) : filteredLeads.length > 0 ? (
                   <div className="rounded-md border">
                     <Table>
                       <TableHeader>
@@ -312,23 +369,23 @@ export default function Admin() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {leads.map((l) => (
-                          <TableRow key={l.id}>
-                            <TableCell className="font-medium">{l.nome}</TableCell>
-                            <TableCell>{l.email || "—"}</TableCell>
-                            <TableCell>{l.telefone || "—"}</TableCell>
+                        {filteredLeads.map(lead => (
+                          <TableRow key={lead.id}>
+                            <TableCell className="font-medium">{lead.nome}</TableCell>
+                            <TableCell>{lead.email || "—"}</TableCell>
+                            <TableCell>{lead.telefone || "—"}</TableCell>
                             <TableCell>
-                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary capitalize">
-                                {l.status}
+                              <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium capitalize text-primary">
+                                {lead.status}
                               </span>
                             </TableCell>
-                            <TableCell className="capitalize">{l.origem || "—"}</TableCell>
+                            <TableCell className="capitalize">{lead.origem || "—"}</TableCell>
                             <TableCell>
                               <Select
-                                value={l.idResponsavel ? String(l.idResponsavel) : "unassigned"}
-                                onValueChange={(value) =>
+                                value={lead.idResponsavel ? String(lead.idResponsavel) : "unassigned"}
+                                onValueChange={value =>
                                   assignLead.mutate({
-                                    leadId: l.id,
+                                    leadId: lead.id,
                                     userId: value === "unassigned" ? null : Number(value),
                                   })
                                 }
@@ -338,7 +395,7 @@ export default function Admin() {
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="unassigned">Não atribuído</SelectItem>
-                                  {corretoresAtivos.map((corretor) => (
+                                  {corretoresAtivos.map(corretor => (
                                     <SelectItem key={corretor.id} value={String(corretor.id)}>
                                       {corretor.name || corretor.email || `Corretor #${corretor.id}`}
                                     </SelectItem>
@@ -346,39 +403,39 @@ export default function Admin() {
                                 </SelectContent>
                               </Select>
                             </TableCell>
-                            <TableCell>{formatDate(l.createdAt)}</TableCell>
+                            <TableCell>{formatStoredDate(lead.createdAt)}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
                     </Table>
                   </div>
                 ) : (
-                  <div className="text-center py-12">
-                    <TrendingUp className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                    <p className="text-muted-foreground">Nenhum lead encontrado</p>
+                  <div className="py-12 text-center">
+                    <TrendingUp className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+                    <p className="text-muted-foreground">
+                      {searchTerm ? "Nenhum lead encontrado para essa pesquisa" : "Nenhum lead encontrado"}
+                    </p>
                   </div>
                 )}
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Gestão de Contratos */}
           <TabsContent value="contratos">
             <Card>
               <CardHeader>
                 <CardTitle>Todos os Contratos</CardTitle>
-                <CardDescription>
-                  Visualize todos os contratos do sistema
-                </CardDescription>
+                <CardDescription>Visualize todos os contratos do sistema</CardDescription>
+                {renderSearchInput("Pesquisar contratos")}
               </CardHeader>
               <CardContent>
                 {loadingContracts ? (
                   <div className="space-y-3">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="h-16 bg-muted rounded animate-pulse" />
+                    {[1, 2, 3].map(item => (
+                      <div key={item} className="h-16 animate-pulse rounded bg-muted" />
                     ))}
                   </div>
-                ) : contracts && contracts.length > 0 ? (
+                ) : filteredContracts.length > 0 ? (
                   <div className="rounded-md border">
                     <Table>
                       <TableHeader>
@@ -392,33 +449,35 @@ export default function Admin() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {contracts.map((c) => (
-                          <TableRow key={c.id}>
-                            <TableCell className="font-medium">#{c.id}</TableCell>
-                            <TableCell>ID {c.idCliente}</TableCell>
-                            <TableCell>ID {c.idImovel}</TableCell>
-                            <TableCell className="capitalize">{c.tipo}</TableCell>
+                        {filteredContracts.map(contract => (
+                          <TableRow key={contract.id}>
+                            <TableCell className="font-medium">#{contract.id}</TableCell>
+                            <TableCell>ID {contract.idCliente}</TableCell>
+                            <TableCell>ID {contract.idImovel}</TableCell>
+                            <TableCell className="capitalize">{contract.tipo}</TableCell>
                             <TableCell>
                               <span
-                                className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                  c.status === "ativo"
+                                className={`rounded-full px-2 py-1 text-xs font-medium ${
+                                  contract.status === "ativo"
                                     ? "bg-green-100 text-green-700"
                                     : "bg-gray-100 text-gray-700"
                                 }`}
                               >
-                                {c.status}
+                                {contract.status}
                               </span>
                             </TableCell>
-                            <TableCell>{formatDate(c.dataInicio)}</TableCell>
+                            <TableCell>{formatStoredDate(contract.dataInicio)}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
                     </Table>
                   </div>
                 ) : (
-                  <div className="text-center py-12">
-                    <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                    <p className="text-muted-foreground">Nenhum contrato encontrado</p>
+                  <div className="py-12 text-center">
+                    <FileText className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+                    <p className="text-muted-foreground">
+                      {searchTerm ? "Nenhum contrato encontrado para essa pesquisa" : "Nenhum contrato encontrado"}
+                    </p>
                   </div>
                 )}
               </CardContent>
