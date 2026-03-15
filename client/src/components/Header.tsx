@@ -1,4 +1,5 @@
 import { Link } from "wouter";
+import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { APP_LOGO, getLoginUrl, getRegisterUrl } from "@/const";
 import { Button } from "@/components/ui/button";
@@ -11,60 +12,58 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ROLE_LABELS } from "@shared/auth";
-import { Menu, User, LogOut, Home, Building2, Briefcase, Phone, Users, LayoutDashboard, Settings } from "lucide-react";
-import { useState } from "react";
+import {
+  Briefcase,
+  Building2,
+  Home,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Phone,
+  Settings,
+  User,
+  Users,
+} from "lucide-react";
 
-/**
- * Header Component
- * 
- * Componente de cabeçalho com navegação dinâmica baseada em roles de usuário.
- * 
- * EDIÇÃO:
- * - Para alterar o logo: modifique APP_LOGO em client/src/const.ts
- * - Para alterar o título: modifique APP_TITLE em client/src/const.ts
- * - Para adicionar/remover itens do menu: edite as seções menuItems abaixo
- */
 export default function Header() {
   const { user, loading, isAuthenticated, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const isRootAdmin =
+    user?.role === "administrativo" && user?.registrationSource === "bootstrap";
+
   const { data: hasNewUsers } = trpc.admin.hasNewUsers.useQuery(undefined, {
     enabled: isAuthenticated && user?.role === "administrativo",
     refetchOnWindowFocus: true,
   });
 
-  // Menu público (visível para todos)
   const publicMenuItems = [
     { href: "/", label: "Home", icon: Home },
-    { href: "/imoveis", label: "Imóveis", icon: Building2 },
-    { href: "/servicos", label: "Nossos Serviços", icon: Briefcase },
+    { href: "/imoveis", label: "Im\u00f3veis", icon: Building2 },
+    { href: "/servicos", label: "Nossos Servi\u00e7os", icon: Briefcase },
     { href: "/contato", label: "Fale Conosco", icon: Phone },
   ];
 
-  // Menu para clientes autenticados
   const clienteMenuItems = [
-    { href: "/area-cliente", label: "Área do Cliente", icon: User },
+    { href: "/area-cliente", label: "\u00c1rea do Cliente", icon: User },
   ];
 
-  // Menu para corretores
   const corretorMenuItems = [
     { href: "/crm", label: "CRM", icon: LayoutDashboard },
-    { href: "/meus-imoveis", label: "Meus Imóveis", icon: Building2 },
+    { href: "/meus-imoveis", label: "Meus Im\u00f3veis", icon: Building2 },
   ];
 
-  // Itens para administrativos
   const adminMenuItems = [
-    { href: "/admin/users", label: "Usuários", icon: Users },
+    { href: "/admin/users", label: "Usu\u00e1rios", icon: Users },
     { href: "/crm", label: "CRM", icon: LayoutDashboard },
     { href: "/admin", label: "Painel Admin", icon: Settings },
   ];
 
-  // Determina quais itens no cabeçalho mostrar baseado no regra de usuário
   const getMenuItems = () => {
     const items =
       isAuthenticated && user && user.role !== "cliente"
         ? publicMenuItems.filter(item => item.href !== "/contato")
         : [...publicMenuItems];
-    
+
     if (isAuthenticated && user) {
       if (user.role === "cliente") {
         items.push(...clienteMenuItems);
@@ -74,7 +73,7 @@ export default function Header() {
         items.push(...adminMenuItems);
       }
     }
-    
+
     return items;
   };
 
@@ -100,21 +99,17 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-15 items-center justify-between">
-        {/* Logo e Título */}
         <Link href="/">
-          <a className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-            {APP_LOGO && (
-              <img src={APP_LOGO} className="h-15 w-15 object-contain" />
-            )}
+          <a className="flex items-center gap-3 transition-opacity hover:opacity-80">
+            {APP_LOGO ? <img src={APP_LOGO} className="h-15 w-15 object-contain" /> : null}
           </a>
         </Link>
 
-        {/* Menu Desktop */}
-        <nav className="hidden md:flex items-center gap-6">
-          {menuItems.map((item) => (
+        <nav className="hidden items-center gap-6 md:flex">
+          {menuItems.map(item => (
             <Link key={item.href} href={item.href}>
               <a
-                className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
+                className="flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-primary"
                 onClick={event => handleMenuNavigation(event, item.href)}
               >
                 <item.icon className="h-4 w-4" />
@@ -133,10 +128,9 @@ export default function Header() {
           ))}
         </nav>
 
-        {/* Área de Usuário */}
         <div className="flex items-center gap-4">
           {loading ? (
-            <div className="h-9 w-24 animate-pulse bg-muted rounded" />
+            <div className="h-9 w-24 animate-pulse rounded bg-muted" />
           ) : isAuthenticated && user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -146,25 +140,27 @@ export default function Header() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <Link href="/minha-ficha">
-                  <a className="block rounded-sm px-2 py-1.5 text-sm transition-colors hover:bg-accent">
-                    <p className="font-medium">{user.name || "Usuário"}</p>
-                    <p className="text-xs text-muted-foreground">{user.email}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Papel: {ROLE_LABELS[user.role]}
-                    </p>
-                  </a>
-                </Link>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/minha-ficha">
-                    <a className="flex items-center gap-2">
-                      <User className="h-4 w-4" />
-                      Meu Perfil
-                    </a>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => logout()} className="gap-2 cursor-pointer">
+                <div className="rounded-sm px-2 py-1.5 text-sm">
+                  <p className="font-medium">{user.name || "Usu\u00e1rio"}</p>
+                  <p className="text-xs text-muted-foreground">{user.email}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Papel: {ROLE_LABELS[user.role]}
+                  </p>
+                </div>
+                {!isRootAdmin ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link href="/minha-ficha">
+                        <a className="flex items-center gap-2">
+                          <User className="h-4 w-4" />
+                          Meu Perfil
+                        </a>
+                      </Link>
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
+                <DropdownMenuItem onClick={() => logout()} className="cursor-pointer gap-2">
                   <LogOut className="h-4 w-4" />
                   Sair
                 </DropdownMenuItem>
@@ -181,7 +177,6 @@ export default function Header() {
             </div>
           )}
 
-          {/* Menu Mobile */}
           <Button
             variant="ghost"
             size="sm"
@@ -193,14 +188,13 @@ export default function Header() {
         </div>
       </div>
 
-      {/* Menu Mobile Expandido */}
-      {mobileMenuOpen && (
-        <div className="md:hidden border-t bg-background">
-          <nav className="container py-4 flex flex-col gap-3">
-            {menuItems.map((item) => (
+      {mobileMenuOpen ? (
+        <div className="border-t bg-background md:hidden">
+          <nav className="container flex flex-col gap-3 py-4">
+            {menuItems.map(item => (
               <Link key={item.href} href={item.href}>
                 <a
-                  className="flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-primary hover:bg-accent transition-colors"
+                  className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-primary"
                   onClick={event => handleMenuNavigation(event, item.href, true)}
                 >
                   <item.icon className="h-4 w-4" />
@@ -219,7 +213,7 @@ export default function Header() {
             ))}
           </nav>
         </div>
-      )}
+      ) : null}
     </header>
   );
 }

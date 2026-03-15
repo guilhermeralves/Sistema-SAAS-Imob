@@ -109,7 +109,11 @@ export default function AdminUserDetails() {
   const [cepError, setCepError] = useState("");
   const cepTimeoutRef = useRef<number | null>(null);
 
-  const { data: adminUser, isLoading: adminUserLoading } = trpc.admin.userById.useQuery(
+  const {
+    data: adminUser,
+    isLoading: adminUserLoading,
+    error: adminUserError,
+  } = trpc.admin.userById.useQuery(
     { id: userId },
     { enabled: isAdminRoute && Number.isFinite(userId) }
   );
@@ -147,12 +151,18 @@ export default function AdminUserDetails() {
   const isFromClientArea =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("from") === "area-cliente";
+  const isSelfRootAdmin =
+    isSelfRoute &&
+    selfUser?.role === "administrativo" &&
+    selfUser?.registrationSource === "bootstrap";
   const fromPropertyId =
     typeof window !== "undefined"
       ? new URLSearchParams(window.location.search).get("fromProperty")
       : null;
   const backHref = fromPropertyId
     ? `/imoveis/${fromPropertyId}`
+    : isSelfRootAdmin
+      ? "/admin"
     : isEditingSelf
       ? (isFromClientArea ? "/area-cliente" : "/")
       : isOwnerDetails
@@ -160,6 +170,8 @@ export default function AdminUserDetails() {
         : "/admin/users";
   const backLabel = fromPropertyId
     ? "Voltar para imovel"
+    : isSelfRootAdmin
+      ? "Voltar para painel admin"
     : isEditingSelf
       ? isFromClientArea
         ? "Voltar para \u00C1rea do Cliente"
@@ -167,6 +179,11 @@ export default function AdminUserDetails() {
       : isOwnerDetails
         ? "Voltar para painel admin"
         : "Voltar para usu\u00E1rios";
+  const accessBlockedMessage = isSelfRootAdmin
+    ? "A ficha do admin principal não está disponível no sistema."
+    : adminUserError?.message?.includes("ficha do admin principal")
+      ? "A ficha do admin principal não está disponível no sistema."
+      : null;
 
   const updateUserDetails = trpc.admin.updateUserDetails.useMutation({
     onSuccess: async () => {
@@ -453,7 +470,13 @@ export default function AdminUserDetails() {
           </div>
         </div>
 
-        {isLoading || !form ? (
+        {accessBlockedMessage ? (
+          <Card>
+            <CardContent className="py-8 text-sm text-muted-foreground">
+              {accessBlockedMessage}
+            </CardContent>
+          </Card>
+        ) : isLoading || !form ? (
           <Card>
             <CardContent className="py-8">
               <div className="space-y-3">
@@ -683,14 +706,14 @@ export default function AdminUserDetails() {
             {!isOwnerDetails ? (
             <Card>
               <CardHeader>
-                <CardTitle>Informações para contratos</CardTitle>
+                <CardTitle>Informações para Contratos</CardTitle>
                 <CardDescription>
                   Estes campos são importantes para venda e locação.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>Data de nascimento</Label>
+                  <Label>Data de Nascimento</Label>
                   <DateInput
                     disabled={isReadOnlyAdminAccount}
                     value={form.birthDate}
@@ -698,7 +721,7 @@ export default function AdminUserDetails() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Profiss?o</Label>
+                  <Label>Profissão</Label>
                   <Input
                     value={form.profession}
                     disabled={isReadOnlyAdminAccount}
@@ -706,7 +729,7 @@ export default function AdminUserDetails() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Sal?rio bruto mensal</Label>
+                  <Label>Salário Bruto Mensal</Label>
                   <MoneyInput
                     disabled={isReadOnlyAdminAccount}
                     value={form.grossMonthlyIncome}
@@ -719,7 +742,7 @@ export default function AdminUserDetails() {
                 </div>
                 <div className="grid gap-4 md:grid-cols-[220px_220px]">
                   <div className="space-y-2">
-                    <Label>Estado civil</Label>
+                    <Label>Estado Civil</Label>
                   <Select
                     value={form.maritalStatus || "empty"}
                     disabled={isReadOnlyAdminAccount}
@@ -732,7 +755,7 @@ export default function AdminUserDetails() {
                   >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="empty">N?o informado</SelectItem>
+                      <SelectItem value="empty">Não Informado</SelectItem>
                       {USER_PROFILE_MARITAL_STATUSES.map(status => (
                         <SelectItem key={status} value={status}>
                           {getMaritalStatusLabel(status)}
@@ -755,7 +778,7 @@ export default function AdminUserDetails() {
                   >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="empty">Nao informado</SelectItem>
+                      <SelectItem value="empty">Não Informado</SelectItem>
                       {SOUTH_AMERICAN_NATIONALITIES.map(nationality => (
                         <SelectItem key={nationality} value={nationality}>
                           {nationality}
@@ -766,7 +789,7 @@ export default function AdminUserDetails() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Renda familiar conjunta</Label>
+                  <Label>Renda Familiar Conjunta</Label>
                   <MoneyInput
                     disabled={isReadOnlyAdminAccount}
                     value={form.householdIncome}
@@ -797,7 +820,7 @@ export default function AdminUserDetails() {
                 {!isOwnerDetails ? (
                   <>
                     <div className="space-y-2 md:col-span-2">
-                      <Label>Endere?o</Label>
+                      <Label>Endereço</Label>
                       <Input
                         value={form.address}
                         disabled={isReadOnlyAdminAccount}
@@ -805,7 +828,7 @@ export default function AdminUserDetails() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>N?mero</Label>
+                      <Label>Número</Label>
                       <Input
                         value={form.addressNumber}
                         disabled={isReadOnlyAdminAccount}

@@ -511,11 +511,17 @@ export default function ImovelDetalhes() {
                       <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Cadastrado por</p>
                       {imovel.cadastradoPor ? (
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                          <Link href={`/admin/users/${imovel.cadastradoPor.id}?fromProperty=${imovel.id}`}>
-                            <a className="text-base font-semibold text-primary underline">
-                              {imovel.cadastradoPor.name || imovel.cadastradoPor.email}
-                            </a>
-                          </Link>
+                          {imovel.cadastradoPor.registrationSource === "bootstrap" ? (
+                            <span className="text-base font-semibold text-foreground">
+                              {imovel.cadastradoPor.name || "Administrador"}
+                            </span>
+                          ) : (
+                            <Link href={`/admin/users/${imovel.cadastradoPor.id}?fromProperty=${imovel.id}`}>
+                              <a className="text-base font-semibold text-primary underline">
+                                {imovel.cadastradoPor.name || imovel.cadastradoPor.email}
+                              </a>
+                            </Link>
+                          )}
                           {imovel.createdAt ? (
                             <span className="text-sm text-muted-foreground">
                               {formatStoredDateTime(imovel.createdAt)}

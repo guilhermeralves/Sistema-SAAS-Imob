@@ -1,4 +1,4 @@
-import { useAuth } from "@/_core/hooks/useAuth";
+﻿import { useAuth } from "@/_core/hooks/useAuth";
 import Layout from "@/components/Layout";
 import {
   AlertDialog,
@@ -49,7 +49,7 @@ import { formatCpf, isValidCpf, normalizeCpf } from "@/lib/cpf";
 import { formatStoredDate } from "@/lib/date";
 import { trpc } from "@/lib/trpc";
 import { ROLE_LABELS, type AppRole } from "@shared/auth";
-import { AlertTriangle, BadgeCheck, Clock3, MoreHorizontal, Plus, Search, Shield, Trash2, UserCog } from "lucide-react";
+import { AlertTriangle, BadgeCheck, Clock3, MoreHorizontal, Plus, Search, Shield, Trash2, UserCog, UserRound } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Link } from "wouter";
@@ -63,6 +63,7 @@ type EditState = {
   role: EditableRole;
   isActive: "0" | "1";
   password: string;
+  passwordOnly?: boolean;
 } | null;
 
 type DeleteState = {
@@ -400,7 +401,7 @@ export default function AdminUsers() {
                           Interesse anterior: {formatLeadInterest(leadLinkPreview.latestInterest)}
                         </p>
                         <p>
-                          Origem: {leadLinkPreview.latestOrigin || "Nao informada"} •{" "}
+                          Origem: {leadLinkPreview.latestOrigin || "Nao informada"} â€¢{" "}
                           {leadLinkPreview.leadCount} lead(s)
                         </p>
                       </div>
@@ -514,8 +515,8 @@ export default function AdminUsers() {
             <div className="flex items-center justify-between gap-4">
               <div>
                 <CardTitle className="flex items-center gap-1 text-xl">
-                  <Shield className="h-5 w-5" />
-                  Lista de todos os usuarios
+                  <UserRound className="h-5 w-5" />
+                  Todos os Usuarios
                 </CardTitle>
                 <CardDescription className="mt-2">
                   Gerencie informacoes e permissoes de qualquer cadastro, mesmo que inativo.
@@ -592,6 +593,10 @@ export default function AdminUsers() {
                       const actingIsRootAdmin =
                         authenticatedUser?.role === "administrativo" &&
                         authenticatedUser?.registrationSource === "bootstrap";
+                      const canChangeRootPassword =
+                        isBootstrapAdmin &&
+                        actingIsRootAdmin &&
+                        authenticatedUser?.id === user.id;
                       const canEditAdminTarget =
                         user.role !== "administrativo" ||
                         actingIsRootAdmin ||
@@ -633,8 +638,8 @@ export default function AdminUsers() {
                             </div>
                           </TableCell>
                           <TableCell>{user.email || "-"}</TableCell>
-                          <TableCell>{ROLE_LABELS[user.role]}</TableCell>
-                          <TableCell>{user.isActive === 1 ? "Ativo" : "Inativo"}</TableCell>
+                          <TableCell>{isBootstrapAdmin ? "-" : ROLE_LABELS[user.role]}</TableCell>
+                          <TableCell>{isBootstrapAdmin ? "-" : user.isActive === 1 ? "Ativo" : "Inativo"}</TableCell>
                           <TableCell>
                             {user.isNewForAdmin ? (
                               <span className="inline-flex items-center rounded-full bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground">
@@ -645,38 +650,70 @@ export default function AdminUsers() {
                             )}
                           </TableCell>
                           <TableCell>
-                            <Button variant="outline" size="sm" asChild>
-                              <Link href={`/admin/users/${user.id}`}>
-                                <a>Ver ficha</a>
-                              </Link>
-                            </Button>
+                            {isBootstrapAdmin ? (
+                              <span className="text-xs font-medium text-muted-foreground">
+                                -
+                              </span>
+                            ) : (
+                              <Button variant="outline" size="sm" asChild>
+                                <Link href={`/admin/users/${user.id}`}>
+                                  <a>Ver ficha</a>
+                                </Link>
+                              </Button>
+                            )}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="gap-2"
-                                onClick={() => {
-                                  if (!canEditAdminTarget) {
-                                    toast.error(
-                                      "Apenas o proprio administrador ou o admin principal podem editar contas administrativas."
-                                    );
-                                    return;
+                              {canChangeRootPassword ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="gap-2"
+                                  onClick={() =>
+                                    setEditState({
+                                      id: user.id,
+                                      name: user.name || "",
+                                      role: user.role,
+                                      isActive: String(user.isActive) as "0" | "1",
+                                      password: "",
+                                      passwordOnly: true,
+                                    })
                                   }
+                                >
+                                  <UserCog className="h-4 w-4" />
+                                  Editar
+                                </Button>
+                              ) : isBootstrapAdmin ? (
+                                <span className="text-xs font-medium text-muted-foreground">
+                                  -
+                                </span>
+                              ) : (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="gap-2"
+                                  onClick={() => {
+                                    if (!canEditAdminTarget) {
+                                      toast.error(
+                                        "Apenas o proprio administrador ou o admin principal podem editar contas administrativas."
+                                      );
+                                      return;
+                                    }
 
-                                  setEditState({
-                                    id: user.id,
-                                    name: user.name || "",
-                                    role: user.role,
-                                    isActive: String(user.isActive) as "0" | "1",
-                                    password: "",
-                                  });
-                                }}
-                              >
-                                <UserCog className="h-4 w-4" />
-                                Editar
-                              </Button>
+                                    setEditState({
+                                      id: user.id,
+                                      name: user.name || "",
+                                      role: user.role,
+                                      isActive: String(user.isActive) as "0" | "1",
+                                      password: "",
+                                      passwordOnly: false,
+                                    });
+                                  }}
+                                >
+                                  <UserCog className="h-4 w-4" />
+                                  Editar
+                                </Button>
+                              )}
                               {isBootstrapAdmin ? null : (
                                 <Button
                                   variant="outline"
@@ -710,76 +747,84 @@ export default function AdminUsers() {
         </Card>
 
         <Dialog open={Boolean(editState)} onOpenChange={open => !open && setEditState(null)}>
-          <DialogContent
-            className="sm:max-w-md lg:max-w-xl"
-            onOpenAutoFocus={event => event.preventDefault()}
-          >
-            <DialogHeader>
-              <DialogTitle>Editar Usuario</DialogTitle>
-              <DialogDescription>
-                Atualize papel, status e senha quando necessario.
-              </DialogDescription>
-            </DialogHeader>
+            <DialogContent
+              className="sm:max-w-md lg:max-w-xl"
+              onOpenAutoFocus={event => event.preventDefault()}
+            >
+              <DialogHeader>
+                <DialogTitle>
+                  {editState?.passwordOnly ? "Trocar senha do Administrador" : "Editar Usuario"}
+                </DialogTitle>
+                <DialogDescription>
+                  {editState?.passwordOnly
+                    ? "Para o admin principal, somente a senha pode ser alterada."
+                    : "Atualize papel, status e senha quando necessario."}
+                </DialogDescription>
+              </DialogHeader>
 
-            {editState && (
+              {editState && (
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-name">Nome</Label>
-                  <Input
-                    id="edit-name"
-                    value={editState.name}
-                    onChange={event =>
-                      setEditState(current =>
-                        current
-                          ? { ...current, name: event.target.value }
-                          : current
-                      )
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Papel</Label>
-                  <Select
-                    value={editState.role}
-                    onValueChange={value =>
-                      setEditState(current =>
-                        current
-                          ? { ...current, role: value as EditableRole }
-                          : current
-                      )
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="cliente">Cliente</SelectItem>
-                      <SelectItem value="corretor">Corretor</SelectItem>
-                      <SelectItem value="administrativo">Admin</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Select
-                    value={editState.isActive}
-                    onValueChange={value =>
-                      setEditState(current =>
-                        current
-                          ? { ...current, isActive: value as "0" | "1" }
-                          : current
-                      )
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">Ativo</SelectItem>
-                      <SelectItem value="0">Inativo</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                {editState.passwordOnly ? null : (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-name">Nome</Label>
+                      <Input
+                        id="edit-name"
+                        value={editState.name}
+                        onChange={event =>
+                          setEditState(current =>
+                            current
+                              ? { ...current, name: event.target.value }
+                              : current
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Papel</Label>
+                      <Select
+                        value={editState.role}
+                        onValueChange={value =>
+                          setEditState(current =>
+                            current
+                              ? { ...current, role: value as EditableRole }
+                              : current
+                          )
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cliente">Cliente</SelectItem>
+                          <SelectItem value="corretor">Corretor</SelectItem>
+                          <SelectItem value="administrativo">Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Status</Label>
+                      <Select
+                        value={editState.isActive}
+                        onValueChange={value =>
+                          setEditState(current =>
+                            current
+                              ? { ...current, isActive: value as "0" | "1" }
+                              : current
+                          )
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">Ativo</SelectItem>
+                          <SelectItem value="0">Inativo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="edit-password">Nova senha</Label>
                   <Input
@@ -800,15 +845,27 @@ export default function AdminUsers() {
                 <Button
                   className="w-full"
                   disabled={updateUser.isPending}
-                  onClick={() =>
-                    updateUser.mutate({
-                      id: editState.id,
-                      name: editState.name || undefined,
-                      role: editState.role,
-                      isActive: Number(editState.isActive) as 0 | 1,
-                      password: editState.password || undefined,
-                    })
-                  }
+                  onClick={() => {
+                    if (editState.passwordOnly && !editState.password) {
+                      toast.error("Informe a nova senha para continuar.");
+                      return;
+                    }
+
+                    updateUser.mutate(
+                      editState.passwordOnly
+                        ? {
+                            id: editState.id,
+                            password: editState.password,
+                          }
+                        : {
+                            id: editState.id,
+                            name: editState.name || undefined,
+                            role: editState.role,
+                            isActive: Number(editState.isActive) as 0 | 1,
+                            password: editState.password || undefined,
+                          }
+                    );
+                  }}
                 >
                   {updateUser.isPending ? "Salvando..." : "Salvar alteracoes"}
                 </Button>
@@ -954,3 +1011,4 @@ export default function AdminUsers() {
     </Layout>
   );
 }
+

@@ -249,6 +249,34 @@ function isRootAdmin(user: {
   );
 }
 
+function assertRootAdminProfileAccessible(user: {
+  role: "cliente" | "corretor" | "administrativo";
+  openId?: string | null;
+  registrationSource?: string | null;
+  email?: string | null;
+}) {
+  if (isRootAdmin(user)) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "A ficha do admin principal nao esta disponivel no sistema.",
+    });
+  }
+}
+
+function assertRootAdminMutable(user: {
+  role: "cliente" | "corretor" | "administrativo";
+  openId?: string | null;
+  registrationSource?: string | null;
+  email?: string | null;
+}) {
+  if (isRootAdmin(user)) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "O admin principal possui dados fixos e nao pode ser alterado.",
+    });
+  }
+}
+
 type LeadLinkPreview = {
   leadCount: number;
   latestLeadId: number;
@@ -539,16 +567,16 @@ export const appRouter = router({
       const user = await getUserByEmail(input.email);
 
       if (!user || !user.passwordHash) {
-        throw new TRPCError({ code: "UNAUTHORIZED", message: "E-mail ou senha inválidos" });
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "E-mail ou senha inválidos." });
 
       }
       if (user.isActive !== 1) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Usu?rio desativado" });
+        throw new TRPCError({ code: "FORBIDDEN", message: "Usuário Desativado. Contate o administrador." });
       }
 
       const isPasswordValid = await verifyPassword(input.password, user.passwordHash);
       if (!isPasswordValid) {
-        throw new TRPCError({ code: "UNAUTHORIZED", message: "E-mail ou senha inválidos" });
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "E-mail ou senha inválidos." });
       }
 
       await upsertUser({
@@ -608,7 +636,7 @@ export const appRouter = router({
       if (!idCorretor) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "Selecione o corretor responsavel antes de cadastrar o imovel",
+          message: "Selecione o corretor responsavel antes de cadastrar o imovel.",
         });
       }
 
@@ -661,7 +689,7 @@ export const appRouter = router({
       if (!idCorretor) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "Selecione o corretor responsavel antes de salvar o imovel",
+          message: "Selecione o corretor responsavel antes de salvar o imóvel.",
         });
       }
 
@@ -909,6 +937,7 @@ export const appRouter = router({
       if (!user) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Usuario nao encontrado" });
       }
+      assertRootAdminMutable(user);
       /*
 
         throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
@@ -968,7 +997,9 @@ export const appRouter = router({
       return await hasNewPublicUsersForAdmin(ctx.user.id);
     }),
     userById: adminProcedure.input(idSchema).query(async ({ ctx, input }) => {
-      return await getAdminUserWithFlags(ctx.user.id, input.id);
+      const user = await getAdminUserWithFlags(ctx.user.id, input.id);
+      assertRootAdminProfileAccessible(user);
+      return user;
     }),
     propertyOwnerById: adminProcedure.input(idSchema).query(async ({ input }) => {
       const { getPropertyOwnerById, getUserById } = await import("./db");
@@ -1067,16 +1098,20 @@ export const appRouter = router({
 
       const actingIsRoot = isRootAdmin(actingUser);
       const targetIsRoot = isRootAdmin(targetUser);
+      const isRootPasswordOnlyUpdate =
+        targetIsRoot &&
+        targetUser.id === ctx.user.id &&
+        input.password !== undefined &&
+        input.name === undefined &&
+        input.role === undefined &&
+        input.isActive === undefined;
+
+      if (targetIsRoot && !isRootPasswordOnlyUpdate) {
+        assertRootAdminMutable(targetUser);
+      }
 
       if (ctx.user.id === targetUser.id && input.isActive === 0) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Voce nao pode desativar sua propria conta" });
-      }
-
-      if (targetIsRoot && ((input.role && input.role !== "administrativo") || input.isActive === 0)) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "O admin principal do sistema nao pode perder acesso ou permissao",
-        });
       }
 
       if (
@@ -1279,11 +1314,8 @@ export const appRouter = router({
         const actingIsRoot = isRootAdmin(actingUser);
         const targetIsRoot = isRootAdmin(user);
 
-        if (targetIsRoot && (input.role !== "administrativo" || input.isActive !== 1)) {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "O admin principal do sistema nao pode perder acesso ou permissao",
-          });
+        if (targetIsRoot) {
+          assertRootAdminMutable(user);
         }
 
         if (
@@ -1408,4 +1440,3 @@ export const appRouter = router({
 });
 
 export type AppRouter = typeof appRouter;
-
