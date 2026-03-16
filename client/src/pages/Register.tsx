@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getLoginUrl } from "@/const";
+import { getPostLoginPath } from "@/lib/auth-routing";
 import { formatCpf, isValidCpf, normalizeCpf } from "@/lib/cpf";
 import { trpc } from "@/lib/trpc";
 import { UserPlus } from "lucide-react";
@@ -34,9 +35,9 @@ export default function Register() {
     return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
   };
 
-  const redirectToHomeWithRefresh = () => {
+  const redirectWithRefresh = (path: string) => {
     if (typeof window !== "undefined") {
-      window.location.assign("/");
+      window.location.assign(path);
     }
   };
 
@@ -49,12 +50,12 @@ export default function Register() {
           `Encontramos um interesse anterior em: ${data.linkedLeadPreview.latestInterest}. Seu acesso foi vinculado a esse lead.`
         );
         window.setTimeout(() => {
-          redirectToHomeWithRefresh();
+          redirectWithRefresh(getPostLoginPath(data.user));
         }, 1200);
         return;
       }
 
-      redirectToHomeWithRefresh();
+      redirectWithRefresh(getPostLoginPath(data.user));
     },
     onError: error => {
       toast.error(error.message || "Não foi possível cadastrar");
@@ -63,7 +64,7 @@ export default function Register() {
 
   useEffect(() => {
     if (!loading && isAuthenticated && user) {
-      redirectToHomeWithRefresh();
+      redirectWithRefresh(getPostLoginPath(user));
     }
   }, [isAuthenticated, loading, user]);
 

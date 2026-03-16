@@ -13,6 +13,10 @@ export function getRedirectParam() {
 }
 
 export function getDefaultAuthenticatedPath(role: AppRole) {
+  if (role === "administrativo" || role === "corretor") {
+    return "/dashboard";
+  }
+
   return "/";
 }
 

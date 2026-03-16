@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getRegisterUrl } from "@/const";
+import { getPostLoginPath } from "@/lib/auth-routing";
 import { trpc } from "@/lib/trpc";
 import { LogIn } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -17,16 +18,16 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const redirectToHomeWithRefresh = () => {
+  const redirectWithRefresh = (path: string) => {
     if (typeof window !== "undefined") {
-      window.location.assign("/");
+      window.location.assign(path);
     }
   };
 
   const login = trpc.auth.login.useMutation({
-    onSuccess: async () => {
+    onSuccess: async data => {
       await utils.auth.me.invalidate();
-      redirectToHomeWithRefresh();
+      redirectWithRefresh(getPostLoginPath(data));
     },
     onError: error => {
       toast.error(error.message || "Não foi possível entrar");
@@ -35,7 +36,7 @@ export default function Login() {
 
   useEffect(() => {
     if (!loading && isAuthenticated && user) {
-      redirectToHomeWithRefresh();
+      redirectWithRefresh(getPostLoginPath(user));
     }
   }, [isAuthenticated, loading, user]);
 

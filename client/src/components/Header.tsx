@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ROLE_LABELS } from "@shared/auth";
 import {
+  CircleDollarSign,
   Briefcase,
   Building2,
   Home,
@@ -20,7 +21,6 @@ import {
   LogOut,
   Menu,
   Phone,
-  Settings,
   User,
   Users,
 } from "lucide-react";
@@ -30,6 +30,7 @@ export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const isRootAdmin =
     user?.role === "administrativo" && user?.registrationSource === "bootstrap";
+  const brandHref = user?.role === "administrativo" ? "/dashboard" : "/";
 
   const { data: hasNewUsers } = trpc.admin.hasNewUsers.useQuery(undefined, {
     enabled: isAuthenticated && user?.role === "administrativo",
@@ -48,21 +49,28 @@ export default function Header() {
   ];
 
   const corretorMenuItems = [
+    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/crm", label: "CRM", icon: LayoutDashboard },
     { href: "/meus-imoveis", label: "Meus Im\u00f3veis", icon: Building2 },
   ];
 
   const adminMenuItems = [
+    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/admin/users", label: "Usu\u00e1rios", icon: Users },
     { href: "/crm", label: "CRM", icon: LayoutDashboard },
-    { href: "/admin", label: "Painel Admin", icon: Settings },
+    { href: "/admin", label: "Administrativo", icon: Briefcase },
+    { href: "/financeiro", label: "Financeiro", icon: CircleDollarSign },
   ];
 
   const getMenuItems = () => {
     const items =
-      isAuthenticated && user && user.role !== "cliente"
-        ? publicMenuItems.filter(item => item.href !== "/contato")
-        : [...publicMenuItems];
+      isAuthenticated && user?.role === "administrativo"
+        ? publicMenuItems.filter(
+            item => item.href !== "/" && item.href !== "/contato" && item.href !== "/servicos"
+          )
+        : isAuthenticated && user && user.role !== "cliente"
+          ? publicMenuItems.filter(item => item.href !== "/contato")
+          : [...publicMenuItems];
 
     if (isAuthenticated && user) {
       if (user.role === "cliente") {
@@ -99,7 +107,7 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-15 items-center justify-between">
-        <Link href="/">
+        <Link href={brandHref}>
           <a className="flex items-center gap-3 transition-opacity hover:opacity-80">
             {APP_LOGO ? <img src={APP_LOGO} className="h-15 w-15 object-contain" /> : null}
           </a>

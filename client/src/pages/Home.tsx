@@ -94,6 +94,13 @@ function formatCurrency(value: number) {
 export default function Home() {
   const { isAuthenticated, user } = useAuth();
   const [index, setIndex] = React.useState(0);
+  const isAdmin = user?.role === "administrativo";
+
+  React.useEffect(() => {
+    if (isAdmin && typeof window !== "undefined") {
+      window.location.replace("/dashboard");
+    }
+  }, [isAdmin]);
 
   React.useEffect(() => {
     const id = setInterval(() => {
@@ -112,6 +119,10 @@ export default function Home() {
   const announceRel = isAuthenticated ? "noopener noreferrer" : undefined;
   const shouldShowOwnerLeadCard =
     !user || (user.role !== "administrativo" && user.role !== "corretor");
+
+  if (isAdmin) {
+    return null;
+  }
 
   return (
     <Layout>

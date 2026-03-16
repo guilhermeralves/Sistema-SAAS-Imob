@@ -20,6 +20,8 @@ import MeusImoveis from "./pages/MeusImoveis";
 import Admin from "./pages/Admin";
 import AdminUsers from "./pages/AdminUsers";
 import AdminUserDetails from "./pages/AdminUserDetails";
+import Financeiro from "./pages/Financeiro";
+import Dashboard from "./pages/Dashboard";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -38,6 +40,9 @@ function Router() {
       <Route path={"/minha-ficha"}>
         <ProtectedRoute component={AdminUserDetails} roles={["cliente", "corretor", "administrativo"]} />
       </Route>
+      <Route path={"/dashboard"}>
+        <ProtectedRoute component={Dashboard} roles={["corretor", "administrativo"]} />
+      </Route>
       <Route path={"/crm"}>
         <ProtectedRoute component={CRM} roles={["corretor", "administrativo"]} />
       </Route>
@@ -55,6 +60,9 @@ function Router() {
       </Route>
       <Route path={"/admin"}>
         <ProtectedRoute component={Admin} roles={["administrativo"]} />
+      </Route>
+      <Route path={"/financeiro"}>
+        <ProtectedRoute component={Financeiro} roles={["administrativo"]} />
       </Route>
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}

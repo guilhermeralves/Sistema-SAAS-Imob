@@ -213,7 +213,7 @@ export default function Admin() {
     <Layout>
       <div className="container py-8">
         <div className="mb-8">
-          <h1 className="mb-2 text-3xl font-bold">Painel Administrativo</h1>
+          <h1 className="mb-2 text-3xl font-bold">Administrativo</h1>
           <p className="text-muted-foreground">Gerencie imóveis, leads e contratos do sistema</p>
           <div className="mt-4">
             <Link href="/admin/users" className="text-sm font-medium text-primary underline">
