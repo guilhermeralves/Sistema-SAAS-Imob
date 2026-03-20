@@ -7,6 +7,8 @@ import { SignJWT, jwtVerify } from "jose";
 import * as db from "../db";
 import { ENV } from "./env";
 import type {
+  AuthorizeRequest,
+  AuthorizeResponse,
   ExchangeTokenRequest,
   ExchangeTokenResponse,
   GetUserInfoResponse,
@@ -28,6 +30,7 @@ export type SessionPayload = {
 };
 
 const EXCHANGE_TOKEN_PATH = `/webdev.v1.WebDevAuthPublicService/ExchangeToken`;
+const AUTHORIZE_PATH = `/webdev.v1.WebDevAuthPublicService/Authorize`;
 const GET_USER_INFO_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserInfo`;
 const GET_USER_INFO_WITH_JWT_PATH =
   `/webdev.v1.WebDevAuthPublicService/GetUserInfoWithJwt`;
@@ -56,6 +59,19 @@ class OAuthService {
     );
 
     return data;
+  }
+
+  async getAuthorizeUrl(redirectUri: string, state: string): Promise<string> {
+    const payload: AuthorizeRequest = {
+      redirectUri,
+      projectId: ENV.appId,
+      state,
+      responseType: "code",
+      scope: "openid profile email",
+    };
+
+    const { data } = await this.client.post<AuthorizeResponse>(AUTHORIZE_PATH, payload);
+    return data.redirectUrl;
   }
 
   async getUserInfoByToken(
@@ -115,6 +131,11 @@ class SDKServer {
     state: string
   ): Promise<ExchangeTokenResponse> {
     return this.oauthService.getTokenByCode(code, state);
+  }
+
+  async getAuthorizeUrl(redirectUri: string): Promise<string> {
+    const encodedState = Buffer.from(redirectUri).toString("base64");
+    return this.oauthService.getAuthorizeUrl(redirectUri, encodedState);
   }
 
   async getUserInfo(accessToken: string): Promise<GetUserInfoResponse> {

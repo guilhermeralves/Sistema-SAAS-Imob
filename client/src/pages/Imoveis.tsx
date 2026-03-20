@@ -89,7 +89,7 @@ function buildPropertySearchText(property: Record<string, unknown>) {
   }
 
   if (property.finalidade === "locacao") {
-    rawValues.push("locacao", "locação");
+    rawValues.push("locacao", "loca��o");
   } else if (property.finalidade === "venda") {
     rawValues.push("venda");
   }
@@ -152,7 +152,7 @@ export default function Imoveis() {
       toast.success("Imóvel cadastrado com sucesso!");
       refetch();  // Atualiza a lista
       setNewPropertyOpen(false);  // Fecha o dialog
-      // Limpa o formul?rio
+      // Limpa o formulário
       setNewPropertyData({
         titulo: "",
         descricao: "",
@@ -192,7 +192,7 @@ export default function Imoveis() {
   const submitCreateProperty = (confirmedOwnerEmailConflict = false) => {
     // Valida campos obrigatorios
     if (!newPropertyData.titulo || !newPropertyData.valor || !newPropertyData.endereco) {
-      toast.error("Preencha título, valor e endereço");
+      toast.error("Preencha t�tulo, valor e endere�o");
       return;
     }
 
@@ -207,12 +207,12 @@ export default function Imoveis() {
       !newPropertyData.ownerPhone ||
       !newPropertyData.ownerCpf
     ) {
-      toast.error("Preencha os dados obrigatórios do proprietário.");
+      toast.error("Preencha os dados obrigat�rios do propriet�rio.");
       return;
     }
 
     if (!isValidCpf(newPropertyData.ownerCpf)) {
-      toast.error("CPF do proprietário inválido. Confira os dígitos informados.");
+      toast.error("CPF do propriet�rio inv�lido. Confira os d�gitos informados.");
       return;
     }
 
@@ -278,8 +278,8 @@ export default function Imoveis() {
       } else {
         setCepError(
           result.status === "not_found"
-            ? "CEP não encontrado"
-            : "Serviço de CEP indisponível no momento"
+            ? "CEP n�o encontrado"
+            : "Servi�o de CEP indispon�vel no momento"
         );
       }
 
@@ -330,12 +330,13 @@ export default function Imoveis() {
 
   return (
     <Layout>
-      <div className="container py-8">
-        <div className="flex justify-between items-center mb-8">
+      <div className="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.88),rgba(244,240,232,0.82)_45%,rgba(248,248,246,1)_100%)]">
+      <div className="container py-8 md:py-10">
+        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           {/* Header */}
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Imóveis Disponíveis</h1>
-            <p className="text-muted-foreground mt-2">
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">Imóveis Disponíveis</h1>
+            <p className="mt-2 text-slate-600">
               Encontre o imóvel perfeito para você
             </p>
           </div>
@@ -344,7 +345,7 @@ export default function Imoveis() {
           {canManageProperties ? (
           <Dialog open={newPropertyOpen} onOpenChange={setNewPropertyOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2">
+              <Button className="gap-2 rounded-full bg-slate-950 text-white hover:bg-slate-800">
                 <Plus className="h-4 w-4" />
                 Novo Imóvel
               </Button>
@@ -352,17 +353,23 @@ export default function Imoveis() {
 
             {/* Conteudo do dialog */}
             <DialogContent
-              className="w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6"
+              className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[32px] border-white/80 bg-[#f7f6f2] p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)] sm:p-6"
               onOpenAutoFocus={event => event.preventDefault()}
             >
-              <DialogHeader>
-                <DialogTitle>Cadastrar Novo Imóvel</DialogTitle>
-                <DialogDescription>
+              <DialogHeader className="space-y-3 pb-2">
+                <div className="inline-flex w-fit rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-800">
+                  Cadastro Imobiliário
+                </div>
+                <DialogTitle className="text-2xl font-semibold tracking-tight text-slate-950">
+                  Cadastrar Novo Imóvel
+                </DialogTitle>
+                <DialogDescription className="text-slate-600">
                   Preencha as informações do imóvel
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="space-y-4">
+              <div className="space-y-5">
+                <div className="rounded-[28px] border border-white/80 bg-white/90 p-4 shadow-[0_20px_50px_-34px_rgba(15,23,42,0.32)] sm:p-5">
                 {/* Campo Titulo */}
                 <div className="space-y-1 sm:space-y-2">
                   <Label htmlFor="titulo" className="text-sm sm:text-base">Título *</Label>
@@ -373,7 +380,7 @@ export default function Imoveis() {
                       setNewPropertyData({ ...newPropertyData, titulo: e.target.value })
                     }
                     placeholder="Ex: Apartamento 3 Quartos no Centro"
-                    className="text-sm sm:text-base"
+                    className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                   />
                 </div>
 
@@ -387,7 +394,7 @@ export default function Imoveis() {
                       setNewPropertyData({ ...newPropertyData, descricao: e.target.value })
                     }
                     placeholder="Descrição sobre o imóvel"
-                    className="w-full p-2 border rounded text-sm sm:text-base resize-none"
+                    className="w-full resize-none rounded-2xl border border-slate-200 bg-white/90 p-3 text-sm shadow-sm sm:text-base"
                     rows={3}
                   />
                 </div>
@@ -402,7 +409,7 @@ export default function Imoveis() {
                       onChange={(e) =>
                         setNewPropertyData({ ...newPropertyData, tipo: e.target.value })
                       }
-                      className="w-full p-2 border rounded text-sm sm:text-base"
+                      className="w-full rounded-2xl border border-slate-200 bg-white/90 p-3 text-sm shadow-sm sm:text-base"
                     >
                       <option value="apartamento">Apartamento</option>
                       <option value="casa">Casa</option>
@@ -419,7 +426,7 @@ export default function Imoveis() {
                       onChange={(e) =>
                         setNewPropertyData({ ...newPropertyData, finalidade: e.target.value })
                       }
-                      className="w-full p-2 border rounded text-sm sm:text-base"
+                      className="w-full rounded-2xl border border-slate-200 bg-white/90 p-3 text-sm shadow-sm sm:text-base"
                     >
                       <option value="venda">Venda</option>
                       <option value="locacao">Locação</option>
@@ -439,8 +446,8 @@ export default function Imoveis() {
                         })
                       }
                     >
-                      <SelectTrigger id="idCorretor" className="text-sm sm:text-base">
-                        <SelectValue placeholder="Selecione o corretor responsável" />
+                      <SelectTrigger id="idCorretor" className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base">
+                        <SelectValue placeholder="Selecione o corretor respons�vel" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="empty">Selecione</SelectItem>
@@ -452,7 +459,7 @@ export default function Imoveis() {
                       </SelectContent>
                     </Select>
                   ) : (
-                    <Input value={user?.name || user?.email || "Corretor"} disabled className="text-sm sm:text-base" />
+                    <Input value={user?.name || user?.email || "Corretor"} disabled className="rounded-2xl border-slate-200 bg-white/80 text-sm shadow-sm sm:text-base" />
                   )}
                 </div>
 
@@ -466,14 +473,16 @@ export default function Imoveis() {
                       setNewPropertyData({ ...newPropertyData, valor: value })
                     }
                     placeholder="R$ 0,00"
-                    className="text-sm sm:text-base"
+                    className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                   />
+                </div>
                 </div>
 
                 {/* Campos de Caracteristicas (Grid) */}
+                <div className="rounded-[28px] border border-white/80 bg-white/90 p-4 shadow-[0_20px_50px_-34px_rgba(15,23,42,0.32)] sm:p-5">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div className="space-y-1 sm:space-y-2">
-                    <Label htmlFor="area" className="text-sm sm:text-base">Área (m²)</Label>
+                    <Label htmlFor="area" className="text-sm sm:text-base">�rea (m�)</Label>
                     <Input
                       id="area"
                       type="number"
@@ -481,7 +490,7 @@ export default function Imoveis() {
                       onChange={(e) =>
                         setNewPropertyData({ ...newPropertyData, area: e.target.value })
                       }
-                      className="text-sm sm:text-base"
+                      className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                     />
                   </div>
                   <div className="space-y-1 sm:space-y-2">
@@ -493,7 +502,7 @@ export default function Imoveis() {
                       onChange={(e) =>
                         setNewPropertyData({ ...newPropertyData, quartos: e.target.value })
                       }
-                      className="text-sm sm:text-base"
+                      className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                     />
                   </div>
                   <div className="space-y-1 sm:space-y-2">
@@ -505,7 +514,7 @@ export default function Imoveis() {
                       onChange={(e) =>
                         setNewPropertyData({ ...newPropertyData, banheiros: e.target.value })
                       }
-                      className="text-sm sm:text-base"
+                      className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                     />
                   </div>
                   <div className="space-y-1 sm:space-y-2">
@@ -517,14 +526,14 @@ export default function Imoveis() {
                       onChange={(e) =>
                         setNewPropertyData({ ...newPropertyData, vagas: e.target.value })
                       }
-                      className="text-sm sm:text-base"
+                      className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                     />
                   </div>
                 </div>
 
                 {/* Campos de Localizacao */}
                 <div className="space-y-1 sm:space-y-2">
-                  <Label htmlFor="endereco" className="text-sm sm:text-base">Endereço *</Label>
+                  <Label htmlFor="endereco" className="text-sm sm:text-base">Endere�o *</Label>
                   <Input
                     id="endereco"
                     value={newPropertyData.endereco}
@@ -532,14 +541,14 @@ export default function Imoveis() {
                       setNewPropertyData({ ...newPropertyData, endereco: e.target.value })
                     }
                     placeholder="Ex: Rua Principal, 123"
-                    className="text-sm sm:text-base"
+                    className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                     disabled={cepLoading}
                   />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div className="space-y-1 sm:space-y-2">
-                    <Label htmlFor="numero" className="text-sm sm:text-base">Número</Label>
+                    <Label htmlFor="numero" className="text-sm sm:text-base">N�mero</Label>
                     <Input
                       id="numero"
                       value={newPropertyData.numero}
@@ -547,7 +556,7 @@ export default function Imoveis() {
                         setNewPropertyData({ ...newPropertyData, numero: e.target.value })
                       }
                       placeholder="Ex: 123"
-                      className="text-sm sm:text-base"
+                      className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                     />
                   </div>
                   <div className="space-y-1 sm:space-y-2">
@@ -559,7 +568,7 @@ export default function Imoveis() {
                         setNewPropertyData({ ...newPropertyData, bairro: e.target.value })
                       }
                       placeholder="Ex: Centro"
-                      className="text-sm sm:text-base"
+                      className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                       disabled={cepLoading}
                     />
                   </div>
@@ -572,7 +581,7 @@ export default function Imoveis() {
                         setNewPropertyData({ ...newPropertyData, cidade: e.target.value })
                       }
                       placeholder="Ex: São Paulo"
-                      className="text-sm sm:text-base"
+                      className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                       disabled={cepLoading}
                     />
                   </div>
@@ -586,7 +595,7 @@ export default function Imoveis() {
                       }
                       placeholder="SP"
                       maxLength={2}
-                      className="text-sm sm:text-base"
+                      className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                       disabled={cepLoading}
                     />
                   </div>
@@ -598,7 +607,7 @@ export default function Imoveis() {
                         value={newPropertyData.cep}
                         onChange={(e) => handleCepChange(e.target.value)}
                         placeholder="01310-100"
-                        className="text-sm sm:text-base"
+                        className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                         maxLength={9}
                       />
                       {cepLoading && (
@@ -612,12 +621,13 @@ export default function Imoveis() {
                     )}
                   </div>
                 </div>
+                </div>
 
-                <div className="rounded-xl border border-border/70 bg-muted/20 p-4">
+                <div className="rounded-[28px] border border-emerald-100/70 bg-[linear-gradient(180deg,rgba(245,250,247,0.95),rgba(255,255,255,0.92))] p-4 shadow-[0_20px_50px_-34px_rgba(15,23,42,0.32)] sm:p-5">
                   <div className="mb-3">
-                    <h3 className="text-base font-semibold">Proprietário do imóvel</h3>
-                    <p className="text-sm text-muted-foreground">
-                      O CPF do proprietário é obrigatório e evita duplicidade de cadastro.
+                    <h3 className="text-base font-semibold text-slate-950">Propriet�rio do im�vel</h3>
+                    <p className="text-sm text-slate-600">
+                      O CPF do propriet�rio � obrigat�rio e evita duplicidade de cadastro.
                     </p>
                   </div>
 
@@ -630,7 +640,7 @@ export default function Imoveis() {
                         onChange={e =>
                           setNewPropertyData({ ...newPropertyData, ownerName: e.target.value })
                         }
-                        className="text-sm sm:text-base"
+                        className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                       />
                     </div>
                     <div className="space-y-1 sm:space-y-2">
@@ -642,7 +652,7 @@ export default function Imoveis() {
                         onChange={e =>
                           setNewPropertyData({ ...newPropertyData, ownerEmail: e.target.value })
                         }
-                        className="text-sm sm:text-base"
+                        className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                       />
                     </div>
                     <div className="space-y-1 sm:space-y-2">
@@ -656,7 +666,7 @@ export default function Imoveis() {
                             ownerPhone: formatPhoneNumber(e.target.value),
                           })
                         }
-                        className="text-sm sm:text-base"
+                        className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                       />
                     </div>
                     <div className="space-y-1 sm:space-y-2">
@@ -672,7 +682,7 @@ export default function Imoveis() {
                             ownerCpf: formatCpf(e.target.value),
                           })
                         }
-                        className="text-sm sm:text-base"
+                        className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                       />
                     </div>
                   </div>
@@ -681,10 +691,10 @@ export default function Imoveis() {
                 {/* Botao de Criar */}
                 <Button
                   onClick={handleCreateProperty}
-                  className="w-full mt-2 sm:mt-4 text-sm sm:text-base py-2 sm:py-3"
+                  className="mt-2 w-full rounded-full bg-emerald-700 py-3 text-sm text-white shadow-[0_18px_40px_-28px_rgba(4,120,87,0.75)] transition-all hover:bg-emerald-800 sm:mt-4 sm:text-base"
                   disabled={createProperty.isPending}
                 >
-                  {createProperty.isPending ? "Criando..." : "Criar Imóvel"}
+                  {createProperty.isPending ? "Criando..." : "Criar Im�vel"}
                 </Button>
               </div>
             </DialogContent>
@@ -693,10 +703,10 @@ export default function Imoveis() {
         </div>
 
         {/* Filtros */}
-        <Card className="mb-8">
-          <CardContent className="p-6">
+        <Card className="mb-8 rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)] backdrop-blur">
+          <CardContent className="p-6 md:p-7">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="flex items-center gap-2 text-lg font-semibold">
+              <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-950">
                 <SlidersHorizontal className="h-5 w-5" />
                 Filtros
               </h2>
@@ -704,7 +714,7 @@ export default function Imoveis() {
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowFilters(!showFilters)}
-                className="md:hidden"
+                className="rounded-full md:hidden"
               >
                 {showFilters ? "Ocultar" : "Mostrar"}
               </Button>
@@ -869,7 +879,7 @@ export default function Imoveis() {
                   valorMax: "",
                   search: "",
                 })}
-                className="mt-4"
+                className="mt-4 rounded-full border-slate-200 bg-white"
               >
                 Limpar Filtros
               </Button>
@@ -878,18 +888,19 @@ export default function Imoveis() {
         </Card>
 
         {/* Resultados */}
-        <div className="mb-4 text-sm text-muted-foreground">
+        <div className="mb-5 text-sm text-slate-600">
           {imoveisFiltrados?.length || 0} {imoveisFiltrados?.length === 1 ? "imóvel encontrado" : "imóveis encontrados"}
         </div>
 
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[1, 2, 3, 4, 5, 6].map((i) => (
-              <Card key={i} className="overflow-hidden">
-                <div className="h-48 bg-muted animate-pulse" />
-                <CardContent className="p-4">
-                  <div className="h-4 bg-muted rounded animate-pulse mb-2" />
-                  <div className="h-3 bg-muted rounded animate-pulse w-2/3" />
+              <Card key={i} className="overflow-hidden rounded-[28px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)]">
+                <div className="h-56 bg-muted animate-pulse" />
+                <CardContent className="p-5">
+                  <div className="mb-3 h-4 rounded bg-muted animate-pulse" />
+                  <div className="mb-5 h-3 w-2/3 rounded bg-muted animate-pulse" />
+                  <div className="h-8 w-28 rounded bg-muted animate-pulse" />
                 </CardContent>
               </Card>
             ))}
@@ -902,31 +913,31 @@ export default function Imoveis() {
 
               return (
                 <Link key={imovel.id} href={`/imoveis/${imovel.id}`}>
-                  <Card className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer h-full">
-                    <div className="relative h-48 overflow-hidden">
+                  <Card className="h-full cursor-pointer overflow-hidden rounded-[28px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_30px_90px_-42px_rgba(15,23,42,0.52)]">
+                    <div className="relative h-56 overflow-hidden">
                       <img
                         src={primeiraFoto}
                         alt={imovel.titulo}
                         className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
                       />
-                      <div className="absolute top-3 right-3 bg-primary text-primary-foreground px-3 py-1 rounded-full text-sm font-semibold">
+                      <div className="absolute right-4 top-4 rounded-full border border-white/20 bg-slate-950/80 px-3 py-1 text-sm font-semibold text-white backdrop-blur">
                         {imovel.finalidade === "venda" ? "Venda" : imovel.finalidade === "locacao" ? "Locação" : "Venda/Locação"}
                       </div>
                       {imovel.destaque === 1 && (
-                        <div className="absolute top-3 left-3 bg-yellow-500 text-white px-3 py-1 rounded-full text-sm font-semibold">
+                        <div className="absolute left-4 top-4 rounded-full border border-white/30 bg-amber-500/90 px-3 py-1 text-sm font-semibold text-white backdrop-blur">
                           Destaque
                         </div>
                       )}
                     </div>
-                    <CardContent className="p-4">
-                      <h3 className="font-bold text-lg mb-2 line-clamp-1">{imovel.titulo}</h3>
-                      <div className="flex items-center gap-1 text-sm text-muted-foreground mb-3">
+                    <CardContent className="p-5">
+                      <h3 className="mb-2 line-clamp-1 text-lg font-semibold text-slate-950">{imovel.titulo}</h3>
+                      <div className="mb-4 flex items-center gap-1 text-sm text-slate-500">
                         <MapPin className="h-4 w-4 flex-shrink-0" />
                         <span className="line-clamp-1">
                           {imovel.bairro ? `${imovel.bairro}, ` : ""}{imovel.cidade}, {imovel.estado}
                         </span>
                       </div>
-                      <div className="flex items-center gap-4 mb-3 text-sm text-muted-foreground">
+                      <div className="mb-5 flex items-center gap-4 text-sm text-slate-600">
                         {imovel.quartos && (
                           <div className="flex items-center gap-1">
                             <Bed className="h-4 w-4" />
@@ -946,7 +957,7 @@ export default function Imoveis() {
                           </div>
                         )}
                       </div>
-                      <div className="text-2xl font-bold text-primary">
+                      <div className="text-2xl font-semibold tracking-tight text-emerald-800">
                         {formatMoneyFromCentsValue(imovel.valor)}
                       </div>
                     </CardContent>
@@ -956,10 +967,10 @@ export default function Imoveis() {
             })}
           </div>
         ) : (
-          <Card className="p-12 text-center">
-            <Search className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-            <h3 className="text-lg font-semibold mb-2">Nenhum imóvel encontrado</h3>
-            <p className="text-muted-foreground mb-4">
+          <Card className="rounded-[32px] border-white/70 bg-white/90 p-12 text-center shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
+            <Search className="mx-auto mb-4 h-12 w-12 text-slate-400" />
+            <h3 className="mb-2 text-lg font-semibold text-slate-950">Nenhum imóvel encontrado</h3>
+            <p className="mb-4 text-slate-500">
               Tente ajustar os filtros para encontrar mais resultados
             </p>
             <Button
@@ -976,11 +987,13 @@ export default function Imoveis() {
                 valorMax: "",
                 search: "",
               })}
+              className="rounded-full border-slate-200 bg-white"
             >
               Limpar Filtros
             </Button>
           </Card>
         )}
+      </div>
       </div>
     </Layout>
   );

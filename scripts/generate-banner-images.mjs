@@ -10,8 +10,8 @@ import fs from 'fs';
 
 /*Caso não esteja funcionando após o clone do projeto voce deverá realizar o seguinte comando no terminal = "pnpm add -D sharp"*/
 
-const input = 'client/image_teste/Banner_2.jpg';
-const outputDir = 'client/public/banner_2';
+const input = 'client/image_teste/banner4.jpg';
+const outputDir = 'client/public/banner_3';
 
 fs.mkdirSync(outputDir, { recursive: true });
 

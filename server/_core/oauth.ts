@@ -9,7 +9,26 @@ function getQueryParam(req: Request, key: string): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+function getPostAuthRedirectPath(role: string | null | undefined) {
+  if (role === "administrativo" || role === "corretor") {
+    return "/dashboard";
+  }
+
+  return "/";
+}
+
 export function registerOAuthRoutes(app: Express) {
+  app.get("/api/oauth/google", async (req: Request, res: Response) => {
+    try {
+      const callbackUrl = new URL("/api/oauth/callback", `${req.protocol}://${req.get("host")}`).toString();
+      const authorizeUrl = await sdk.getAuthorizeUrl(callbackUrl);
+      res.redirect(302, authorizeUrl);
+    } catch (error) {
+      console.error("[OAuth] Failed to start Google login", error);
+      res.redirect(302, "/login?oauth_error=google_start_failed");
+    }
+  });
+
   app.get("/api/oauth/callback", async (req: Request, res: Response) => {
     const code = getQueryParam(req, "code");
     const state = getQueryParam(req, "state");
@@ -37,19 +56,22 @@ export function registerOAuthRoutes(app: Express) {
         lastSignedIn: new Date(),
       });
 
+      const syncedUser = await db.getUserByOpenId(userInfo.openId);
+
       const sessionToken = await sdk.createSessionToken(userInfo.openId, {
         name: userInfo.name || "",
         expiresInMs: ONE_YEAR_MS,
         provider: "oauth",
+        userId: syncedUser?.id,
       });
 
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
-      res.redirect(302, "/");
+      res.redirect(302, getPostAuthRedirectPath(syncedUser?.role));
     } catch (error) {
       console.error("[OAuth] Callback failed", error);
-      res.status(500).json({ error: "OAuth callback failed" });
+      res.redirect(302, "/login?oauth_error=google_callback_failed");
     }
   });
 }

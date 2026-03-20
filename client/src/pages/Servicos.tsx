@@ -1,60 +1,54 @@
 import Layout from "@/components/Layout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
-  Building2,
-  Search,
-  FileText,
-  Users,
-  CheckCircle2,
   ArrowRight,
-  Shield,
+  Building2,
+  CheckCircle2,
   Clock,
+  FileText,
+  Search,
+  Shield,
   TrendingUp,
+  Users,
 } from "lucide-react";
 import { Link } from "wouter";
 
-/**
- * Página de Serviços
- * 
- * Apresenta os serviços oferecidos pela imobiliária.
- * 
- * EDIÇÃO:
- * - Para modificar os serviços: edite o array SERVICOS abaixo
- * - Para alterar os diferenciais: edite DIFERENCIAIS
- * - Para modificar o processo digital: edite PROCESSO_DIGITAL
- */
-
-// ========== ÁREA DE EDIÇÃO - SERVIÇOS ==========
 const SERVICOS = [
   {
     icon: Search,
-    title: "Compra e Venda de Imóveis",
-    description: "Facilitamos todo o processo de compra e venda do seu imóvel, desde a avaliação até a assinatura do contrato.",
+    eyebrow: "Compra e venda",
+    title: "Compra e venda de imóveis",
+    description:
+      "Facilitamos todo o processo de compra e venda, desde a avaliação até o fechamento com segurança.",
     features: [
       "Avaliação profissional do imóvel",
       "Marketing digital e tradicional",
-      "Visitas agendadas com potenciais compradores",
-      "Negociação e fechamento do negócio",
-      "Assessoria jurídica completa",
+      "Visitas com compradores qualificados",
+      "Negociação e apoio no fechamento",
+      "Assessoria jurídica",
     ],
   },
   {
     icon: FileText,
-    title: "Locação de Imóveis",
-    description: "Alugue seu imóvel com segurança e praticidade. Cuidamos de toda a burocracia para você.",
+    eyebrow: "Locação",
+    title: "Locação de imóveis",
+    description:
+      "Alugue seu imóvel com mais segurança e menos burocracia, com acompanhamento operacional da equipe.",
     features: [
       "Análise de crédito dos locatários",
       "Elaboração de contratos",
       "Vistoria de entrada e saída",
       "Gestão de pagamentos",
-      "Suporte jurídico em caso de inadimplência",
+      "Suporte em caso de inadimplência",
     ],
   },
   {
     icon: Building2,
-    title: "Administração de Imóveis",
-    description: "Administramos seu imóvel com transparência e eficiência, garantindo rentabilidade e tranquilidade.",
+    eyebrow: "Administração",
+    title: "Administração imobiliária",
+    description:
+      "Gestão transparente para proprietários que precisam de rotina organizada e acompanhamento constante.",
     features: [
       "Cobrança de aluguéis e encargos",
       "Manutenção preventiva e corretiva",
@@ -65,187 +59,210 @@ const SERVICOS = [
   },
   {
     icon: Users,
-    title: "Consultoria Imobiliária",
-    description: "Orientação especializada para suas decisões imobiliárias, seja para investimento ou uso próprio.",
+    eyebrow: "Consultoria",
+    title: "Consultoria imobiliária",
+    description:
+      "Orientação especializada para decisões imobiliárias mais seguras, seja para investir, comprar ou vender.",
     features: [
       "Análise de mercado",
-      "Avaliação de potencial de valorização",
+      "Avaliação do potencial de valorização",
       "Planejamento financeiro",
       "Estratégias de investimento",
       "Acompanhamento personalizado",
     ],
   },
 ];
-// ========== FIM DA ÁREA DE EDIÇÃO ==========
 
-// ========== ÁREA DE EDIÇÃO - DIFERENCIAIS ==========
 const DIFERENCIAIS = [
   {
     icon: Shield,
-    title: "Segurança e Confiança",
-    description: "Processos transparentes e assessoria jurídica completa.",
+    title: "Segurança e confiança",
+    description: "Processos claros, orientação jurídica e condução responsável em cada etapa.",
   },
   {
     icon: Clock,
     title: "Agilidade",
-    description: "Tecnologia e processos otimizados para resultados rápidos.",
+    description: "Tecnologia e organização para acelerar o atendimento sem perder cuidado.",
   },
   {
     icon: TrendingUp,
     title: "Resultados",
-    description: "Equipe experiente focada no melhor negócio para você.",
+    description: "Atuação focada em valor, posicionamento e negociação com visão de mercado.",
   },
 ];
-// ========== FIM DA ÁREA DE EDIÇÃO ==========
 
-// ========== ÁREA DE EDIÇÃO - PROCESSO DIGITAL ==========
-const PROCESSO_DIGITAL = {
-  title: "Processo 100% Digital",
-  description: "Na AFG Imobiliária, utilizamos tecnologia de ponta para tornar sua experiência mais ágil e segura.",
-  etapas: [
-    {
-      numero: "01",
-      titulo: "Cadastro Online",
-      descricao: "Cadastre seu imóvel ou interesse através do nosso site ou WhatsApp.",
-    },
-    {
-      numero: "02",
-      titulo: "Avaliação Digital",
-      descricao: "Nossa equipe avalia e publica seu imóvel em múltiplos canais.",
-    },
-    {
-      numero: "03",
-      titulo: "Visitas Agendadas",
-      descricao: "Organizamos visitas com interessados qualificados.",
-    },
-    {
-      numero: "04",
-      titulo: "Documentação Digital",
-      descricao: "Toda a documentação pode ser enviada e assinada digitalmente.",
-    },
-  ],
-};
-// ========== FIM DA ÁREA DE EDIÇÃO ==========
+const PROCESSO_DIGITAL = [
+  {
+    numero: "01",
+    titulo: "Cadastro online",
+    descricao: "Recebemos o imóvel ou a necessidade do cliente por site, atendimento direto ou WhatsApp.",
+  },
+  {
+    numero: "02",
+    titulo: "Análise e preparação",
+    descricao: "Organizamos informações, avaliamos contexto e posicionamos o imóvel da forma correta.",
+  },
+  {
+    numero: "03",
+    titulo: "Processo comercial",
+    descricao: "Cuidamos das visitas, negociações e comunicação com mais controle de processo.",
+  },
+  {
+    numero: "04",
+    titulo: "Documentação",
+    descricao: "Centralizamos as etapas documentais para tornar a jornada mais segura e fluida.",
+  },
+];
 
 export default function Servicos() {
   return (
     <Layout>
-      {/* Hero */}
-      <section className="bg-gradient-to-br from-primary/10 via-background to-accent/10 py-16 md:py-24">
-        <div className="container text-center">
-          <h1 className="text-4xl md:text-5xl font-bold mb-4">Nossos Serviços</h1>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Soluções completas para todas as suas necessidades imobiliárias
-          </p>
-        </div>
-      </section>
+      <div className="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.88),rgba(244,240,232,0.82)_45%,rgba(248,248,246,1)_100%)] pb-20">
+        <section className="pt-10 md:pt-12">
+          <div className="container">
+            <div className="mb-10 max-w-3xl">
+              <p className="mb-4 inline-flex rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-800">
+                Nossos serviços
+              </p>
+              <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-5xl">
+                Soluções imobiliárias com operação mais clara, segura e organizada.
+              </h1>
+              <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
+                Reunimos atendimento comercial, gestão operacional e apoio documental para
+                acompanhar compra, venda, locação e administração de imóveis com mais consistência.
+              </p>
 
-      {/* Serviços Detalhados */}
-      <section className="py-16 md:py-24">
-        <div className="container">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {SERVICOS.map((servico, index) => (
-              <Card key={index} className="border-2 hover:border-primary/50 transition-colors">
-                <CardHeader>
-                  <div className="h-14 w-14 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                    <servico.icon className="h-7 w-7 text-primary" />
-                  </div>
-                  <CardTitle className="text-2xl">{servico.title}</CardTitle>
-                  <CardDescription className="text-base">{servico.description}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-3">
-                    {servico.features.map((feature, idx) => (
-                      <li key={idx} className="flex items-start gap-2">
-                        <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                        <span className="text-sm text-muted-foreground">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                <Link href="/contato">
+                  <Button className="h-12 rounded-full bg-emerald-700 px-6 text-white shadow-[0_18px_40px_-24px_rgba(4,120,87,0.85)] hover:bg-emerald-800">
+                    Fale Conosco
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </Link>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              {DIFERENCIAIS.map(item => (
+                <Card
+                  key={item.title}
+                  className="rounded-[28px] border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(241,245,243,0.88))] shadow-[0_20px_50px_-34px_rgba(15,23,42,0.32)]"
+                >
+                  <CardContent className="p-5">
+                    <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
+                      <item.icon className="h-5 w-5" />
+                    </div>
+                    <h2 className="text-lg font-semibold text-slate-950">{item.title}</h2>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">{item.description}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+
+            <Card className="mt-4 rounded-[28px] border-transparent bg-[linear-gradient(135deg,#4e7b66,#628b78_55%,#7aa18b)] text-white shadow-[0_25px_60px_-35px_rgba(15,23,42,0.6)]">
+                <CardContent className="p-6">
+                  <p className="text-xs uppercase tracking-[0.2em] text-white/70">
+                    Processo digital
+                  </p>
+                  <p className="mt-3 text-2xl font-semibold tracking-tight">
+                    Atendimento com fluxo mais simples do início ao fechamento.
+                  </p>
+                  <p className="mt-3 max-w-xl text-sm leading-6 text-white/80">
+                    Organização comercial, documentação e apoio contínuo para diminuir ruído e
+                    dar mais previsibilidade ao processo.
+                  </p>
                 </CardContent>
               </Card>
-            ))}
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Diferenciais */}
-      <section className="py-16 md:py-24 bg-muted/30">
-        <div className="container">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Por Que Escolher a AFG?</h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
-              Nossos diferenciais fazem toda a diferença na sua experiência
-            </p>
+        <section className="pt-14 md:pt-18">
+          <div className="container">
+            <div className="mb-8 max-w-2xl">
+              <p className="mb-3 inline-flex rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-800">
+                Atuação AFG
+              </p>
+              <h2 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">
+                Áreas em que atuamos dentro da operação imobiliária.
+              </h2>
+              <p className="mt-3 text-base leading-7 text-slate-600">
+                Cada serviço foi organizado para apoiar uma etapa importante da jornada do cliente e do proprietário.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              {SERVICOS.map(servico => (
+                <Card
+                  key={servico.title}
+                  className="rounded-[30px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_30px_90px_-42px_rgba(15,23,42,0.5)]"
+                >
+                  <CardContent className="p-6 md:p-7">
+                    <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
+                      <servico.icon className="h-5 w-5" />
+                    </div>
+                    <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+                      {servico.eyebrow}
+                    </p>
+                    <h3 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
+                      {servico.title}
+                    </h3>
+                    <p className="mt-3 text-sm leading-7 text-slate-600">{servico.description}</p>
+
+                    <div className="mt-6 grid gap-3">
+                      {servico.features.map(feature => (
+                        <div
+                          key={feature}
+                          className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50/60 px-4 py-3"
+                        >
+                          <CheckCircle2 className="mt-0.5 h-4.5 w-4.5 flex-shrink-0 text-emerald-700" />
+                          <span className="text-sm leading-6 text-slate-700">{feature}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </div>
+        </section>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {DIFERENCIAIS.map((diferencial, index) => (
-              <Card key={index} className="text-center border-2">
-                <CardContent className="pt-8 pb-6">
-                  <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                    <diferencial.icon className="h-8 w-8 text-primary" />
-                  </div>
-                  <h3 className="text-xl font-bold mb-2">{diferencial.title}</h3>
-                  <p className="text-muted-foreground">{diferencial.description}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Processo Digital */}
-      <section className="py-16 md:py-24">
-        <div className="container">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">{PROCESSO_DIGITAL.title}</h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              {PROCESSO_DIGITAL.description}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {PROCESSO_DIGITAL.etapas.map((etapa, index) => (
-              <Card key={index} className="relative overflow-hidden">
-                <div className="absolute top-0 right-0 text-8xl font-bold text-primary/5">
-                  {etapa.numero}
+        <section className="pt-14 md:pt-18">
+          <div className="container">
+            <Card className="rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
+              <CardContent className="p-6 md:p-8">
+                <div className="mb-8 max-w-2xl">
+                  <p className="mb-3 inline-flex rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-800">
+                    Fluxo digital
+                  </p>
+                  <h2 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">
+                    Como conduzimos o processo de forma mais organizada.
+                  </h2>
+                  <p className="mt-3 text-base leading-7 text-slate-600">
+                    Usamos uma estrutura simples para centralizar atendimento, análise comercial e documentação.
+                  </p>
                 </div>
-                <CardContent className="pt-6 relative">
-                  <div className="h-12 w-12 rounded-full bg-primary text-primary-foreground flex items-center justify-center mb-4 text-lg font-bold">
-                    {etapa.numero}
-                  </div>
-                  <h3 className="text-lg font-bold mb-2">{etapa.titulo}</h3>
-                  <p className="text-sm text-muted-foreground">{etapa.descricao}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
 
-      {/* CTA */}
-      <section className="py-16 md:py-24 bg-gradient-to-br from-primary/5 to-accent/5">
-        <div className="container text-center">
-          <h2 className="text-3xl md:text-4xl font-bold mb-4">Pronto para Começar?</h2>
-          <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
-            Entre em contato conosco e descubra como podemos ajudá-lo
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/contato">
-              <Button size="lg" className="gap-2">
-                Fale Conosco
-                <ArrowRight className="h-5 w-5" />
-              </Button>
-            </Link>
-            <Link href="/imoveis">
-              <Button size="lg" variant="outline">
-                Ver Imóveis
-              </Button>
-            </Link>
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+                  {PROCESSO_DIGITAL.map(etapa => (
+                    <Card
+                      key={etapa.numero}
+                      className="rounded-[28px] border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(240,245,242,0.88))] shadow-[0_18px_40px_-30px_rgba(15,23,42,0.32)]"
+                    >
+                      <CardContent className="p-5">
+                        <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-sm font-semibold text-white">
+                          {etapa.numero}
+                        </div>
+                        <h3 className="text-lg font-semibold text-slate-950">{etapa.titulo}</h3>
+                        <p className="mt-3 text-sm leading-6 text-slate-600">{etapa.descricao}</p>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
     </Layout>
   );
 }

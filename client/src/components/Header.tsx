@@ -1,4 +1,4 @@
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { APP_LOGO, getLoginUrl, getRegisterUrl } from "@/const";
@@ -28,6 +28,7 @@ import {
 export default function Header() {
   const { user, loading, isAuthenticated, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [location] = useLocation();
   const isRootAdmin =
     user?.role === "administrativo" && user?.registrationSource === "bootstrap";
   const brandHref = user?.role === "administrativo" ? "/dashboard" : "/";
@@ -55,7 +56,6 @@ export default function Header() {
   ];
 
   const adminMenuItems = [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/admin/users", label: "Usu\u00e1rios", icon: Users },
     { href: "/crm", label: "CRM", icon: LayoutDashboard },
     { href: "/admin", label: "Administrativo", icon: Briefcase },
@@ -63,20 +63,22 @@ export default function Header() {
   ];
 
   const getMenuItems = () => {
+    const dashboardItem = { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard };
+
     const items =
       isAuthenticated && user?.role === "administrativo"
-        ? publicMenuItems.filter(
+        ? [dashboardItem, ...publicMenuItems.filter(
             item => item.href !== "/" && item.href !== "/contato" && item.href !== "/servicos"
-          )
-        : isAuthenticated && user && user.role !== "cliente"
-          ? publicMenuItems.filter(item => item.href !== "/contato")
+          )]
+        : isAuthenticated && user?.role === "corretor"
+          ? [dashboardItem, ...publicMenuItems.filter(item => item.href !== "/contato")]
           : [...publicMenuItems];
 
     if (isAuthenticated && user) {
       if (user.role === "cliente") {
         items.push(...clienteMenuItems);
       } else if (user.role === "corretor") {
-        items.push(...corretorMenuItems);
+        items.push(...corretorMenuItems.filter(item => item.href !== "/dashboard"));
       } else if (user.role === "administrativo") {
         items.push(...adminMenuItems);
       }
@@ -86,6 +88,22 @@ export default function Header() {
   };
 
   const menuItems = getMenuItems();
+
+  const getDesktopNavClassName = (href: string) => {
+    const isActive = location === href;
+
+    return isActive
+      ? "flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900 shadow-sm ring-1 ring-emerald-100 transition-colors"
+      : "flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium text-slate-500 transition-colors hover:bg-emerald-50/70 hover:text-emerald-900";
+  };
+
+  const getMobileNavClassName = (href: string) => {
+    const isActive = location === href;
+
+    return isActive
+      ? "flex items-center gap-3 rounded-2xl bg-emerald-50 px-3 py-2.5 text-sm font-medium text-emerald-900 ring-1 ring-emerald-100"
+      : "flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-500 transition-colors hover:bg-emerald-50/70 hover:text-emerald-900";
+  };
 
   const handleMenuNavigation = (
     event: React.MouseEvent<HTMLAnchorElement>,
@@ -105,7 +123,7 @@ export default function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 w-full border-b border-[#e5e3da] bg-[#f8f7f2]/92 backdrop-blur supports-[backdrop-filter]:bg-[#f8f7f2]/80">
       <div className="container flex h-15 items-center justify-between">
         <Link href={brandHref}>
           <a className="flex items-center gap-3 transition-opacity hover:opacity-80">
@@ -113,11 +131,11 @@ export default function Header() {
           </a>
         </Link>
 
-        <nav className="hidden items-center gap-6 md:flex">
+        <nav className="hidden items-center gap-2 md:flex">
           {menuItems.map(item => (
             <Link key={item.href} href={item.href}>
               <a
-                className="flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-primary"
+                className={getDesktopNavClassName(item.href)}
                 onClick={event => handleMenuNavigation(event, item.href)}
               >
                 <item.icon className="h-4 w-4" />
@@ -125,7 +143,7 @@ export default function Header() {
                   <span>{item.label}</span>
                   {item.href === "/admin/users" && hasNewUsers ? (
                     <span
-                      className="inline-block h-2.5 w-2.5 rounded-full bg-primary"
+                      className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-700"
                       aria-label="Existem novos cadastros"
                       title="Existem novos cadastros"
                     />
@@ -142,7 +160,11 @@ export default function Header() {
           ) : isAuthenticated && user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2 rounded-full border-[#d8d6ca] bg-white/80 text-slate-700 hover:bg-emerald-50 hover:text-emerald-900"
+                >
                   <User className="h-4 w-4" />
                   <span className="hidden sm:inline">{user.name || user.email}</span>
                 </Button>
@@ -176,10 +198,19 @@ export default function Header() {
             </DropdownMenu>
           ) : (
             <div className="flex items-center gap-2">
-              <Button asChild size="sm" variant="outline" className="hidden sm:inline-flex">
+              <Button
+                asChild
+                size="sm"
+                variant="outline"
+                className="hidden rounded-full border-[#d8d6ca] bg-white/80 text-slate-700 hover:bg-emerald-50 hover:text-emerald-900 sm:inline-flex"
+              >
                 <a href={getRegisterUrl()}>Cadastrar</a>
               </Button>
-              <Button asChild size="sm">
+              <Button
+                asChild
+                size="sm"
+                className="rounded-full bg-emerald-700 text-white shadow-[0_12px_30px_-18px_rgba(4,120,87,0.8)] hover:bg-emerald-800"
+              >
                 <a href={getLoginUrl()}>Entrar</a>
               </Button>
             </div>
@@ -197,12 +228,12 @@ export default function Header() {
       </div>
 
       {mobileMenuOpen ? (
-        <div className="border-t bg-background md:hidden">
-          <nav className="container flex flex-col gap-3 py-4">
+        <div className="border-t border-[#e5e3da] bg-[#f8f7f2] md:hidden">
+          <nav className="container flex flex-col gap-2.5 py-4">
             {menuItems.map(item => (
               <Link key={item.href} href={item.href}>
                 <a
-                  className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-primary"
+                  className={getMobileNavClassName(item.href)}
                   onClick={event => handleMenuNavigation(event, item.href, true)}
                 >
                   <item.icon className="h-4 w-4" />
@@ -210,7 +241,7 @@ export default function Header() {
                     <span>{item.label}</span>
                     {item.href === "/admin/users" && hasNewUsers ? (
                       <span
-                        className="inline-block h-2.5 w-2.5 rounded-full bg-primary"
+                        className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-700"
                         aria-label="Existem novos cadastros"
                         title="Existem novos cadastros"
                       />

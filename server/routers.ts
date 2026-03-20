@@ -41,6 +41,7 @@ const registerSchema = z.object({
   name: z.string().trim().min(2).max(120),
   cpf: cpfSchema,
   phone: z.string().trim().min(14).max(20),
+  birthDate: z.string().nullable().optional(),
 });
 
 const loginSchema = z.object({
@@ -526,15 +527,16 @@ export const appRouter = router({
       await ensureUniqueUserIdentity(input.email, input.cpf);
 
       const passwordHash = await hashPassword(input.password);
-      const createdUser = await createUser({
-        openId: `local:${nanoid()}`,
-        name: input.name.trim(),
-        email: input.email,
-        cpf: input.cpf,
-        phone: input.phone.trim(),
-        loginMethod: "password",
-        passwordHash,
-        registrationSource: "public_signup",
+        const createdUser = await createUser({
+          openId: `local:${nanoid()}`,
+          name: input.name.trim(),
+          email: input.email,
+          cpf: input.cpf,
+          phone: input.phone.trim(),
+          birthDate: input.birthDate ? new Date(`${input.birthDate}T00:00:00`) : null,
+          loginMethod: "password",
+          passwordHash,
+          registrationSource: "public_signup",
         role: "cliente",
         isActive: 1,
         lastSignedIn: new Date(),

@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { APP_LOGO2, APP_TITLE, APP_VERSION } from "@/const";
-import { Mail, Phone, MapPin, Facebook, Instagram, Linkedin } from "lucide-react";
+import { Mail, MapPin, Facebook, Instagram, Linkedin } from "lucide-react";
 
 /**
  * Footer Component
@@ -15,8 +15,7 @@ import { Mail, Phone, MapPin, Facebook, Instagram, Linkedin } from "lucide-react
 
 // ========== ÁREA DE EDIÇÃO - INFORMAÇÕES DE CONTATO ==========
 const CONTACT_INFO = {
-  phone: "(11) 9999-9999",
-  email: "contato@afgimobiliaria.com.br",
+  email: "contato@afg.com",
   address: "Av. Cassiano Ricardo, 601 The One Office Tower - Jardim Aquarius - São José dos Campos/SP",
   whatsapp: "5511999999999", // Formato: código do país + DDD + número
 };
@@ -87,13 +86,6 @@ export default function Footer() {
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Contato</h3>
             <div className="space-y-3">
-              <a
-                href={`tel:${CONTACT_INFO.phone.replace(/\D/g, "")}`}
-                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
-              >
-                <Phone className="h-4 w-4" />
-                {CONTACT_INFO.phone}
-              </a>
               <a
                 href={`mailto:${CONTACT_INFO.email}`}
                 className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
