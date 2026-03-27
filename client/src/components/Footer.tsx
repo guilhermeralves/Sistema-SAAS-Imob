@@ -38,8 +38,8 @@ export default function Footer() {
   const currentYear = new Date().getFullYear();
 
   return (
-    <footer className="bg-muted/50 border-t mt-auto">
-      <div className="container py-12">
+    <footer className="mt-auto overflow-hidden border-t bg-muted/50">
+      <div className="container pb-10 pt-12">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {/* Sobre a Empresa */}
           <div className="space-y-4">
@@ -100,14 +100,22 @@ export default function Footer() {
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Copyright */}
-        <div className="mt-8 pt-8 border-t text-center text-sm text-muted-foreground">
-          <p>
-            © {currentYear} {APP_TITLE}. Todos os direitos reservados.
+      {/* Copyright */}
+      <div className="relative w-full border-t border-slate-500/45 bg-[linear-gradient(135deg,#474c54,#585e68_45%,#707988)]">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 opacity-25 bg-[repeating-linear-gradient(135deg,rgba(255,255,255,0.2)_0px,rgba(255,255,255,0.2)_1px,transparent_1px,transparent_8px)]"
+        />
+        <div className="container py-5 text-center text-sm text-slate-100">
+          <p className="text-slate-50">
+            © {currentYear} {APP_TITLE} - Todos os direitos reservados.
           </p>
-          <p className="mt-2">Created by <span className="font-bold">Noxilon®</span></p>
-          <p>Software Version v{APP_VERSION}</p>
+          <p className="mt-2 text-slate-200">
+            Created by <span className="font-bold text-slate-50">Noxilon®</span>
+          </p>
+          <p className="text-slate-200">Software Version {APP_VERSION}</p>
         </div>
       </div>
     </footer>

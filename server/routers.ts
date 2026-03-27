@@ -190,6 +190,32 @@ const propertyOwnerDetailsSchema = z.object({
   notes: z.string().trim().max(2000).optional(),
 });
 
+const taskKindSchema = z.enum(["tarefa", "evento"]);
+const taskPersistedStatusSchema = z.enum(["pendente", "em_andamento"]);
+const taskEditableStatusSchema = z.enum(["pendente", "em_andamento", "atrasado", "concluida"]);
+
+const taskUpsertBaseSchema = z.object({
+  title: z.string().trim().min(2).max(180),
+  kind: taskKindSchema,
+  dueAt: z.string().trim().optional().nullable(),
+  description: z.string().trim().max(2000).optional().nullable(),
+  assigneeIds: z.array(z.number().int().positive()).max(30).default([]),
+});
+
+const createTaskItemSchema = taskUpsertBaseSchema.extend({
+  status: taskPersistedStatusSchema.default("pendente"),
+});
+
+const updateTaskItemSchema = taskUpsertBaseSchema.extend({
+  id: z.number().int().positive(),
+  status: taskEditableStatusSchema,
+});
+
+const taskNoteSchema = z.object({
+  taskId: z.number().int().positive(),
+  note: z.string().trim().min(1).max(1200),
+});
+
 function setSessionCookie(ctx: { req: any; res: any }, sessionToken: string) {
   const cookieOptions = getSessionCookieOptions(ctx.req);
   ctx.res.cookie(COOKIE_NAME, sessionToken, {
@@ -370,6 +396,89 @@ async function ensureLeadAccess(
   }
 
   return lead;
+}
+
+function normalizeAssigneeIds(assigneeIds: number[]) {
+  return Array.from(new Set(assigneeIds)).sort((a, b) => a - b);
+}
+
+function parseOptionalTaskDueAt(value: string | null | undefined) {
+  if (!value) return null;
+
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Data/hora da tarefa invalida",
+    });
+  }
+
+  return parsedDate;
+}
+
+function getComputedTaskStatus(task: {
+  status: "pendente" | "em_andamento";
+  dueAt?: Date | string | null;
+}) {
+  const dueAt = task.dueAt ? new Date(task.dueAt) : null;
+  if (!dueAt || Number.isNaN(dueAt.getTime())) {
+    return task.status;
+  }
+
+  if (dueAt.getTime() < Date.now()) {
+    return "atrasado" as const;
+  }
+
+  return task.status;
+}
+
+async function assertValidAssignees(assigneeIds: number[]) {
+  if (assigneeIds.length === 0) return;
+
+  const { getUsersByIds } = await import("./db");
+  const users = await getUsersByIds(assigneeIds);
+  const foundIds = new Set(users.map(user => user.id));
+  const missingIds = assigneeIds.filter(id => !foundIds.has(id));
+
+  if (missingIds.length > 0) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Existem usuarios vinculados invalidos na tarefa.",
+    });
+  }
+
+  const inactiveIds = users.filter(user => user.isActive !== 1).map(user => user.id);
+  if (inactiveIds.length > 0) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Nao e possivel vincular usuarios inativos em tarefas/eventos.",
+    });
+  }
+}
+
+async function ensureTaskAccess(
+  user: { id: number; role: "cliente" | "corretor" | "administrativo" },
+  taskId: number
+) {
+  const { getTaskItemWithRelationsById } = await import("./db");
+  const task = await getTaskItemWithRelationsById(taskId);
+
+  if (!task) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Tarefa/Evento nao encontrado" });
+  }
+
+  if (user.role === "administrativo") {
+    return task;
+  }
+
+  const isCreator = task.createdByUserId === user.id;
+  const isAssigned = task.assignees.some(assignee => assignee.id === user.id);
+
+  if (!isCreator && !isAssigned) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Voce nao tem acesso a esta tarefa/evento" });
+  }
+
+  return task;
 }
 
 async function ensureUniqueUserIdentity(
@@ -897,6 +1006,168 @@ export const appRouter = router({
       const { createLeadFile } = await import("./db");
       await ensureLeadAccess(ctx.user, (input as any).idLead);
       return await createLeadFile({ ...(input as any), idUsuario: ctx.user.id });
+    }),
+  }),
+
+  tasks: router({
+    list: staffProcedure.query(async ({ ctx }) => {
+      const { getAllTaskItemsWithRelations, getTaskItemsForUserWithRelations } = await import("./db");
+      const taskItems =
+        ctx.user.role === "administrativo"
+          ? await getAllTaskItemsWithRelations()
+          : await getTaskItemsForUserWithRelations(ctx.user.id);
+
+      return taskItems.map(taskItem => ({
+        ...taskItem,
+        computedStatus: getComputedTaskStatus(taskItem),
+        isAssignedToCurrentUser: taskItem.assignees.some(assignee => assignee.id === ctx.user.id),
+      }));
+    }),
+    users: staffProcedure.query(async () => {
+      const { getAllUsers } = await import("./db");
+      const users = await getAllUsers();
+
+      return users
+        .filter(user => user.isActive === 1)
+        .map(user => ({
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+        }));
+    }),
+    summary: staffProcedure.query(async ({ ctx }) => {
+      const { getAllTaskItemsWithRelations, getTaskItemsForUserWithRelations } = await import("./db");
+      const taskItems =
+        ctx.user.role === "administrativo"
+          ? await getAllTaskItemsWithRelations()
+          : await getTaskItemsForUserWithRelations(ctx.user.id);
+
+      const assignedItems = taskItems.filter(taskItem =>
+        taskItem.assignees.some(assignee => assignee.id === ctx.user.id)
+      );
+      const assignedOverdueCount = assignedItems.filter(
+        taskItem => getComputedTaskStatus(taskItem) === "atrasado"
+      ).length;
+
+      return {
+        assignedOpenCount: assignedItems.length,
+        assignedOverdueCount,
+        totalVisibleCount: taskItems.length,
+      };
+    }),
+    create: staffProcedure.input(createTaskItemSchema).mutation(async ({ ctx, input }) => {
+      const { createTaskItem, getTaskItemWithRelationsById, replaceTaskItemAssignees } = await import("./db");
+      const normalizedAssigneeIds = normalizeAssigneeIds(input.assigneeIds);
+      await assertValidAssignees(normalizedAssigneeIds);
+
+      const dueAt = parseOptionalTaskDueAt(input.dueAt);
+      if (input.kind === "evento" && !dueAt) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Eventos precisam ter data e horario definidos.",
+        });
+      }
+
+      const created = await createTaskItem({
+        title: input.title.trim(),
+        kind: input.kind,
+        status: input.status,
+        dueAt,
+        description: input.description?.trim() || null,
+        createdByUserId: ctx.user.id,
+      });
+
+      await replaceTaskItemAssignees(created.id, normalizedAssigneeIds);
+      const fullTaskItem = await getTaskItemWithRelationsById(created.id);
+
+      if (!fullTaskItem) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Nao foi possivel carregar a tarefa criada.",
+        });
+      }
+
+      return {
+        ...fullTaskItem,
+        computedStatus: getComputedTaskStatus(fullTaskItem),
+        isAssignedToCurrentUser: fullTaskItem.assignees.some(assignee => assignee.id === ctx.user.id),
+      };
+    }),
+    update: staffProcedure.input(updateTaskItemSchema).mutation(async ({ ctx, input }) => {
+      const { deleteTaskItem, getTaskItemWithRelationsById, replaceTaskItemAssignees, updateTaskItem } = await import("./db");
+      await ensureTaskAccess(ctx.user, input.id);
+
+      if (input.status === "concluida") {
+        await deleteTaskItem(input.id);
+        return { action: "deleted" as const, id: input.id };
+      }
+
+      const normalizedAssigneeIds = normalizeAssigneeIds(input.assigneeIds);
+      await assertValidAssignees(normalizedAssigneeIds);
+
+      const dueAt = parseOptionalTaskDueAt(input.dueAt);
+      if (input.kind === "evento" && !dueAt) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Eventos precisam ter data e horario definidos.",
+        });
+      }
+
+      await updateTaskItem(input.id, {
+        title: input.title.trim(),
+        kind: input.kind,
+        dueAt,
+        description: input.description?.trim() || null,
+        status: input.status === "atrasado" ? "pendente" : input.status,
+      });
+      await replaceTaskItemAssignees(input.id, normalizedAssigneeIds);
+
+      const updatedTaskItem = await getTaskItemWithRelationsById(input.id);
+      if (!updatedTaskItem) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Nao foi possivel carregar a tarefa atualizada.",
+        });
+      }
+
+      return {
+        action: "updated" as const,
+        task: {
+          ...updatedTaskItem,
+          computedStatus: getComputedTaskStatus(updatedTaskItem),
+          isAssignedToCurrentUser: updatedTaskItem.assignees.some(
+            assignee => assignee.id === ctx.user.id
+          ),
+        },
+      };
+    }),
+    delete: staffProcedure.input(idSchema).mutation(async ({ ctx, input }) => {
+      const { deleteTaskItem } = await import("./db");
+      await ensureTaskAccess(ctx.user, input.id);
+      await deleteTaskItem(input.id);
+      return { success: true } as const;
+    }),
+    notes: staffProcedure
+      .input(z.object({ taskId: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        const { getTaskItemNotes } = await import("./db");
+        await ensureTaskAccess(ctx.user, input.taskId);
+        return await getTaskItemNotes(input.taskId);
+      }),
+    addNote: staffProcedure.input(taskNoteSchema).mutation(async ({ ctx, input }) => {
+      const { createTaskItemNote, updateTaskItem } = await import("./db");
+      await ensureTaskAccess(ctx.user, input.taskId);
+
+      const createdNote = await createTaskItemNote({
+        taskId: input.taskId,
+        userId: ctx.user.id,
+        note: input.note.trim(),
+      });
+
+      await updateTaskItem(input.taskId, {});
+
+      return createdNote;
     }),
   }),
 

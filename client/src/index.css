@@ -187,4 +187,64 @@
     width: 0;
     height: 0;
   }
+
+  .dark [class*="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.88),rgba(244,240,232,0.82)_45%,rgba(248,248,246,1)_100%)]"] {
+    background: radial-gradient(
+      circle at top left,
+      rgba(30, 41, 59, 0.94),
+      rgba(15, 23, 42, 0.92) 45%,
+      rgba(2, 6, 23, 1) 100%
+    ) !important;
+  }
+
+  .dark .bg-\[\#f7f6f2\] {
+    background-color: rgba(15, 23, 42, 0.92) !important;
+  }
+
+  .dark .bg-white\/90 {
+    background-color: rgba(15, 23, 42, 0.78) !important;
+  }
+
+  .dark .bg-white\/80 {
+    background-color: rgba(15, 23, 42, 0.68) !important;
+  }
+
+  .dark .bg-white {
+    background-color: rgba(15, 23, 42, 0.88) !important;
+  }
+
+  .dark .border-white\/80,
+  .dark .border-white\/70,
+  .dark .border-white\/30,
+  .dark .border-white\/20 {
+    border-color: rgba(148, 163, 184, 0.34) !important;
+  }
+
+  .dark .border-slate-200 {
+    border-color: rgba(148, 163, 184, 0.24) !important;
+  }
+
+  .dark .text-slate-950 {
+    color: rgba(241, 245, 249, 0.97) !important;
+  }
+
+  .dark .text-slate-900 {
+    color: rgba(241, 245, 249, 0.94) !important;
+  }
+
+  .dark .text-slate-700 {
+    color: rgba(203, 213, 225, 0.95) !important;
+  }
+
+  .dark .text-slate-600 {
+    color: rgba(148, 163, 184, 0.98) !important;
+  }
+
+  .dark .text-slate-500 {
+    color: rgba(148, 163, 184, 0.86) !important;
+  }
+
+  .dark .text-slate-400 {
+    color: rgba(148, 163, 184, 0.72) !important;
+  }
 }

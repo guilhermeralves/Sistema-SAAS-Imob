@@ -22,6 +22,7 @@ import AdminUsers from "./pages/AdminUsers";
 import AdminUserDetails from "./pages/AdminUserDetails";
 import Financeiro from "./pages/Financeiro";
 import Dashboard from "./pages/Dashboard";
+import TarefasEventos from "./pages/TarefasEventos";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -64,6 +65,9 @@ function Router() {
       <Route path={"/financeiro"}>
         <ProtectedRoute component={Financeiro} roles={["administrativo"]} />
       </Route>
+      <Route path={"/tarefas-eventos"}>
+        <ProtectedRoute component={TarefasEventos} roles={["corretor", "administrativo"]} />
+      </Route>
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
@@ -91,7 +95,7 @@ function App() {
     <ErrorBoundary>
       <ThemeProvider
         defaultTheme="light"
-        // switchable
+        switchable
       >
         <TooltipProvider>
           <ScrollToTopOnRouteChange />

@@ -471,10 +471,10 @@ export default function Dashboard() {
 
   return (
     <Layout>
-      <div className="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.95),rgba(244,240,232,0.92)_45%,rgba(248,248,246,1)_100%)]">
+      <div className="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.95),rgba(244,240,232,0.92)_45%,rgba(248,248,246,1)_100%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(30,41,59,0.94),rgba(15,23,42,0.92)_45%,rgba(2,6,23,1)_100%)]">
         <div className="container py-8 md:py-10">
           <div className="space-y-6">
-            <Card className="overflow-hidden rounded-[36px] border border-white/70 bg-[#ece9e1] shadow-[0_24px_80px_-42px_rgba(15,23,42,0.5)]">
+            <Card className="overflow-hidden rounded-[36px] border border-white/70 bg-white/90 shadow-[0_24px_80px_-42px_rgba(15,23,42,0.5)]">
               <CardContent className="grid gap-8 p-6 md:p-8 xl:grid-cols-[1.2fr_0.9fr] xl:items-center">
                 <div className="space-y-5">
                   <div className="flex items-center gap-4">
@@ -482,10 +482,7 @@ export default function Dashboard() {
                       <LayoutDashboard className="h-8 w-8" />
                     </div>
                     <div>
-                      <Badge variant="secondary" className="rounded-full bg-white/80 px-3 py-1 text-[11px] uppercase tracking-[0.18em] text-slate-600">
-                        Dashboard
-                      </Badge>
-                      <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">
+                      <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">
                         {isAdmin ? `Olá, ${user?.name || "Administrador"}` : `Olá, ${user?.name || "Corretor"}`}
                       </h1>
                     </div>
@@ -497,7 +494,7 @@ export default function Dashboard() {
                         ? "Acompanhe a evolução comercial e operacional da AFG em um painel mais executivo."
                         : "Acompanhe seus leads, a carteira de imóveis e uma prévia do desempenho do período."}
                     </p>
-                    <p className="text-sm text-slate-500">Os dados consideram sempre o período selecionado.</p>
+                    <p className="text-sm text-slate-600">Os dados consideram sempre o período selecionado.</p>
                   </div>
                 </div>
 
@@ -505,7 +502,7 @@ export default function Dashboard() {
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="text-sm font-medium text-slate-900">Dados por Período</p>
-                      <p className="text-xs text-muted-foreground">Altere a janela de análise sem mudar o restante do fluxo.</p>
+                      <p className="text-xs text-slate-600">Altere a janela de análise sem mudar o restante do fluxo.</p>
                     </div>
                     <Badge className="rounded-full bg-emerald-700/90 px-3 py-1 text-white">{PERIOD_LABELS[period]}</Badge>
                   </div>
@@ -529,7 +526,7 @@ export default function Dashboard() {
                   </div>
 
                   <div className="flex flex-wrap gap-3">
-                    <Button type="button" className="gap-2 rounded-full bg-slate-950 text-white hover:bg-slate-800" onClick={handleDownloadReportPreview}>
+                    <Button type="button" className="gap-2 rounded-full bg-white/95 text-slate-900 hover:bg-white" onClick={handleDownloadReportPreview}>
                       <Download className="h-4 w-4" />
                       Gerar Relatório de Performance Geral
                     </Button>

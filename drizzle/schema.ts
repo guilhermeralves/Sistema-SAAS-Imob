@@ -181,6 +181,62 @@ export type LeadFile = typeof leadFiles.$inferSelect;
 export type InsertLeadFile = typeof leadFiles.$inferInsert;
 
 /**
+ * Tabela de tarefas e eventos internos
+ * Auxilia o dia a dia operacional entre os usuarios do sistema
+ */
+export const taskItems = pgTable("taskItems", {
+  id: serial("id").primaryKey(),
+  title: varchar("title", { length: 180 }).notNull(),
+  kind: varchar("kind", { length: 20 })
+    .$type<"tarefa" | "evento">()
+    .default("tarefa")
+    .notNull(),
+  status: varchar("status", { length: 20 })
+    .$type<"pendente" | "em_andamento">()
+    .default("pendente")
+    .notNull(),
+  dueAt: timestamp("dueAt", { mode: "date" }),
+  description: text("description"),
+  createdByUserId: integer("createdByUserId").notNull(),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export type TaskItem = typeof taskItems.$inferSelect;
+export type InsertTaskItem = typeof taskItems.$inferInsert;
+
+/**
+ * Vinculos de usuarios associados a tarefa/evento
+ */
+export const taskItemAssignments = pgTable(
+  "taskItemAssignments",
+  {
+    id: serial("id").primaryKey(),
+    taskId: integer("taskId").notNull(),
+    userId: integer("userId").notNull(),
+    createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  },
+  table => [uniqueIndex("taskItemAssignments_taskId_userId_idx").on(table.taskId, table.userId)]
+);
+
+export type TaskItemAssignment = typeof taskItemAssignments.$inferSelect;
+export type InsertTaskItemAssignment = typeof taskItemAssignments.$inferInsert;
+
+/**
+ * Observacoes em texto para tarefas/eventos
+ */
+export const taskItemNotes = pgTable("taskItemNotes", {
+  id: serial("id").primaryKey(),
+  taskId: integer("taskId").notNull(),
+  userId: integer("userId").notNull(),
+  note: text("note").notNull(),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export type TaskItemNote = typeof taskItemNotes.$inferSelect;
+export type InsertTaskItemNote = typeof taskItemNotes.$inferInsert;
+
+/**
  * Tabela de contratos
  * Armazena informacoes sobre contratos de clientes
  */

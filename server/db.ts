@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import {
   adminUserViews,
@@ -11,12 +11,20 @@ import {
   InsertPropertyDocument,
   InsertPropertyOwner,
   InsertProperty,
+  InsertTaskItem,
+  InsertTaskItemAssignment,
+  InsertTaskItemNote,
   InsertUser,
+  TaskItem,
+  User,
   contracts,
   documents,
   leadFiles,
   leadNotes,
   leads,
+  taskItemAssignments,
+  taskItemNotes,
+  taskItems,
   propertyDocuments,
   propertyOwners,
   properties,
@@ -651,6 +659,216 @@ export async function createLeadFile(data: InsertLeadFile) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return await db.insert(leadFiles).values(data);
+}
+
+type TaskActor = Pick<User, "id" | "name" | "email" | "role" | "isActive">;
+
+export type TaskItemWithRelations = TaskItem & {
+  createdBy: TaskActor | null;
+  assignees: TaskActor[];
+};
+
+async function enrichTaskItemsWithRelations(taskRows: TaskItem[]): Promise<TaskItemWithRelations[]> {
+  const db = await getDb();
+  if (!db || taskRows.length === 0) {
+    return taskRows.map(task => ({
+      ...task,
+      createdBy: null,
+      assignees: [],
+    }));
+  }
+
+  const taskIds = taskRows.map(task => task.id);
+  const assignmentRows =
+    taskIds.length > 0
+      ? await db
+          .select()
+          .from(taskItemAssignments)
+          .where(inArray(taskItemAssignments.taskId, taskIds))
+      : [];
+
+  const userIds = Array.from(
+    new Set([
+      ...taskRows.map(task => task.createdByUserId),
+      ...assignmentRows.map(assignment => assignment.userId),
+    ])
+  );
+
+  const relatedUsers =
+    userIds.length > 0
+      ? await db.select().from(users).where(inArray(users.id, userIds))
+      : [];
+
+  const usersById = new Map<number, TaskActor>(
+    relatedUsers.map(user => [
+      user.id,
+      {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isActive: user.isActive,
+      },
+    ])
+  );
+
+  const assigneesByTask = new Map<number, TaskActor[]>();
+
+  for (const assignment of assignmentRows) {
+    const linkedUser = usersById.get(assignment.userId);
+    if (!linkedUser) continue;
+
+    const currentAssignees = assigneesByTask.get(assignment.taskId) ?? [];
+    currentAssignees.push(linkedUser);
+    assigneesByTask.set(assignment.taskId, currentAssignees);
+  }
+
+  return taskRows.map(task => ({
+    ...task,
+    createdBy: usersById.get(task.createdByUserId) ?? null,
+    assignees: assigneesByTask.get(task.id) ?? [],
+  }));
+}
+
+export async function getUsersByIds(userIds: number[]) {
+  const db = await getDb();
+  if (!db || userIds.length === 0) return [];
+  return await db.select().from(users).where(inArray(users.id, userIds));
+}
+
+export async function getAllTaskItemsWithRelations() {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = await db.select().from(taskItems).orderBy(desc(taskItems.updatedAt));
+  return await enrichTaskItemsWithRelations(rows);
+}
+
+export async function getTaskItemsForUserWithRelations(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const assignmentRows = await db
+    .select({ taskId: taskItemAssignments.taskId })
+    .from(taskItemAssignments)
+    .where(eq(taskItemAssignments.userId, userId));
+
+  const assignedTaskIds = assignmentRows.map(item => item.taskId);
+
+  const rows =
+    assignedTaskIds.length === 0
+      ? await db
+          .select()
+          .from(taskItems)
+          .where(eq(taskItems.createdByUserId, userId))
+          .orderBy(desc(taskItems.updatedAt))
+      : await db
+          .select()
+          .from(taskItems)
+          .where(
+            or(
+              eq(taskItems.createdByUserId, userId),
+              inArray(taskItems.id, assignedTaskIds)
+            )
+          )
+          .orderBy(desc(taskItems.updatedAt));
+
+  return await enrichTaskItemsWithRelations(rows);
+}
+
+export async function getTaskItemById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const rows = await db.select().from(taskItems).where(eq(taskItems.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function getTaskItemWithRelationsById(id: number) {
+  const task = await getTaskItemById(id);
+  if (!task) return undefined;
+
+  const [enriched] = await enrichTaskItemsWithRelations([task]);
+  return enriched;
+}
+
+export async function getTaskItemAssigneeIds(taskId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = await db
+    .select({ userId: taskItemAssignments.userId })
+    .from(taskItemAssignments)
+    .where(eq(taskItemAssignments.taskId, taskId));
+
+  return rows.map(row => row.userId);
+}
+
+export async function createTaskItem(data: InsertTaskItem) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [created] = await db.insert(taskItems).values(data).returning();
+  return created;
+}
+
+export async function updateTaskItem(id: number, data: Partial<InsertTaskItem>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [updated] = await db
+    .update(taskItems)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(taskItems.id, id))
+    .returning();
+
+  return updated;
+}
+
+export async function replaceTaskItemAssignees(taskId: number, userIds: number[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.delete(taskItemAssignments).where(eq(taskItemAssignments.taskId, taskId));
+
+  if (userIds.length === 0) return;
+
+  const uniqueUserIds = Array.from(new Set(userIds));
+  const rows: InsertTaskItemAssignment[] = uniqueUserIds.map(userId => ({
+    taskId,
+    userId,
+    createdAt: new Date(),
+  }));
+
+  await db.insert(taskItemAssignments).values(rows);
+}
+
+export async function deleteTaskItem(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.delete(taskItemAssignments).where(eq(taskItemAssignments.taskId, id));
+  await db.delete(taskItemNotes).where(eq(taskItemNotes.taskId, id));
+  await db.delete(taskItems).where(eq(taskItems.id, id));
+}
+
+export async function getTaskItemNotes(taskId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(taskItemNotes)
+    .where(eq(taskItemNotes.taskId, taskId))
+    .orderBy(desc(taskItemNotes.createdAt));
+}
+
+export async function createTaskItemNote(data: InsertTaskItemNote) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [created] = await db.insert(taskItemNotes).values(data).returning();
+  return created;
 }
 
 export async function getContractsByCliente(idCliente: number) {

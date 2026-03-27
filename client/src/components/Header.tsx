@@ -4,6 +4,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { APP_LOGO, getLoginUrl, getRegisterUrl } from "@/const";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
+import { useTheme } from "@/contexts/ThemeContext";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ROLE_LABELS } from "@shared/auth";
 import {
+  CalendarDays,
   CircleDollarSign,
   Briefcase,
   Building2,
@@ -20,21 +22,30 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  Moon,
   Phone,
+  Sun,
   User,
   Users,
 } from "lucide-react";
 
 export default function Header() {
   const { user, loading, isAuthenticated, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const isRootAdmin =
     user?.role === "administrativo" && user?.registrationSource === "bootstrap";
+  const isStaff = user?.role === "administrativo" || user?.role === "corretor";
   const brandHref = user?.role === "administrativo" ? "/dashboard" : "/";
 
   const { data: hasNewUsers } = trpc.admin.hasNewUsers.useQuery(undefined, {
     enabled: isAuthenticated && user?.role === "administrativo",
+    refetchOnWindowFocus: true,
+  });
+
+  const { data: taskSummary } = trpc.tasks.summary.useQuery(undefined, {
+    enabled: isAuthenticated && isStaff,
     refetchOnWindowFocus: true,
   });
 
@@ -93,16 +104,16 @@ export default function Header() {
     const isActive = location === href;
 
     return isActive
-      ? "flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900 shadow-sm ring-1 ring-emerald-100 transition-colors"
-      : "flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium text-slate-500 transition-colors hover:bg-emerald-50/70 hover:text-emerald-900";
+      ? "flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900 shadow-sm ring-1 ring-emerald-100 transition-colors dark:bg-emerald-500/15 dark:text-emerald-200 dark:ring-emerald-400/30"
+      : "flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium text-slate-500 transition-colors hover:bg-emerald-50/70 hover:text-emerald-900 dark:text-slate-300 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-200";
   };
 
   const getMobileNavClassName = (href: string) => {
     const isActive = location === href;
 
     return isActive
-      ? "flex items-center gap-3 rounded-2xl bg-emerald-50 px-3 py-2.5 text-sm font-medium text-emerald-900 ring-1 ring-emerald-100"
-      : "flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-500 transition-colors hover:bg-emerald-50/70 hover:text-emerald-900";
+      ? "flex items-center gap-3 rounded-2xl bg-emerald-50 px-3 py-2.5 text-sm font-medium text-emerald-900 ring-1 ring-emerald-100 dark:bg-emerald-500/15 dark:text-emerald-200 dark:ring-emerald-400/30"
+      : "flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-500 transition-colors hover:bg-emerald-50/70 hover:text-emerald-900 dark:text-slate-300 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-200";
   };
 
   const handleMenuNavigation = (
@@ -123,7 +134,7 @@ export default function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-[#e5e3da] bg-[#f8f7f2]/92 backdrop-blur supports-[backdrop-filter]:bg-[#f8f7f2]/80">
+    <header className="sticky top-0 z-50 w-full border-b border-[#e5e3da] bg-[#f8f7f2]/92 backdrop-blur supports-[backdrop-filter]:bg-[#f8f7f2]/80 dark:border-white/10 dark:bg-[#111827]/92 dark:supports-[backdrop-filter]:bg-[#111827]/80">
       <div className="container flex h-15 items-center justify-between">
         <Link href={brandHref}>
           <a className="flex items-center gap-3 transition-opacity hover:opacity-80">
@@ -158,58 +169,91 @@ export default function Header() {
           {loading ? (
             <div className="h-9 w-24 animate-pulse rounded bg-muted" />
           ) : isAuthenticated && user ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+            <div className="flex items-center gap-1.5">
+              {isStaff ? (
                 <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2 rounded-full border-[#d8d6ca] bg-white/80 text-slate-700 hover:bg-emerald-50 hover:text-emerald-900"
+                  variant="ghost"
+                  size="icon"
+                  className="relative h-9 w-9 rounded-full border-0 bg-transparent p-0 text-slate-600 shadow-none hover:bg-emerald-50/60 hover:text-emerald-900 dark:text-slate-200 dark:hover:bg-emerald-500/15 dark:hover:text-emerald-200"
+                  onClick={() => setLocation("/tarefas-eventos")}
+                  aria-label="Abrir tarefas e eventos"
+                  title="Tarefas e Eventos"
                 >
-                  <User className="h-4 w-4" />
-                  <span className="hidden sm:inline">{user.name || user.email}</span>
+                  <CalendarDays className="h-5 w-5" />
+                  {(taskSummary?.assignedOpenCount ?? 0) > 0 ? (
+                    <span className="absolute right-0.5 top-0.5 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-emerald-700 px-1 text-[10px] font-semibold text-white">
+                      {Math.min(taskSummary?.assignedOpenCount ?? 0, 99)}
+                    </span>
+                  ) : null}
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <div className="rounded-sm px-2 py-1.5 text-sm">
-                  <p className="font-medium">{user.name || "Usu\u00e1rio"}</p>
-                  <p className="text-xs text-muted-foreground">{user.email}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Papel: {ROLE_LABELS[user.role]}
-                  </p>
-                </div>
-                {!isRootAdmin ? (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                      <Link href="/minha-ficha">
-                        <a className="flex items-center gap-2">
-                          <User className="h-4 w-4" />
-                          Meu Perfil
-                        </a>
-                      </Link>
-                    </DropdownMenuItem>
-                  </>
-                ) : null}
-                <DropdownMenuItem onClick={() => logout()} className="cursor-pointer gap-2">
-                  <LogOut className="h-4 w-4" />
-                  Sair
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              ) : null}
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 rounded-full border-[#d8d6ca] bg-white/80 text-slate-700 hover:bg-emerald-50 hover:text-emerald-900 dark:border-white/20 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-emerald-500/15 dark:hover:text-emerald-200"
+                  >
+                    <User className="h-4 w-4" />
+                    <span className="hidden sm:inline">{user.name || user.email}</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <div className="rounded-sm px-2 py-1.5 text-sm">
+                    <p className="font-medium">{user.name || "Usu\u00e1rio"}</p>
+                    <p className="text-xs text-muted-foreground">{user.email}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Papel: {ROLE_LABELS[user.role]}
+                    </p>
+                  </div>
+                  {!isRootAdmin ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link href="/minha-ficha">
+                          <a className="flex items-center gap-2">
+                            <User className="h-4 w-4" />
+                            Meu Perfil
+                          </a>
+                        </Link>
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
+                  {toggleTheme && isRootAdmin ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => toggleTheme()} className="cursor-pointer gap-2">
+                        {theme === "dark" ? (
+                          <Sun className="h-4 w-4" />
+                        ) : (
+                          <Moon className="h-4 w-4" />
+                        )}
+                        {theme === "dark" ? "Voltar para modo claro" : "Ativar modo escuro (Beta)"}
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
+                  <DropdownMenuItem onClick={() => logout()} className="cursor-pointer gap-2">
+                    <LogOut className="h-4 w-4" />
+                    Sair
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           ) : (
             <div className="flex items-center gap-2">
               <Button
                 asChild
                 size="sm"
                 variant="outline"
-                className="hidden rounded-full border-[#d8d6ca] bg-white/80 text-slate-700 hover:bg-emerald-50 hover:text-emerald-900 sm:inline-flex"
+                className="hidden rounded-full border-[#d8d6ca] bg-white/80 text-slate-700 hover:bg-emerald-50 hover:text-emerald-900 dark:border-white/20 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-emerald-500/15 dark:hover:text-emerald-200 sm:inline-flex"
               >
                 <a href={getRegisterUrl()}>Cadastrar</a>
               </Button>
               <Button
                 asChild
                 size="sm"
-                className="rounded-full bg-emerald-700 text-white shadow-[0_12px_30px_-18px_rgba(4,120,87,0.8)] hover:bg-emerald-800"
+                className="rounded-full bg-emerald-700 text-white shadow-[0_12px_30px_-18px_rgba(4,120,87,0.8)] hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
               >
                 <a href={getLoginUrl()}>Entrar</a>
               </Button>
@@ -228,7 +272,7 @@ export default function Header() {
       </div>
 
       {mobileMenuOpen ? (
-        <div className="border-t border-[#e5e3da] bg-[#f8f7f2] md:hidden">
+        <div className="border-t border-[#e5e3da] bg-[#f8f7f2] dark:border-white/10 dark:bg-[#111827] md:hidden">
           <nav className="container flex flex-col gap-2.5 py-4">
             {menuItems.map(item => (
               <Link key={item.href} href={item.href}>
