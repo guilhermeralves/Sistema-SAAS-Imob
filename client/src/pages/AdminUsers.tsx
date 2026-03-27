@@ -331,11 +331,12 @@ export default function AdminUsers() {
 
   return (
     <Layout>
-      <div className="container py-8 space-y-6">
-        <div className="flex items-center justify-between gap-4">
+      <div className="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.88),rgba(244,240,232,0.82)_45%,rgba(248,248,246,1)_100%)]">
+      <div className="container space-y-6 py-8 md:py-10">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Usuários</h1>
-            <p className="text-muted-foreground mt-2">
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">Usuários</h1>
+            <p className="mt-2 text-slate-600">
               Gerencie usuarios, ajuste permissoes e desative contas.
             </p>
           </div>
@@ -350,27 +351,28 @@ export default function AdminUsers() {
             }}
           >
             <DialogTrigger asChild>
-              <Button className="gap-2">
+              <Button className="gap-2 rounded-full bg-slate-950 text-white hover:bg-slate-800">
                 <Plus className="h-4 w-4" />
                 Novo Usuario
               </Button>
             </DialogTrigger>
             <DialogContent
-              className="sm:max-w-md lg:max-w-xl"
+              className="max-h-[90vh] w-full max-w-xl overflow-y-auto scrollbar-hidden rounded-[32px] border-white/80 bg-[#f7f6f2] p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)] sm:p-6"
               onOpenAutoFocus={event => event.preventDefault()}
             >
-              <DialogHeader>
-                <DialogTitle>Criar Usuario</DialogTitle>
-                <DialogDescription>
+              <DialogHeader className="space-y-3 pb-2">
+                <DialogTitle className="text-2xl font-semibold tracking-tight text-slate-950">Criar Usuario</DialogTitle>
+                <DialogDescription className="text-slate-600">
                   Crie contas de cliente, corretor ou admin.
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="space-y-4">
+              <div className="space-y-5">
                 <div className="space-y-2">
                   <Label htmlFor="create-name">Nome</Label>
                   <Input
                     id="create-name"
+                    className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                     value={createForm.name}
                     onChange={event =>
                       setCreateForm(current => ({ ...current, name: event.target.value }))
@@ -381,6 +383,7 @@ export default function AdminUsers() {
                   <Label htmlFor="create-cpf">CPF</Label>
                   <Input
                     id="create-cpf"
+                    className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                     value={createForm.cpf}
                     inputMode="numeric"
                     maxLength={14}
@@ -413,6 +416,7 @@ export default function AdminUsers() {
                   <Input
                     id="create-email"
                     type="email"
+                    className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                     value={createForm.email}
                     onChange={event =>
                       setCreateForm(current => ({ ...current, email: event.target.value }))
@@ -425,6 +429,7 @@ export default function AdminUsers() {
                     id="create-password"
                     type="password"
                     minLength={8}
+                    className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                     value={createForm.password}
                     onChange={event =>
                       setCreateForm(current => ({ ...current, password: event.target.value }))
@@ -442,7 +447,7 @@ export default function AdminUsers() {
                       }))
                     }
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -457,6 +462,7 @@ export default function AdminUsers() {
                     <Label htmlFor="create-creci">CRECI</Label>
                     <Input
                       id="create-creci"
+                      className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                       value={createForm.creci}
                       inputMode="text"
                       maxLength={10}
@@ -474,7 +480,7 @@ export default function AdminUsers() {
                   </div>
                 ) : null}
                 <Button
-                  className="w-full"
+                  className="w-full rounded-full bg-emerald-700 text-white shadow-[0_18px_40px_-28px_rgba(4,120,87,0.75)] hover:bg-emerald-800"
                   disabled={createUser.isPending}
                   onClick={() => submitCreateUser(false)}
                 >
@@ -485,24 +491,26 @@ export default function AdminUsers() {
           </Dialog>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
           {cards.map(card => {
             const isSelected = selectedFilter === card.key;
 
             return (
               <Card
                 key={card.key}
-                className={`min-h-[124px] cursor-pointer rounded-2xl border border-border/80 transition-all hover:shadow-md ${
-                  isSelected ? "ring-2 ring-primary shadow-md" : "shadow-sm"
+                className={`min-h-[124px] cursor-pointer rounded-[28px] border-white/70 bg-white/90 transition-all hover:shadow-[0_30px_90px_-42px_rgba(15,23,42,0.52)] ${
+                  isSelected
+                    ? "ring-2 ring-emerald-700/35 shadow-[0_30px_90px_-42px_rgba(15,23,42,0.52)]"
+                    : "shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)]"
                 }`}
                 onClick={() =>
                   setSelectedFilter(current => (current === card.key ? null : card.key))
                 }
               >
                 <CardHeader className="px-6 pt-5 pb-2">
-                  <CardTitle className="text-sm font-medium">{card.label}</CardTitle>
+                  <CardTitle className="text-sm font-medium text-slate-600">{card.label}</CardTitle>
                 </CardHeader>
-                <CardContent className="px-6 pb-5 pt-0 text-3xl font-bold tracking-tight">
+                <CardContent className="px-6 pb-5 pt-0 text-3xl font-bold tracking-tight text-slate-950">
                   {card.value}
                 </CardContent>
               </Card>
@@ -510,15 +518,15 @@ export default function AdminUsers() {
           })}
         </div>
 
-        <Card>
+        <Card className="rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)] backdrop-blur">
           <CardHeader>
             <div className="flex items-center justify-between gap-4">
               <div>
-                <CardTitle className="flex items-center gap-1 text-xl">
+                <CardTitle className="flex items-center gap-1 text-xl text-slate-950">
                   <UserRound className="h-5 w-5" />
                   Todos os Usuarios
                 </CardTitle>
-                <CardDescription className="mt-2">
+                <CardDescription className="mt-2 text-slate-600">
                   Gerencie informacoes e permissoes de qualquer cadastro, mesmo que inativo.
                 </CardDescription>
               </div>
@@ -541,12 +549,12 @@ export default function AdminUsers() {
           </CardHeader>
           <CardContent>
             <div className="relative mb-4 lg:max-w-xl">
-              <Search className="text-muted-foreground absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <Input
                 value={search}
                 onChange={event => setSearch(event.target.value)}
                 placeholder="Pesquisar por nome, e-mail, papel, status ou ultimo login"
-                className="pl-9"
+                className="h-11 rounded-2xl border-slate-200 bg-white/90 pl-9 text-sm shadow-sm sm:text-base"
               />
             </div>
 
@@ -573,7 +581,7 @@ export default function AdminUsers() {
                 ))}
               </div>
             ) : filteredUsers.length > 0 ? (
-              <div className="rounded-md border">
+              <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white/80">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -739,7 +747,7 @@ export default function AdminUsers() {
                 </Table>
               </div>
             ) : (
-              <p className="text-muted-foreground">
+              <p className="text-slate-600">
                 Nenhum usuario encontrado para o filtro atual.
               </p>
             )}
@@ -748,14 +756,14 @@ export default function AdminUsers() {
 
         <Dialog open={Boolean(editState)} onOpenChange={open => !open && setEditState(null)}>
             <DialogContent
-              className="sm:max-w-md lg:max-w-xl"
+              className="max-h-[90vh] w-full max-w-xl overflow-y-auto scrollbar-hidden rounded-[32px] border-white/80 bg-[#f7f6f2] p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)] sm:p-6"
               onOpenAutoFocus={event => event.preventDefault()}
             >
-              <DialogHeader>
-                <DialogTitle>
+              <DialogHeader className="space-y-3 pb-2">
+                <DialogTitle className="text-2xl font-semibold tracking-tight text-slate-950">
                   {editState?.passwordOnly ? "Trocar senha do Administrador" : "Editar Usuario"}
                 </DialogTitle>
-                <DialogDescription>
+                <DialogDescription className="text-slate-600">
                   {editState?.passwordOnly
                     ? "Para o admin principal, somente a senha pode ser alterada."
                     : "Atualize papel, status e senha quando necessario."}
@@ -763,13 +771,14 @@ export default function AdminUsers() {
               </DialogHeader>
 
               {editState && (
-              <div className="space-y-4">
+              <div className="space-y-5">
                 {editState.passwordOnly ? null : (
                   <>
                     <div className="space-y-2">
                       <Label htmlFor="edit-name">Nome</Label>
                       <Input
                         id="edit-name"
+                        className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                         value={editState.name}
                         onChange={event =>
                           setEditState(current =>
@@ -792,7 +801,7 @@ export default function AdminUsers() {
                           )
                         }
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -814,7 +823,7 @@ export default function AdminUsers() {
                           )
                         }
                       >
-                        <SelectTrigger>
+                        <SelectTrigger className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -832,6 +841,7 @@ export default function AdminUsers() {
                     type="password"
                     minLength={8}
                     placeholder="Deixe em branco para manter"
+                    className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                     value={editState.password}
                     onChange={event =>
                       setEditState(current =>
@@ -843,7 +853,7 @@ export default function AdminUsers() {
                   />
                 </div>
                 <Button
-                  className="w-full"
+                  className="w-full rounded-full bg-emerald-700 text-white shadow-[0_18px_40px_-28px_rgba(4,120,87,0.75)] hover:bg-emerald-800"
                   disabled={updateUser.isPending}
                   onClick={() => {
                     if (editState.passwordOnly && !editState.password) {
@@ -875,18 +885,18 @@ export default function AdminUsers() {
         </Dialog>
 
         <AlertDialog open={createConfirmOpen} onOpenChange={setCreateConfirmOpen}>
-          <AlertDialogContent>
+          <AlertDialogContent className="rounded-[32px] border-white/80 bg-[#f7f6f2] shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)]">
             <AlertDialogHeader>
-              <AlertDialogTitle>Confirmar vinculacao com lead existente?</AlertDialogTitle>
-              <AlertDialogDescription>
+              <AlertDialogTitle className="text-2xl font-semibold tracking-tight text-slate-950">Confirmar vinculacao com lead existente?</AlertDialogTitle>
+              <AlertDialogDescription className="text-slate-600">
                 {leadLinkPreview
                   ? `Esse usuario ja e um lead e tem interesse em: ${formatLeadInterest(leadLinkPreview.latestInterest)}. O sistema vinculara o acesso de usuario ao lead.`
                   : "Nao ha lead para vincular."}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Voltar</AlertDialogCancel>
-              <AlertDialogAction onClick={() => submitCreateUser(true)}>
+              <AlertDialogCancel className="rounded-full">Voltar</AlertDialogCancel>
+              <AlertDialogAction className="rounded-full bg-slate-950 text-white hover:bg-slate-800" onClick={() => submitCreateUser(true)}>
                 Confirmar e criar usuario
               </AlertDialogAction>
             </AlertDialogFooter>
@@ -895,18 +905,18 @@ export default function AdminUsers() {
 
         <Dialog open={deleteState !== null} onOpenChange={open => !open && setDeleteState(null)}>
           <DialogContent
-            className="sm:max-w-md lg:max-w-2xl"
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto scrollbar-hidden rounded-[32px] border-white/80 bg-[#f7f6f2] p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)] sm:p-6"
             onOpenAutoFocus={event => event.preventDefault()}
           >
-            <DialogHeader>
-              <DialogTitle>
+            <DialogHeader className="space-y-3 pb-2">
+              <DialogTitle className="text-2xl font-semibold tracking-tight text-slate-950">
                 {deletePreview?.mode === "revoke_access"
                   ? deletePreview.isSelf
                     ? "Voce ira excluir o proprio acesso de usuario?"
                     : "Revogar acesso deste administrador?"
                   : "Excluir usuario?"}
               </DialogTitle>
-              <DialogDescription>
+              <DialogDescription className="text-slate-600">
                 {deletePreview?.mode === "revoke_access"
                   ? "Os dados do perfil permanecerao no sistema. Apenas o acesso sera removido."
                   : "A exclusao remove o cadastro de acesso do sistema. Se houver lead vinculado, voce pode manter ou apagar esse historico comercial."}
@@ -925,7 +935,7 @@ export default function AdminUsers() {
               </div>
             ) : deletePreview ? (
               <div className="space-y-4">
-                <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+                <div className="rounded-2xl border border-white/80 bg-white/90 p-4 text-sm shadow-sm">
                   <p><strong>Usuario:</strong> {deletePreview.user.name || "Sem nome"}</p>
                   <p><strong>E-mail:</strong> {deletePreview.user.email || "Nao informado"}</p>
                   <p><strong>Papel:</strong> {ROLE_LABELS[deletePreview.user.role]}</p>
@@ -946,9 +956,9 @@ export default function AdminUsers() {
                         Encontramos {deletePreview.linkedLeads.length} lead(s) ligado(s) a este usuario.
                       </p>
                     </div>
-                    <div className="space-y-2 rounded-lg border p-3">
+                    <div className="space-y-2 rounded-2xl border border-white/80 bg-white/90 p-3 shadow-sm">
                       {deletePreview.linkedLeads.map(lead => (
-                        <div key={lead.id} className="rounded-md border bg-background p-3 text-sm">
+                        <div key={lead.id} className="rounded-xl border border-slate-200 bg-white p-3 text-sm">
                           <p><strong>Lead #{lead.id}:</strong> {lead.nome}</p>
                           <p><strong>Interesse:</strong> {formatLeadInterest(lead.interesse)}</p>
                           <p><strong>Origem:</strong> {lead.origem || "Nao informada"}</p>
@@ -1007,6 +1017,7 @@ export default function AdminUsers() {
             ) : null}
           </DialogContent>
         </Dialog>
+      </div>
       </div>
     </Layout>
   );

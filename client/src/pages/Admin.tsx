@@ -27,6 +27,11 @@ import { getLoginUrl } from "@/const";
 import { Building2, FileText, Search, Shield, TrendingUp, User } from "lucide-react";
 import { toast } from "sonner";
 
+const SURFACE_CARD_CLASS =
+  "rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)] backdrop-blur";
+const FIELD_CLASS =
+  "rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base";
+
 function normalizeSearchValue(value: string) {
   return value
     .normalize("NFD")
@@ -154,12 +159,12 @@ export default function Admin() {
 
   const renderSearchInput = (placeholder: string) => (
     <div className="relative mt-2 max-w-xl">
-      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
       <Input
         value={searchTerm}
         onChange={event => setSearchTerm(event.target.value)}
         placeholder={placeholder}
-        className="pl-9"
+        className={`${FIELD_CLASS} pl-9`}
       />
     </div>
   );
@@ -211,54 +216,50 @@ export default function Admin() {
 
   return (
     <Layout>
-      <div className="container py-8">
+      <div className="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.88),rgba(244,240,232,0.82)_45%,rgba(248,248,246,1)_100%)]">
+      <div className="container py-8 md:py-10">
         <div className="mb-8">
-          <h1 className="mb-2 text-3xl font-bold">Administrativo</h1>
-          <p className="text-muted-foreground">Gerencie imóveis, leads e contratos do sistema</p>
-          <div className="mt-4">
-            <Link href="/admin/users" className="text-sm font-medium text-primary underline">
-              Abrir painel completo de usuários
-            </Link>
-          </div>
+          <h1 className="mb-2 text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">Administrativo</h1>
+          <p className="text-slate-600">Gerencie imóveis, leads e contratos do sistema</p>
         </div>
 
         <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-          <Card className="min-h-[124px] rounded-2xl border border-border/80 shadow-sm">
+          <Card className="min-h-[124px] rounded-[28px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)]">
             <CardHeader className="flex flex-row items-center justify-between px-6 pb-2 pt-5">
-              <CardTitle className="text-sm font-medium">Imóveis</CardTitle>
-              <Building2 className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium text-slate-600">Imóveis</CardTitle>
+              <Building2 className="h-6 w-6 text-slate-500" />
             </CardHeader>
             <CardContent className="px-6 pb-5 pt-0">
-              <div className="text-3xl font-bold tracking-tight">{totalImoveis}</div>
-              <p className="text-xs text-muted-foreground">{imoveisAtivos} ativos</p>
+              <div className="text-3xl font-bold tracking-tight text-slate-950">{totalImoveis}</div>
+              <p className="text-xs text-slate-500">{imoveisAtivos} ativos</p>
             </CardContent>
           </Card>
 
-          <Card className="min-h-[124px] rounded-2xl border border-border/80 shadow-sm">
+          <Card className="min-h-[124px] rounded-[28px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)]">
             <CardHeader className="flex flex-row items-center justify-between px-6 pb-2 pt-5">
-              <CardTitle className="text-sm font-medium">Leads</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium text-slate-600">Leads</CardTitle>
+              <TrendingUp className="h-6 w-6 text-slate-500" />
             </CardHeader>
             <CardContent className="px-6 pb-5 pt-0">
-              <div className="text-3xl font-bold tracking-tight">{totalLeads}</div>
-              <p className="text-xs text-muted-foreground">{leadsFechados} fechados</p>
+              <div className="text-3xl font-bold tracking-tight text-slate-950">{totalLeads}</div>
+              <p className="text-xs text-slate-500">{leadsFechados} fechados</p>
             </CardContent>
           </Card>
 
-          <Card className="min-h-[124px] rounded-2xl border border-border/80 shadow-sm">
+          <Card className="min-h-[124px] rounded-[28px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)]">
             <CardHeader className="flex flex-row items-center justify-between px-6 pb-2 pt-5">
-              <CardTitle className="text-sm font-medium">Contratos</CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium text-slate-600">Contratos</CardTitle>
+              <FileText className="h-6 w-6 text-slate-500" />
             </CardHeader>
             <CardContent className="px-6 pb-5 pt-0">
-              <div className="text-3xl font-bold tracking-tight">{totalContratos}</div>
-              <p className="text-xs text-muted-foreground">{contratosAtivos} ativos</p>
+              <div className="text-3xl font-bold tracking-tight text-slate-950">{totalContratos}</div>
+              <p className="text-xs text-slate-500">{contratosAtivos} ativos</p>
             </CardContent>
           </Card>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList>
+          <TabsList className="rounded-full border border-slate-200 bg-white/90">
             <TabsTrigger value="imoveis" className="gap-2">
               <Building2 className="h-4 w-4" />
               Imóveis
@@ -274,10 +275,10 @@ export default function Admin() {
           </TabsList>
 
           <TabsContent value="imoveis">
-            <Card>
+            <Card className={SURFACE_CARD_CLASS}>
               <CardHeader>
-                <CardTitle>Todos os Imóveis</CardTitle>
-                <CardDescription>Visualize todos os imóveis cadastrados no sistema</CardDescription>
+                <CardTitle className="text-slate-950">Todos os Imóveis</CardTitle>
+                <CardDescription className="text-slate-600">Visualize todos os imóveis cadastrados no sistema</CardDescription>
                 {renderSearchInput("Pesquisar imóveis")}
               </CardHeader>
               <CardContent>
@@ -288,7 +289,7 @@ export default function Admin() {
                     ))}
                   </div>
                 ) : filteredProperties.length > 0 ? (
-                  <div className="rounded-md border">
+                  <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white/80">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -330,8 +331,8 @@ export default function Admin() {
                   </div>
                 ) : (
                   <div className="py-12 text-center">
-                    <Building2 className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
-                    <p className="text-muted-foreground">
+                    <Building2 className="mx-auto mb-4 h-12 w-12 text-slate-400" />
+                    <p className="text-slate-600">
                       {searchTerm ? "Nenhum imóvel encontrado para essa pesquisa" : "Nenhum imóvel cadastrado"}
                     </p>
                   </div>
@@ -341,10 +342,10 @@ export default function Admin() {
           </TabsContent>
 
           <TabsContent value="leads">
-            <Card>
+            <Card className={SURFACE_CARD_CLASS}>
               <CardHeader>
-                <CardTitle>Todos os Leads</CardTitle>
-                <CardDescription>Visualize todos os leads do sistema</CardDescription>
+                <CardTitle className="text-slate-950">Todos os Leads</CardTitle>
+                <CardDescription className="text-slate-600">Visualize todos os leads do sistema</CardDescription>
                 {renderSearchInput("Pesquisar leads")}
               </CardHeader>
               <CardContent>
@@ -355,7 +356,7 @@ export default function Admin() {
                     ))}
                   </div>
                 ) : filteredLeads.length > 0 ? (
-                  <div className="rounded-md border">
+                  <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white/80">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -390,7 +391,7 @@ export default function Admin() {
                                   })
                                 }
                               >
-                                <SelectTrigger className="w-44">
+                                <SelectTrigger className={`${FIELD_CLASS} w-44`}>
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -411,8 +412,8 @@ export default function Admin() {
                   </div>
                 ) : (
                   <div className="py-12 text-center">
-                    <TrendingUp className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
-                    <p className="text-muted-foreground">
+                    <TrendingUp className="mx-auto mb-4 h-12 w-12 text-slate-400" />
+                    <p className="text-slate-600">
                       {searchTerm ? "Nenhum lead encontrado para essa pesquisa" : "Nenhum lead encontrado"}
                     </p>
                   </div>
@@ -422,10 +423,10 @@ export default function Admin() {
           </TabsContent>
 
           <TabsContent value="contratos">
-            <Card>
+            <Card className={SURFACE_CARD_CLASS}>
               <CardHeader>
-                <CardTitle>Todos os Contratos</CardTitle>
-                <CardDescription>Visualize todos os contratos do sistema</CardDescription>
+                <CardTitle className="text-slate-950">Todos os Contratos</CardTitle>
+                <CardDescription className="text-slate-600">Visualize todos os contratos do sistema</CardDescription>
                 {renderSearchInput("Pesquisar contratos")}
               </CardHeader>
               <CardContent>
@@ -436,7 +437,7 @@ export default function Admin() {
                     ))}
                   </div>
                 ) : filteredContracts.length > 0 ? (
-                  <div className="rounded-md border">
+                  <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white/80">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -474,8 +475,8 @@ export default function Admin() {
                   </div>
                 ) : (
                   <div className="py-12 text-center">
-                    <FileText className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
-                    <p className="text-muted-foreground">
+                    <FileText className="mx-auto mb-4 h-12 w-12 text-slate-400" />
+                    <p className="text-slate-600">
                       {searchTerm ? "Nenhum contrato encontrado para essa pesquisa" : "Nenhum contrato encontrado"}
                     </p>
                   </div>
@@ -484,6 +485,7 @@ export default function Admin() {
             </Card>
           </TabsContent>
         </Tabs>
+      </div>
       </div>
     </Layout>
   );

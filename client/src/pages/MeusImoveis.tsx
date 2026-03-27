@@ -519,7 +519,7 @@ export default function MeusImoveis() {
 
         <Dialog open={Boolean(editingImovel)} onOpenChange={open => !open && closeEditDialog()}>
           <DialogContent
-            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6"
+            className="w-full max-w-2xl max-h-[90vh] overflow-y-auto scrollbar-hidden p-4 sm:p-6"
             onOpenAutoFocus={event => event.preventDefault()}
           >
             <DialogHeader>

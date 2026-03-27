@@ -3,6 +3,7 @@ import Layout from "@/components/Layout";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import DateInput from "@/components/DateInput";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -48,6 +49,7 @@ export default function Contato() {
   const [formData, setFormData] = useState({
     nome: "",
     email: "",
+    birthDate: "",
     cpf: "",
     telefone: "",
     mensagem: "",
@@ -74,7 +76,7 @@ export default function Contato() {
     onSuccess: () => {
       setSubmitted(true);
       toast.success("Mensagem enviada com sucesso! Entraremos em contato em breve.");
-      setFormData({ nome: "", email: "", cpf: "", telefone: "", mensagem: "" });
+      setFormData({ nome: "", email: "", birthDate: "", cpf: "", telefone: "", mensagem: "" });
     },
     onError: error => {
       toast.error("Erro ao enviar mensagem. Tente novamente.");
@@ -190,12 +192,12 @@ export default function Contato() {
                     Formulário
                   </div>
                   <CardTitle className="pt-3 text-2xl font-semibold tracking-tight text-slate-950">
-                    Envie sua mensagem
+                    Envie sua Mensagem
                   </CardTitle>
                   <CardDescription className="text-slate-600">
                     {isClientUser
                       ? `Conte como podemos te ajudar ${user?.name || user?.email || ""}.`
-                      : "Preencha os campos abaixo e nossa equipe entra em contato o mais breve possível."}
+                      : "Preencha os campos abaixo, nos informe sobre seu interesse e nossa equipe entrará em contato o mais breve possível."}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -229,7 +231,7 @@ export default function Contato() {
                               />
                             </div>
 
-                            <div className="space-y-2">
+                            <div className="space-y-2 md:col-span-2">
                               <Label htmlFor="email">E-mail</Label>
                               <Input
                                 id="email"
@@ -254,6 +256,22 @@ export default function Contato() {
                                   })
                                 }
                                 className="h-12 rounded-2xl border-slate-200 bg-white shadow-sm"
+                              />
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor="birthDate">Data de Nascimento</Label>
+                              <DateInput
+                                id="birthDate"
+                                value={formData.birthDate}
+                                onValueChange={value =>
+                                  setFormData({
+                                    ...formData,
+                                    birthDate: value,
+                                  })
+                                }
+                                className="h-12 rounded-2xl border-slate-200 bg-white shadow-sm"
+                                placeholder="DD/MM/AAAA"
                               />
                             </div>
 
@@ -307,7 +325,10 @@ export default function Contato() {
               <div className="space-y-6">
                 <Card className="rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-2xl font-semibold tracking-tight text-slate-950">
+                    <div className="inline-flex w-fit rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-800">
+                      Oportunidades
+                    </div>
+                    <CardTitle className="pt-3 text-2xl font-semibold tracking-tight text-slate-950">
                       Trabalhe Conosco
                     </CardTitle>
                     <CardDescription className="text-slate-600">

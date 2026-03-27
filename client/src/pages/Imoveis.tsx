@@ -353,7 +353,7 @@ export default function Imoveis() {
 
             {/* Conteudo do dialog */}
             <DialogContent
-              className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-[32px] border-white/80 bg-[#f7f6f2] p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)] sm:p-6"
+              className="max-h-[90vh] w-full max-w-2xl overflow-y-auto scrollbar-hidden rounded-[32px] border-white/80 bg-[#f7f6f2] p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)] sm:p-6"
               onOpenAutoFocus={event => event.preventDefault()}
             >
               <DialogHeader className="space-y-3 pb-2">

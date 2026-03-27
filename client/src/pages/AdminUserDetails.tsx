@@ -95,6 +95,11 @@ const SOUTH_AMERICAN_NATIONALITIES = [
   "Venezuela",
 ] as const;
 
+const SURFACE_CARD_CLASS =
+  "rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)] backdrop-blur";
+const FIELD_CLASS =
+  "rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base";
+
 export default function AdminUserDetails() {
   const { user: authenticatedUser } = useAuth();
   const [isAdminRoute, params] = useRoute("/admin/users/:id");
@@ -448,21 +453,22 @@ export default function AdminUserDetails() {
 
   return (
     <Layout>
-      <div className="container py-8 space-y-6">
+      <div className="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.88),rgba(244,240,232,0.82)_45%,rgba(248,248,246,1)_100%)]">
+      <div className="container space-y-6 py-8 md:py-10">
         <div className="flex items-center justify-between gap-4">
           <div>
             <div className="mb-3">
               <Link href={backHref}>
-                <a className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+                <a className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900">
                   <ArrowLeft className="h-4 w-4" />
                   <span>{backLabel}</span>
                 </a>
               </Link>
             </div>
-            <h1 className="text-4xl font-bold">
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">
               {isOwnerDetails ? "Ficha do Proprietario" : "Ficha do Usuário"}
             </h1>
-            <p className="text-muted-foreground mt-2">
+            <p className="mt-2 text-slate-600">
               {isOwnerDetails
                 ? "Gerencie os dados do proprietario vinculado ao imovel."
                 : "Complete os dados pessoais e financeiros exigidos para contratos."}
@@ -471,13 +477,13 @@ export default function AdminUserDetails() {
         </div>
 
         {accessBlockedMessage ? (
-          <Card>
-            <CardContent className="py-8 text-sm text-muted-foreground">
+          <Card className={SURFACE_CARD_CLASS}>
+            <CardContent className="py-8 text-sm text-slate-600">
               {accessBlockedMessage}
             </CardContent>
           </Card>
         ) : isLoading || !form ? (
-          <Card>
+          <Card className={SURFACE_CARD_CLASS}>
             <CardContent className="py-8">
               <div className="space-y-3">
                 {[1, 2, 3].map(item => (
@@ -489,19 +495,19 @@ export default function AdminUserDetails() {
         ) : (
           <>
             {isReadOnlyAdminAccount ? (
-              <Card className="border-amber-200 bg-amber-50">
+              <Card className="rounded-[28px] border-amber-200 bg-amber-50 shadow-[0_20px_50px_-36px_rgba(120,53,15,0.4)]">
                 <CardContent className="py-4 text-sm text-amber-900">
                   Apenas o proprio administrador ou o admin principal podem alterar esta conta administrativa.
                 </CardContent>
               </Card>
             ) : null}
-            <Card>
+            <Card className={SURFACE_CARD_CLASS}>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-slate-950">
                   <UserRoundSearch className="h-5 w-5" />
                   {isOwnerDetails ? "Dados do proprietario" : "Dados obrigatórios"}
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-slate-600">
                   {isOwnerDetails
                     ? "Nome, e-mail, CPF e telefone identificam o proprietario vinculado a este imovel."
                     : "Nome, e-mail, CPF e senha são obrigatórios para cadastro. Os demais campos podem ser preenchidos aqui."}
@@ -511,6 +517,7 @@ export default function AdminUserDetails() {
                 <div className="space-y-2">
                   <Label>Nome</Label>
                   <Input
+                    className={FIELD_CLASS}
                     value={form.name}
                     disabled={isReadOnlyAdminAccount}
                     onChange={e => setForm({ ...form, name: e.target.value })}
@@ -519,6 +526,7 @@ export default function AdminUserDetails() {
                 <div className="space-y-2">
                   <Label>E-mail</Label>
                   <Input
+                    className={FIELD_CLASS}
                     value={form.email}
                     disabled={isReadOnlyAdminAccount}
                     onChange={e => setForm({ ...form, email: e.target.value })}
@@ -527,6 +535,7 @@ export default function AdminUserDetails() {
                 <div className="space-y-2">
                   <Label>CPF</Label>
                   <Input
+                    className={FIELD_CLASS}
                     value={form.cpf}
                     disabled={isReadOnlyAdminAccount}
                     inputMode="numeric"
@@ -537,6 +546,7 @@ export default function AdminUserDetails() {
                 <div className="space-y-2">
                   <Label>Telefone</Label>
                   <Input
+                    className={FIELD_CLASS}
                     value={form.phone}
                     disabled={isReadOnlyAdminAccount}
                     onChange={e => setForm({ ...form, phone: formatPhoneNumber(e.target.value) })}
@@ -546,13 +556,13 @@ export default function AdminUserDetails() {
                   propertyOwner?.linkedUser ? (
                     <div className="space-y-2 md:col-span-2">
                       <Label>Conta vinculada</Label>
-                      <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm">
+                      <div className="rounded-2xl border border-white/80 bg-white/90 px-4 py-3 text-sm shadow-sm">
                         <Link href={`/admin/users/${propertyOwner.linkedUser.id}`}>
                           <a className="font-medium text-primary underline">
                             {propertyOwner.linkedUser.name || propertyOwner.linkedUser.email}
                           </a>
                         </Link>
-                        <p className="mt-1 text-muted-foreground">
+                        <p className="mt-1 text-slate-600">
                           Este proprietario ja possui um usuario vinculado pelo CPF.
                         </p>
                       </div>
@@ -560,7 +570,7 @@ export default function AdminUserDetails() {
                   ) : (
                     <div className="space-y-2 md:col-span-2">
                       <Label>Conta vinculada</Label>
-                      <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+                      <div className="rounded-2xl border border-white/80 bg-white/90 px-4 py-3 text-sm text-slate-600 shadow-sm">
                         Este proprietario ainda nao possui login vinculado. Essa ficha permanece acessivel a partir do imovel.
                       </div>
                     </div>
@@ -568,7 +578,7 @@ export default function AdminUserDetails() {
                 ) : isEditingSelf ? (
                   form.role === "corretor" ? (
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
                         <Label>CRECI</Label>
                         {user?.creciStatus === "verified" ? (
                           <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
@@ -583,6 +593,7 @@ export default function AdminUserDetails() {
                         ) : null}
                       </div>
                       <Input
+                        className={`${FIELD_CLASS} w-full max-w-[220px]`}
                         value={form.creci}
                         disabled={isReadOnlyAdminAccount}
                         maxLength={10}
@@ -597,7 +608,7 @@ export default function AdminUserDetails() {
                 ) : form.role === "corretor" ? (
                   <div className="grid gap-4 md:col-span-2 md:grid-cols-[minmax(0,1fr)_180px_180px]">
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
                         <Label>CRECI</Label>
                         {user?.creciStatus === "verified" ? (
                           <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
@@ -612,6 +623,7 @@ export default function AdminUserDetails() {
                         ) : null}
                       </div>
                       <Input
+                        className={`${FIELD_CLASS} w-full max-w-[220px]`}
                         value={form.creci}
                         disabled={isReadOnlyAdminAccount}
                         maxLength={10}
@@ -644,7 +656,7 @@ export default function AdminUserDetails() {
                         disabled={isReadOnlyAdminAccount}
                         onValueChange={value => setForm({ ...form, role: value as AppRole })}
                       >
-                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectTrigger className={FIELD_CLASS}><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="cliente">Cliente</SelectItem>
                           <SelectItem value="corretor">Corretor</SelectItem>
@@ -659,7 +671,7 @@ export default function AdminUserDetails() {
                         disabled={isReadOnlyAdminAccount}
                         onValueChange={value => setForm({ ...form, isActive: value as "0" | "1" })}
                       >
-                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectTrigger className={FIELD_CLASS}><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="1">Ativo</SelectItem>
                           <SelectItem value="0">Inativo</SelectItem>
@@ -676,7 +688,7 @@ export default function AdminUserDetails() {
                         disabled={isReadOnlyAdminAccount}
                         onValueChange={value => setForm({ ...form, role: value as AppRole })}
                       >
-                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectTrigger className={FIELD_CLASS}><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="cliente">Cliente</SelectItem>
                           <SelectItem value="corretor">Corretor</SelectItem>
@@ -691,7 +703,7 @@ export default function AdminUserDetails() {
                         disabled={isReadOnlyAdminAccount}
                         onValueChange={value => setForm({ ...form, isActive: value as "0" | "1" })}
                       >
-                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectTrigger className={FIELD_CLASS}><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="1">Ativo</SelectItem>
                           <SelectItem value="0">Inativo</SelectItem>
@@ -704,10 +716,10 @@ export default function AdminUserDetails() {
             </Card>
 
             {!isOwnerDetails ? (
-            <Card>
+            <Card className={SURFACE_CARD_CLASS}>
               <CardHeader>
-                <CardTitle>Informações para Contratos</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-slate-950">Informações para Contratos</CardTitle>
+                <CardDescription className="text-slate-600">
                   Estes campos são importantes para venda e locação.
                 </CardDescription>
               </CardHeader>
@@ -715,6 +727,7 @@ export default function AdminUserDetails() {
                 <div className="space-y-2">
                   <Label>Data de Nascimento</Label>
                   <DateInput
+                    className={FIELD_CLASS}
                     disabled={isReadOnlyAdminAccount}
                     value={form.birthDate}
                     onValueChange={value => setForm({ ...form, birthDate: value })}
@@ -723,6 +736,7 @@ export default function AdminUserDetails() {
                 <div className="space-y-2">
                   <Label>Profissão</Label>
                   <Input
+                    className={FIELD_CLASS}
                     value={form.profession}
                     disabled={isReadOnlyAdminAccount}
                     onChange={e => setForm({ ...form, profession: e.target.value })}
@@ -731,6 +745,7 @@ export default function AdminUserDetails() {
                 <div className="space-y-2">
                   <Label>Salário Bruto Mensal</Label>
                   <MoneyInput
+                    className={FIELD_CLASS}
                     disabled={isReadOnlyAdminAccount}
                     value={form.grossMonthlyIncome}
                     onValueChange={value =>
@@ -753,7 +768,7 @@ export default function AdminUserDetails() {
                       })
                     }
                   >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger className={FIELD_CLASS}><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="empty">Não Informado</SelectItem>
                       {USER_PROFILE_MARITAL_STATUSES.map(status => (
@@ -776,7 +791,7 @@ export default function AdminUserDetails() {
                       })
                     }
                   >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger className={FIELD_CLASS}><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="empty">Não Informado</SelectItem>
                       {SOUTH_AMERICAN_NATIONALITIES.map(nationality => (
@@ -791,6 +806,7 @@ export default function AdminUserDetails() {
                 <div className="space-y-2">
                   <Label>Renda Familiar Conjunta</Label>
                   <MoneyInput
+                    className={FIELD_CLASS}
                     disabled={isReadOnlyAdminAccount}
                     value={form.householdIncome}
                     onValueChange={value =>
@@ -803,6 +819,7 @@ export default function AdminUserDetails() {
                 <div className="space-y-2">
                   <Label>RG</Label>
                   <Input
+                    className={FIELD_CLASS}
                     value={form.rg}
                     disabled={isReadOnlyAdminAccount}
                     onChange={e => setForm({ ...form, rg: e.target.value })}
@@ -812,9 +829,9 @@ export default function AdminUserDetails() {
             </Card>
             ) : null}
 
-            <Card>
+            <Card className={SURFACE_CARD_CLASS}>
               <CardHeader>
-                <CardTitle>{isOwnerDetails ? "Observações do proprietário" : "Endereço Atual e Observações"}</CardTitle>
+                <CardTitle className="text-slate-950">{isOwnerDetails ? "Observações do proprietário" : "Endereço Atual e Observações"}</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2">
                 {!isOwnerDetails ? (
@@ -822,6 +839,7 @@ export default function AdminUserDetails() {
                     <div className="space-y-2 md:col-span-2">
                       <Label>Endereço</Label>
                       <Input
+                        className={FIELD_CLASS}
                         value={form.address}
                         disabled={isReadOnlyAdminAccount}
                         onChange={e => setForm({ ...form, address: e.target.value })}
@@ -830,6 +848,7 @@ export default function AdminUserDetails() {
                     <div className="space-y-2">
                       <Label>Número</Label>
                       <Input
+                        className={FIELD_CLASS}
                         value={form.addressNumber}
                         disabled={isReadOnlyAdminAccount}
                         onChange={e => setForm({ ...form, addressNumber: e.target.value })}
@@ -838,6 +857,7 @@ export default function AdminUserDetails() {
                     <div className="space-y-2">
                       <Label>Bairro</Label>
                       <Input
+                        className={FIELD_CLASS}
                         value={form.neighborhood}
                         disabled={isReadOnlyAdminAccount}
                         onChange={e => setForm({ ...form, neighborhood: e.target.value })}
@@ -846,6 +866,7 @@ export default function AdminUserDetails() {
                     <div className="space-y-2">
                       <Label>Cidade</Label>
                       <Input
+                        className={FIELD_CLASS}
                         value={form.city}
                         disabled={isReadOnlyAdminAccount}
                         onChange={e => setForm({ ...form, city: e.target.value })}
@@ -854,6 +875,7 @@ export default function AdminUserDetails() {
                     <div className="space-y-2">
                       <Label>UF</Label>
                       <Input
+                        className={FIELD_CLASS}
                         value={form.state}
                         disabled={isReadOnlyAdminAccount}
                         onChange={e => setForm({ ...form, state: e.target.value })}
@@ -862,6 +884,7 @@ export default function AdminUserDetails() {
                     <div className="space-y-2">
                       <Label>CEP</Label>
                       <Input
+                        className={FIELD_CLASS}
                         value={form.zipCode}
                         disabled={isReadOnlyAdminAccount}
                         inputMode="numeric"
@@ -878,6 +901,7 @@ export default function AdminUserDetails() {
                 <div className="space-y-2 md:col-span-2">
                   <Label>Observações</Label>
                   <Textarea
+                    className={FIELD_CLASS}
                     value={form.notes}
                     disabled={isReadOnlyAdminAccount}
                     onChange={e => setForm({ ...form, notes: e.target.value })}
@@ -889,7 +913,7 @@ export default function AdminUserDetails() {
 
             <div className="flex justify-end">
                 <Button
-                  className="gap-2"
+                  className="gap-2 rounded-full bg-slate-950 text-white hover:bg-slate-800"
                   disabled={
                     isReadOnlyAdminAccount ||
                     updateUserDetails.isPending ||
@@ -909,16 +933,17 @@ export default function AdminUserDetails() {
               open={confirmCreciRemovalOpen}
               onOpenChange={setConfirmCreciRemovalOpen}
             >
-              <AlertDialogContent>
+              <AlertDialogContent className="rounded-[32px] border-white/80 bg-[#f7f6f2] shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)]">
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Confirmar remo??o do CRECI?</AlertDialogTitle>
-                  <AlertDialogDescription>
+                  <AlertDialogTitle className="text-2xl font-semibold tracking-tight text-slate-950">Confirmar remoção do CRECI?</AlertDialogTitle>
+                  <AlertDialogDescription className="text-slate-600">
                     Essa operação está retirando o cadastro do CRECI desse corretor, deseja continuar?
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogCancel className="rounded-full">Cancelar</AlertDialogCancel>
                   <AlertDialogAction
+                    className="rounded-full bg-slate-950 text-white hover:bg-slate-800"
                     onClick={() => {
                       setConfirmCreciRemovalOpen(false);
                       persistSave();
@@ -932,8 +957,7 @@ export default function AdminUserDetails() {
           </>
         )}
       </div>
+      </div>
     </Layout>
   );
 }
-
-

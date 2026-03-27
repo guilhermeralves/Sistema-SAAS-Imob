@@ -150,10 +150,10 @@ export default function Login() {
                   <div className="mx-auto w-full max-w-md">
                     <div className="mb-5">
                       <h1 className="text-3xl font-semibold tracking-tight text-slate-950 xl:text-4xl">
-                        Bem-vindo de volta
+                        Bem-vindo de volta!
                       </h1>
                       <p className="mt-2 text-sm text-slate-600 sm:text-[15px]">
-                        Entre para acompanhar imóveis, oportunidades e toda a operação da AFG.
+                        Entre para acompanhar imóveis, oportunidades e gerenciar seus imóveis.
                       </p>
                     </div>
 

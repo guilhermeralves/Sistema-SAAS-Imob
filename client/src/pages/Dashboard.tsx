@@ -50,14 +50,14 @@ type ChartPoint = { label: string; primary: number; secondary: number; tertiary:
 type PreviewBalance = { incoming: number; outgoing: number; balance: number };
 
 const PERIOD_OPTIONS: Array<{ value: DashboardPeriod; label: string }> = [
-  { value: "month", label: "M\u00eas atual" },
+  { value: "month", label: "Mês atual" },
   { value: "week", label: "Semana atual" },
   { value: "year", label: "Anual" },
   { value: "all", label: "Geral" },
 ];
 
 const PERIOD_LABELS: Record<DashboardPeriod, string> = {
-  month: "M\u00eas atual",
+  month: "Mês atual",
   week: "Semana atual",
   year: "Anual",
   all: "Geral",
@@ -264,7 +264,7 @@ function ActivityList({ title, description, items }: { title: string; descriptio
           ))
         ) : (
           <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-muted-foreground">
-            Nenhum movimento para exibir neste per\u00edodo.
+            Nenhum movimento para exibir neste período.
           </div>
         )}
       </CardContent>
@@ -338,7 +338,7 @@ export default function Dashboard() {
       recentContracts: [...completedContracts].sort((a, b) => new Date(b.updatedAt ?? b.createdAt).getTime() - new Date(a.updatedAt ?? a.createdAt).getTime()).slice(0, 4).map(item => ({
         id: `contract-${item.id}`,
         title: `Contrato #${item.id}`,
-        subtitle: `${item.tipo === "locacao" ? "Loca\u00e7\u00e3o" : "Venda"} encerrada`,
+        subtitle: `${item.tipo === "locacao" ? "Locação" : "Venda"} encerrada`,
         date: item.updatedAt ?? item.createdAt,
         tone: "amber" as const,
       })),
@@ -376,40 +376,40 @@ export default function Dashboard() {
   const reportLines = useMemo(() => {
     if (isAdmin) {
       return [
-        { label: "Periodo selecionado", value: PERIOD_LABELS[period] },
+        { label: "Período selecionado", value: PERIOD_LABELS[period] },
         { label: "Novos clientes", value: String(adminMetrics.newClientsCount) },
         { label: "Novos leads", value: String(adminMetrics.newLeadsCount) },
         { label: "Contratos ativos", value: String(adminMetrics.activeContractsCount) },
-        { label: "Contratos concluidos", value: String(adminMetrics.completedContractsCount) },
-        { label: "Entradas financeiras (previa)", value: formatCurrency(financialPreview.incoming) },
-        { label: "Saidas financeiras (previa)", value: formatCurrency(financialPreview.outgoing) },
-        { label: "Saldo financeiro (previa)", value: formatCurrency(financialPreview.balance) },
+        { label: "Contratos concluídos", value: String(adminMetrics.completedContractsCount) },
+        { label: "Entradas financeiras (prévia)", value: formatCurrency(financialPreview.incoming) },
+        { label: "Saídas financeiras (prévia)", value: formatCurrency(financialPreview.outgoing) },
+        { label: "Saldo financeiro (prévia)", value: formatCurrency(financialPreview.balance) },
       ];
     }
 
     return [
-      { label: "Periodo selecionado", value: PERIOD_LABELS[period] },
+      { label: "Período selecionado", value: PERIOD_LABELS[period] },
       { label: "Novos leads", value: String(brokerMetrics.newLeadsCount) },
-      { label: "Imoveis ativos", value: String(brokerMetrics.activePropertiesCount) },
-      { label: "Imoveis na carteira", value: String(brokerMetrics.managedPropertiesCount) },
-      { label: "Imoveis em destaque", value: String(brokerMetrics.highlightedPropertiesCount) },
-      { label: "Saldo financeiro (previa)", value: formatCurrency(financialPreview.balance) },
+      { label: "Imóveis ativos", value: String(brokerMetrics.activePropertiesCount) },
+      { label: "Imóveis na carteira", value: String(brokerMetrics.managedPropertiesCount) },
+      { label: "Imóveis em destaque", value: String(brokerMetrics.highlightedPropertiesCount) },
+      { label: "Saldo financeiro (prévia)", value: formatCurrency(financialPreview.balance) },
     ];
   }, [adminMetrics, brokerMetrics, financialPreview, isAdmin, period]);
 
   const handleDownloadReportPreview = () => {
     const now = new Date();
     const lines = [
-      `Periodo: ${PERIOD_LABELS[period]}`,
+      `Período: ${PERIOD_LABELS[period]}`,
       ...reportLines.map(line => `${line.label}: ${line.value}`),
       `Emitido em: ${now.toLocaleDateString("pt-BR")} ${now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`,
-      "Este arquivo e uma previa visual do relatorio mensal automatizado.",
+      "Este arquivo é uma prévia visual do relatório mensal automatizado.",
     ];
     downloadBlob(
-      buildPdfFromLines("Relatorio de Performance Geral - Previa", lines),
+      buildPdfFromLines("Relatório de Performance Geral - Prévia", lines),
       `relatorio-performance-geral-${now.toISOString().slice(0, 10)}.pdf`,
     );
-    toast.success("Pr\u00e9via do relat\u00f3rio baixada com sucesso.");
+    toast.success("Prévia do relatório baixada com sucesso.");
   };
 
   if (loading) {
@@ -439,7 +439,7 @@ export default function Dashboard() {
         <div className="container py-16 text-center">
           <User className="mx-auto mb-4 h-16 w-16 text-muted-foreground" />
           <h1 className="mb-2 text-2xl font-bold">Acesso Restrito</h1>
-          <p className="mb-6 text-muted-foreground">Voc\u00ea precisa fazer login para acessar o Dashboard.</p>
+          <p className="mb-6 text-muted-foreground">Você precisa fazer login para acessar o Dashboard.</p>
           <Button asChild>
             <a href={getLoginUrl()}>Fazer Login</a>
           </Button>
@@ -454,7 +454,7 @@ export default function Dashboard() {
         <div className="container py-16 text-center">
           <Shield className="mx-auto mb-4 h-16 w-16 text-destructive" />
           <h1 className="mb-2 text-2xl font-bold">Acesso Negado</h1>
-          <p className="mb-6 text-muted-foreground">Esta \u00e1rea est\u00e1 dispon\u00edvel somente para administradores e corretores.</p>
+          <p className="mb-6 text-muted-foreground">Esta área está disponível somente para administradores e corretores.</p>
           <Button asChild>
             <Link href="/">Voltar para o site</Link>
           </Button>
@@ -466,8 +466,8 @@ export default function Dashboard() {
   const activeChartData = isAdmin ? adminMetrics.chartData : brokerMetrics.chartData;
   const summaryTitle = isAdmin ? "Performance Geral" : "Performance Comercial";
   const summaryDescription = isAdmin
-    ? "Clientes, leads e contratos encerrados no per\u00edodo selecionado."
-    : "Leads e carteira de im\u00f3veis acompanhados no per\u00edodo selecionado.";
+    ? "Clientes, leads e contratos encerrados no período selecionado."
+    : "Leads e carteira de imóveis acompanhados no período selecionado.";
 
   return (
     <Layout>
@@ -486,7 +486,7 @@ export default function Dashboard() {
                         Dashboard
                       </Badge>
                       <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">
-                        {isAdmin ? `Ol\u00e1, ${user?.name || "Administrador"}` : `Ol\u00e1, ${user?.name || "Corretor"}`}
+                        {isAdmin ? `Olá, ${user?.name || "Administrador"}` : `Olá, ${user?.name || "Corretor"}`}
                       </h1>
                     </div>
                   </div>
@@ -494,18 +494,18 @@ export default function Dashboard() {
                   <div className="max-w-2xl space-y-2">
                     <p className="text-base text-slate-700 md:text-lg">
                       {isAdmin
-                        ? "Acompanhe a evolu\u00e7\u00e3o comercial e operacional da AFG em um painel mais executivo."
-                        : "Acompanhe seus leads, a carteira de im\u00f3veis e uma pr\u00e9via do desempenho do per\u00edodo."}
+                        ? "Acompanhe a evolução comercial e operacional da AFG em um painel mais executivo."
+                        : "Acompanhe seus leads, a carteira de imóveis e uma prévia do desempenho do período."}
                     </p>
-                    <p className="text-sm text-slate-500">Os dados consideram sempre o per\u00edodo selecionado, com M\u00eas atual ativo por padr\u00e3o.</p>
+                    <p className="text-sm text-slate-500">Os dados consideram sempre o período selecionado.</p>
                   </div>
                 </div>
 
                 <div className="space-y-4 rounded-[30px] border border-white/80 bg-white/70 p-5 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.35)]">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-medium text-slate-900">Per\u00edodo de leitura</p>
-                      <p className="text-xs text-muted-foreground">Altere a janela de an\u00e1lise sem mudar o restante do fluxo.</p>
+                      <p className="text-sm font-medium text-slate-900">Dados por Período</p>
+                      <p className="text-xs text-muted-foreground">Altere a janela de análise sem mudar o restante do fluxo.</p>
                     </div>
                     <Badge className="rounded-full bg-emerald-700/90 px-3 py-1 text-white">{PERIOD_LABELS[period]}</Badge>
                   </div>
@@ -531,11 +531,8 @@ export default function Dashboard() {
                   <div className="flex flex-wrap gap-3">
                     <Button type="button" className="gap-2 rounded-full bg-slate-950 text-white hover:bg-slate-800" onClick={handleDownloadReportPreview}>
                       <Download className="h-4 w-4" />
-                      Gerar Relat\u00f3rio de Performance Geral
+                      Gerar Relatório de Performance Geral
                     </Button>
-                    <Badge variant="outline" className="rounded-full px-3 py-1 text-xs text-slate-600">
-                      PDF de pr\u00e9via para valida\u00e7\u00e3o visual
-                    </Badge>
                   </div>
                 </div>
               </CardContent>
@@ -550,14 +547,14 @@ export default function Dashboard() {
             ) : isAdmin ? (
               <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-5">
                 <MetricCard title="Novos Clientes" value={String(adminMetrics.newClientsCount)} description={`Cadastros novos em ${PERIOD_LABELS[period].toLowerCase()}`} icon={UserPlus} accent="success" />
-                <MetricCard title="Novos Leads" value={String(adminMetrics.newLeadsCount)} description="Interesses comerciais gerados no per\u00edodo" icon={Users} />
-                <MetricCard title="Contratos Ativos" value={String(adminMetrics.activeContractsCount)} description="Contratos de loca\u00e7\u00e3o ativos no momento" icon={FileCheck2} />
-                <MetricCard title="Contratos Conclu\u00eddos" value={String(adminMetrics.completedContractsCount)} description="Contratos encerrados dentro da janela selecionada" icon={Briefcase} accent="warning" />
+                <MetricCard title="Novos Leads" value={String(adminMetrics.newLeadsCount)} description="Interesses comerciais gerados no período" icon={Users} />
+                <MetricCard title="Contratos Ativos" value={String(adminMetrics.activeContractsCount)} description="Contratos de locação ativos no momento" icon={FileCheck2} />
+                <MetricCard title="Contratos Concluídos" value={String(adminMetrics.completedContractsCount)} description="Contratos encerrados dentro da janela selecionada" icon={Briefcase} accent="warning" />
                 <Card className="rounded-[28px] border-transparent bg-[linear-gradient(135deg,#4e7b66,#628b78_55%,#7aa18b)] text-white shadow-[0_25px_60px_-35px_rgba(15,23,42,0.6)]">
                   <CardContent className="flex h-full flex-col justify-between p-6">
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <p className="text-sm font-medium text-white/80">Balan\u00e7o Financeiro</p>
+                        <p className="text-sm font-medium text-white/80">Balanço Financeiro</p>
                         <p className="mt-2 text-3xl font-semibold tracking-tight">{formatCurrency(financialPreview.balance)}</p>
                       </div>
                       <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15">
@@ -571,9 +568,8 @@ export default function Dashboard() {
                       </div>
                       <div className="flex items-center gap-2 text-sm text-white/80">
                         <ArrowDownRight className="h-4 w-4" />
-                        Sa\u00eddas: {formatCurrency(financialPreview.outgoing)}
+                        Saídas: {formatCurrency(financialPreview.outgoing)}
                       </div>
-                      <Badge className="mt-2 w-fit rounded-full bg-white/20 px-3 py-1 text-white">Pr\u00e9via visual at\u00e9 integra\u00e7\u00e3o financeira</Badge>
                     </div>
                   </CardContent>
                 </Card>
@@ -581,21 +577,21 @@ export default function Dashboard() {
             ) : (
               <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
                 <MetricCard title="Novos Leads" value={String(brokerMetrics.newLeadsCount)} description={`Leads recebidos em ${PERIOD_LABELS[period].toLowerCase()}`} icon={Users} />
-                <MetricCard title="Im\u00f3veis Ativos" value={String(brokerMetrics.activePropertiesCount)} description="Im\u00f3veis com status ativo sob sua gest\u00e3o" icon={Building2} accent="success" />
-                <MetricCard title="Carteira de Im\u00f3veis" value={String(brokerMetrics.managedPropertiesCount)} description="Total de im\u00f3veis vinculados ao seu perfil" icon={LayoutDashboard} />
+                <MetricCard title="Imóveis Ativos" value={String(brokerMetrics.activePropertiesCount)} description="Imóveis com status ativo sob sua gestão" icon={Building2} accent="success" />
+                <MetricCard title="Carteira de Imóveis" value={String(brokerMetrics.managedPropertiesCount)} description="Total de imóveis vinculados ao seu perfil" icon={LayoutDashboard} />
                 <Card className="rounded-[28px] border-transparent bg-[linear-gradient(135deg,#4e7b66,#628b78_55%,#7aa18b)] text-white shadow-[0_25px_60px_-35px_rgba(15,23,42,0.6)]">
                   <CardContent className="flex h-full flex-col justify-between p-6">
                     <div className="flex items-start justify-between gap-4">
                       <div>
-                        <p className="text-sm font-medium text-white/80">Balan\u00e7o Financeiro</p>
+                        <p className="text-sm font-medium text-white/80">Balanço Financeiro</p>
                         <p className="mt-2 text-3xl font-semibold tracking-tight">{formatCurrency(financialPreview.balance)}</p>
                       </div>
                       <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15">
                         <HandCoins className="h-5 w-5" />
                       </div>
                     </div>
-                    <Badge className="w-fit rounded-full bg-white/20 px-3 py-1 text-white">Pr\u00e9via visual</Badge>
-                    <p className="text-sm text-white/80">O detalhamento financeiro do corretor entra na pr\u00f3xima etapa.</p>
+                    <Badge className="w-fit rounded-full bg-white/20 px-3 py-1 text-white">Prévia visual</Badge>
+                    <p className="text-sm text-white/80">O detalhamento financeiro do corretor entra na próxima etapa.</p>
                   </CardContent>
                 </Card>
               </div>
@@ -617,11 +613,11 @@ export default function Dashboard() {
                       <p className="mt-2 text-2xl font-semibold text-slate-950">{isAdmin ? adminMetrics.newClientsCount : brokerMetrics.newLeadsCount}</p>
                     </div>
                     <div className="rounded-[24px] bg-slate-50 p-4">
-                      <p className="text-xs uppercase tracking-[0.16em] text-slate-500">{isAdmin ? "Leads" : "Im\u00f3veis ativos"}</p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-slate-500">{isAdmin ? "Leads" : "Imóveis ativos"}</p>
                       <p className="mt-2 text-2xl font-semibold text-slate-950">{isAdmin ? adminMetrics.newLeadsCount : brokerMetrics.activePropertiesCount}</p>
                     </div>
                     <div className="rounded-[24px] bg-slate-50 p-4">
-                      <p className="text-xs uppercase tracking-[0.16em] text-slate-500">{isAdmin ? "Conclu\u00eddos" : "Destaques"}</p>
+                      <p className="text-xs uppercase tracking-[0.16em] text-slate-500">{isAdmin ? "Concluídos" : "Destaques"}</p>
                       <p className="mt-2 text-2xl font-semibold text-slate-950">{isAdmin ? adminMetrics.completedContractsCount : brokerMetrics.highlightedPropertiesCount}</p>
                     </div>
                   </div>
@@ -659,8 +655,8 @@ export default function Dashboard() {
               <div className="grid gap-5">
                 <Card className="rounded-[32px] border-white/70 bg-white/90 shadow-[0_20px_50px_-30px_rgba(15,23,42,0.45)]">
                   <CardHeader className="pb-3">
-                    <CardTitle>Resumo do Per\u00edodo</CardTitle>
-                    <CardDescription>Leitura r\u00e1pida do que est\u00e1 mais relevante agora.</CardDescription>
+                    <CardTitle>Resumo do Período</CardTitle>
+                    <CardDescription>Leitura rápida do que está mais relevante agora.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {reportLines.slice(0, 5).map(line => (
@@ -677,7 +673,7 @@ export default function Dashboard() {
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <CardTitle>Saldo Financeiro</CardTitle>
-                        <CardDescription>Pr\u00e9via visual para aprova\u00e7\u00e3o de layout</CardDescription>
+                        <CardDescription>Prévia visual para aprovação de layout</CardDescription>
                       </div>
                       <Sparkles className="h-5 w-5 text-emerald-700" />
                     </div>
@@ -688,7 +684,7 @@ export default function Dashboard() {
                       <p className="text-2xl font-semibold text-emerald-700">{formatCurrency(financialPreview.incoming)}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">Sa\u00eddas</p>
+                      <p className="text-sm text-muted-foreground">Saídas</p>
                       <p className="text-2xl font-semibold text-rose-600">{formatCurrency(financialPreview.outgoing)}</p>
                     </div>
                     <div className="rounded-[26px] bg-emerald-700 px-5 py-4 text-white">
@@ -702,17 +698,17 @@ export default function Dashboard() {
 
             {isAdmin ? (
               <div className="grid gap-5 xl:grid-cols-3">
-                <ActivityList title="Clientes Recentes" description="Cadastros mais novos no portal durante o per\u00edodo." items={adminMetrics.recentClients} />
+                <ActivityList title="Clientes Recentes" description="Cadastros mais novos no portal durante o período." items={adminMetrics.recentClients} />
                 <ActivityList title="Leads Recentes" description="Interesses comerciais captados pelo sistema." items={adminMetrics.recentLeads} />
                 <div className="grid gap-5">
                   <ActivityList title="Contratos Encerrados" description="Movimentos contratuais fechados na janela selecionada." items={adminMetrics.recentContracts} />
                   <Card className="rounded-[28px] border-white/70 bg-white/90 shadow-[0_20px_50px_-30px_rgba(15,23,42,0.45)]">
                     <CardHeader className="pb-3">
-                      <CardTitle>Atalhos R\u00e1pidos</CardTitle>
-                      <CardDescription>Navega\u00e7\u00e3o direta para as \u00e1reas mais usadas do dia a dia.</CardDescription>
+                      <CardTitle>Atalhos Rápidos</CardTitle>
+                      <CardDescription>Navegando direta para as áreas mais usadas do dia a dia.</CardDescription>
                     </CardHeader>
                     <CardContent className="grid gap-3 sm:grid-cols-2">
-                      <Button asChild variant="outline" className="justify-start gap-2 rounded-2xl"><Link href="/admin/users"><Users className="h-4 w-4" />Usu\u00e1rios</Link></Button>
+                      <Button asChild variant="outline" className="justify-start gap-2 rounded-2xl"><Link href="/admin/users"><Users className="h-4 w-4" />Usuários</Link></Button>
                       <Button asChild variant="outline" className="justify-start gap-2 rounded-2xl"><Link href="/crm"><LayoutDashboard className="h-4 w-4" />CRM</Link></Button>
                       <Button asChild variant="outline" className="justify-start gap-2 rounded-2xl"><Link href="/admin"><Briefcase className="h-4 w-4" />Administrativo</Link></Button>
                       <Button asChild variant="outline" className="justify-start gap-2 rounded-2xl"><Link href="/financeiro"><CircleDollarSign className="h-4 w-4" />Financeiro</Link></Button>
@@ -726,14 +722,14 @@ export default function Dashboard() {
                 <ActivityList title="Im\u00f3veis Recentes" description="Itens mais recentes da sua carteira." items={brokerMetrics.recentPropertyItems} />
                 <Card className="rounded-[28px] border-white/70 bg-white/90 shadow-[0_20px_50px_-30px_rgba(15,23,42,0.45)]">
                   <CardHeader className="pb-3">
-                    <CardTitle>Vis\u00e3o do Corretor</CardTitle>
-                    <CardDescription>Esta primeira vers\u00e3o j\u00e1 entrega o painel base e abre caminho para os refinamentos do corretor.</CardDescription>
+                    <CardTitle>Visão do Corretor</CardTitle>
+                    <CardDescription>Esta primeira versão já entrega o painel base e abre caminho para os refinamentos do corretor.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3 text-sm text-slate-600">
-                    <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">Leads do per\u00edodo: <span className="font-semibold text-slate-950">{brokerMetrics.newLeadsCount}</span></div>
-                    <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">Im\u00f3veis ativos: <span className="font-semibold text-slate-950">{brokerMetrics.activePropertiesCount}</span></div>
-                    <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">Im\u00f3veis em destaque: <span className="font-semibold text-slate-950">{brokerMetrics.highlightedPropertiesCount}</span></div>
-                    <Button asChild variant="outline" className="mt-2 w-full justify-start gap-2 rounded-2xl"><Link href="/meus-imoveis"><Building2 className="h-4 w-4" />Abrir Meus Im\u00f3veis</Link></Button>
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">Leads do período: <span className="font-semibold text-slate-950">{brokerMetrics.newLeadsCount}</span></div>
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">Imóveis ativos: <span className="font-semibold text-slate-950">{brokerMetrics.activePropertiesCount}</span></div>
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">Imóveis em destaque: <span className="font-semibold text-slate-950">{brokerMetrics.highlightedPropertiesCount}</span></div>
+                    <Button asChild variant="outline" className="mt-2 w-full justify-start gap-2 rounded-2xl"><Link href="/meus-imoveis"><Building2 className="h-4 w-4" />Abrir Meus Imóveis</Link></Button>
                   </CardContent>
                 </Card>
               </div>

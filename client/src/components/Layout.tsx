@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useLocation } from "wouter";
 import Header from "./Header";
 import Footer from "./Footer";
 import { cn } from "@/lib/utils";
@@ -23,7 +24,10 @@ interface LayoutProps {
 
 export default function Layout({ children, hideFooter = false, mainClassName }: LayoutProps) {
   const { user, isAuthenticated } = useAuth();
-  const shouldShowWhatsappShortcut = !isAuthenticated || user?.role === "cliente";
+  const [location] = useLocation();
+  const hideWhatsappShortcut = location === "/login" || location === "/register";
+  const shouldShowWhatsappShortcut =
+    !hideWhatsappShortcut && (!isAuthenticated || user?.role === "cliente");
   const whatsappHref =
     "https://wa.me/5511999999999?text=" +
     encodeURIComponent("Olá! Gostaria de mais informações.");

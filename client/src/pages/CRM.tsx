@@ -10,8 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue,} from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,} from "@/components/ui/dialog";
 import { formatCpf, isValidCpf } from "@/lib/cpf";
 import { trpc } from "@/lib/trpc";
-import { Users, Plus, Phone, Mail, MessageSquare, Upload, FileText, ArrowRight, User, Calendar } from "lucide-react";
-import { toast, Toaster } from "sonner";
+import { Users, Plus, Phone, Mail, MessageSquare, FileText, User } from "lucide-react";
+import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
 
 /**
@@ -21,7 +21,7 @@ import { getLoginUrl } from "@/const";
  * 
  * EDIÇÃO:
  * - Para modificar os status do pipeline: edite PIPELINE_STATUS
- * - Para alterar cores dos status: edite getStatusColor
+ * - Para alterar cores dos status: edite PIPELINE_STATUS
  */
 
 // ========== ÁREA DE EDIÇÃO - PIPELINE ==========
@@ -40,6 +40,11 @@ const MANUAL_ORIGIN_OPTIONS = [
   { value: "outros", label: "Outros" },
 ];
 // ========== FIM DA ÁREA DE EDIÇÃO ==========
+
+const SURFACE_CARD_CLASS =
+  "rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)] backdrop-blur";
+const FIELD_CLASS =
+  "rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base";
 
 function formatDateTime(date: Date | string | null) {
   if (!date) return "Data não disponível";
@@ -60,11 +65,6 @@ function formatDateTime(date: Date | string | null) {
       timeZone: "America/Sao_Paulo",
     })
   );
-}
-
-function getStatusColor(status: string) {
-  const statusConfig = PIPELINE_STATUS.find((s) => s.value === status);
-  return statusConfig?.color || "bg-gray-100 text-gray-700";
 }
 
 function getLeadOriginLabel(origin: string | null | undefined) {
@@ -279,44 +279,41 @@ export default function CRM() {
     );
   }
 
-  const leadsByStatus = PIPELINE_STATUS.map((status) => ({
-    ...status,      
-    leads: leads?.filter((lead) => lead.status === status.value) || [],
-  }));
-
   return (
     <Layout>
-      <div className="container py-8">
-        <div className="flex justify-between items-center mb-8">
+      <div className="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.88),rgba(244,240,232,0.82)_45%,rgba(248,248,246,1)_100%)]">
+      <div className="container py-8 md:py-10">
+        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Gestão de Leads</h1>
-            <p className="text-muted-foreground mt-2">
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">Gestão de Leads</h1>
+            <p className="mt-2 text-slate-600">
               Gerencie seus leads e acompanhe o funil de vendas
             </p>
           </div>
           <Dialog open={newLeadOpen} onOpenChange={setNewLeadOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2">
+              <Button className="gap-2 rounded-full bg-slate-950 text-white hover:bg-slate-800">
                 <Plus className="h-4 w-4" />
                 Novo Lead
               </Button>
             </DialogTrigger>
 
             <DialogContent
-              className="sm:max-w-md lg:max-w-xl"
+              className="max-h-[90vh] w-full max-w-xl overflow-y-auto scrollbar-hidden rounded-[32px] border-white/80 bg-[#f7f6f2] p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)] sm:p-6"
               onOpenAutoFocus={event => event.preventDefault()}
             >
-              <DialogHeader>
-                <DialogTitle>Cadastrar Novo Lead</DialogTitle>
-                  <DialogDescription>
-                    Preencha as informações do lead.
-                  </DialogDescription>
+              <DialogHeader className="space-y-3 pb-2">
+                <DialogTitle className="text-2xl font-semibold tracking-tight text-slate-950">Cadastrar Novo Lead</DialogTitle>
+                  <DialogDescription className="text-slate-600">
+                  Preencha as informações do lead.
+                </DialogDescription>
               </DialogHeader>
-              <div className="space-y-4">
+              <div className="space-y-5">
                 <div className="space-y-2">
                   <Label htmlFor="nome">Nome *</Label>
                   <Input
                     id="nome"
+                    className={FIELD_CLASS}
                     value={newLeadData.nome}
                     maxLength={40}
                     onChange={event => setNewLeadData({ ...newLeadData, nome: event.target.value })}
@@ -329,6 +326,7 @@ export default function CRM() {
                     <Input
                       id="email"
                       type="email"
+                      className={FIELD_CLASS}
                       value={newLeadData.email}
                       maxLength={35}
                       onChange={event => setNewLeadData({ ...newLeadData, email: event.target.value })}
@@ -339,6 +337,7 @@ export default function CRM() {
                     <Label htmlFor="telefone">Telefone</Label>
                     <Input
                       id="telefone"
+                      className={FIELD_CLASS}
                       value={newLeadData.telefone}
                       onChange={event =>
                         setNewLeadData({ ...newLeadData, telefone: formatPhone(event.target.value) })
@@ -352,6 +351,7 @@ export default function CRM() {
                     <Label htmlFor="cpf">CPF</Label>
                     <Input
                       id="cpf"
+                      className={FIELD_CLASS}
                       value={newLeadData.cpf}
                       inputMode="numeric"
                       maxLength={14}
@@ -367,7 +367,7 @@ export default function CRM() {
                       value={newLeadData.origem}
                       onValueChange={value => setNewLeadData({ ...newLeadData, origem: value })}
                     >
-                      <SelectTrigger id="origem">
+                      <SelectTrigger id="origem" className={FIELD_CLASS}>
                         <SelectValue placeholder="Selecione a origem" />
                       </SelectTrigger>
                       <SelectContent>
@@ -387,7 +387,7 @@ export default function CRM() {
                     value={newLeadData.interesse}
                     onValueChange={value => setNewLeadData({ ...newLeadData, interesse: value })}
                   >
-                    <SelectTrigger id="interesse">
+                    <SelectTrigger id="interesse" className={FIELD_CLASS}>
                       <SelectValue placeholder="Selecione o interesse" />
                     </SelectTrigger>
                     <SelectContent>
@@ -404,14 +404,14 @@ export default function CRM() {
                   <Textarea
                     id="observacao"
                     maxLength={400}
-                    className="resize-none"
+                    className={`${FIELD_CLASS} resize-none`}
                     value={newLeadData.observacao}
                     onChange={event => setNewLeadData({ ...newLeadData, observacao: event.target.value })}
                     rows={4}
                   />
                 </div>
 
-                <Button onClick={handleCreateLead} className="w-full" disabled={createLead.isPending}>
+                <Button onClick={handleCreateLead} className="w-full rounded-full bg-emerald-700 text-white shadow-[0_18px_40px_-28px_rgba(4,120,87,0.75)] hover:bg-emerald-800" disabled={createLead.isPending}>
                   {createLead.isPending ? "Criando..." : "Criar Lead"}
                 </Button>
               </div>
@@ -419,7 +419,7 @@ export default function CRM() {
           </Dialog>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+        <div className="mb-8 grid grid-cols-2 gap-5 md:grid-cols-3 lg:grid-cols-6">
           {PIPELINE_STATUS.map((status) => {
             const qtdLeads = leads?.filter(l => l.status === status.value).length || 0;
             const isSelected = statusSelected === status.value;
@@ -427,18 +427,21 @@ export default function CRM() {
             return (
               <Card
                 key={status.value}
-                className={`min-h-[124px] cursor-pointer rounded-2xl border border-border/80 transition-all hover:shadow-md ${isSelected ? 'ring-2 ring-primary shadow-md' : 'shadow-sm'
-                  }`}
+                className={`min-h-[124px] cursor-pointer rounded-[28px] border-white/70 bg-white/90 transition-all hover:shadow-[0_30px_90px_-42px_rgba(15,23,42,0.52)] ${
+                  isSelected
+                    ? "ring-2 ring-emerald-700/35 shadow-[0_30px_90px_-42px_rgba(15,23,42,0.52)]"
+                    : "shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)]"
+                }`}
                 onClick={() => setStatusSelected(status.value)}
               >
                 <CardContent className="flex h-full items-center p-6">
                   <div className="flex items-center gap-3">
                     <div className={`w-3 h-3 rounded-full ${status.color}`} />
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-foreground">
+                      <p className="text-sm font-medium text-slate-600">
                         {status.label}
                       </p>
-                      <p className="mt-2 text-3xl font-bold tracking-tight text-foreground">
+                      <p className="mt-2 text-3xl font-bold tracking-tight text-slate-950">
                         {qtdLeads}
                       </p>
                     </div>
@@ -457,38 +460,38 @@ export default function CRM() {
             ))}
           </div>
         ) : (
-            <Card>
+            <Card className={SURFACE_CARD_CLASS}>
                 <CardHeader>
-                  <CardTitle>
+                  <CardTitle className="text-slate-950">
                     {PIPELINE_STATUS.find(s => s.value === statusSelected)?.label}
                   </CardTitle>
-                  <CardDescription>
+                  <CardDescription className="text-slate-600">
                     {leadsFiltrados.length} lead(s) encontrado(s) 
                   </CardDescription>
                 </CardHeader>
               <CardContent>
                 {isLoading ? (
                   <div className="text-center py-8">
-                    <p className="text-muted-foreground">Carregando leads...</p>
+                    <p className="text-slate-600">Carregando leads...</p>
                   </div>
                 ) : leadsFiltrados.length === 0 ? (
                   <div className="text-center py-8">
-                    <p className="text-muted-foreground">Nenhum lead neste status</p>
+                    <p className="text-slate-600">Nenhum lead neste status</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
                     {leadsFiltrados.map((lead) => (
                       <div
                         key={lead.id}
-                        className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+                        className="cursor-pointer rounded-2xl border border-slate-200 bg-white/80 p-4 transition-colors hover:bg-white"
                         onClick={() => {
                           setSelectedLead(lead);
                           setLeadDetailsOpen(true);
                         }}
                       >
                         <div className="flex-1">
-                          <h3 className="font-semibold text-foreground">{lead.nome}</h3>
-                          <div className="flex gap-4 mt-2 text-sm text-muted-foreground">
+                          <h3 className="font-semibold text-slate-950">{lead.nome}</h3>
+                          <div className="mt-2 flex gap-4 text-sm text-slate-500">
                             <span className="flex items-center gap-1">
                               <Phone className="h-3 w-3" />
                               {lead.telefone}
@@ -512,12 +515,12 @@ export default function CRM() {
 
         {/* DIALOG DETALHES DO LEAD */}
         <Dialog open={leadDetailsOpen} onOpenChange={setLeadDetailsOpen}>
-          <DialogContent className="w-full max-w-[calc(100%-2rem)] max-h-[95vh] overflow-y-auto sm:max-w-lg lg:max-w-5xl">
+          <DialogContent className="max-h-[95vh] w-full max-w-[calc(100%-2rem)] overflow-y-auto scrollbar-hidden rounded-[32px] border-white/80 bg-[#f7f6f2] p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)] sm:max-w-lg sm:p-6 lg:max-w-5xl">
             {selectedLead && (
               <>
-                <DialogHeader className="max-w-3xl">
-                  <DialogTitle className="text-2xl">{selectedLead.nome}</DialogTitle>
-                  <DialogDescription>
+                <DialogHeader className="max-w-3xl space-y-3 pb-2">
+                  <DialogTitle className="text-2xl font-semibold tracking-tight text-slate-950">{selectedLead.nome}</DialogTitle>
+                  <DialogDescription className="text-slate-600">
                     Lead #{selectedLead.id} • Criado em {
                       selectedLead.createdAt
                         ? formatDateTime(selectedLead.createdAt)
@@ -527,26 +530,26 @@ export default function CRM() {
                 </DialogHeader>
                 <div className="space-y-6">
                   {/* Informações */}
-                  <Card>
+                  <Card className="rounded-[28px] border-white/80 bg-white/90 shadow-[0_20px_50px_-34px_rgba(15,23,42,0.32)]">
                     <CardHeader>
-                      <CardTitle className="text-lg">Informações</CardTitle>
+                      <CardTitle className="text-lg text-slate-950">Informações</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
                       {selectedLead.email && (
                         <div className="flex items-center gap-2">
-                          <Mail className="h-4 w-4 text-muted-foreground" />
+                          <Mail className="h-4 w-4 text-slate-500" />
                           <span className="text-sm">{selectedLead.email}</span>
                         </div>
                       )}
                       {selectedLead.telefone && (
                         <div className="flex items-center gap-2">
-                          <Phone className="h-4 w-4 text-muted-foreground" />
+                          <Phone className="h-4 w-4 text-slate-500" />
                           <span className="text-sm">{selectedLead.telefone}</span>
                         </div>
                       )}
                       <div>
                         <Label>Origem</Label>
-                        <p className="mt-1 text-sm text-muted-foreground">
+                        <p className="mt-1 text-sm text-slate-600">
                           {getLeadOriginLabel(selectedLead.origem)}
                         </p>
                       </div>
@@ -556,7 +559,7 @@ export default function CRM() {
                           value={selectedLead.status}
                           onValueChange={(value) => handleStatusChange(selectedLead.id, value) }
                         >
-                          <SelectTrigger className="-ml-1">
+                          <SelectTrigger className={FIELD_CLASS}>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -571,7 +574,7 @@ export default function CRM() {
                       {selectedLead.interesse && (
                         <div>
                           <Label>Interesse</Label>
-                          <p className="text-sm text-muted-foreground mt-1">
+                          <p className="mt-1 text-sm text-slate-600">
                             {selectedLead.interesse}
                           </p>
                         </div>
@@ -588,9 +591,9 @@ export default function CRM() {
                   </Card>
 
                   {/* Anotações */}
-                  <Card>
+                  <Card className="rounded-[28px] border-white/80 bg-white/90 shadow-[0_20px_50px_-34px_rgba(15,23,42,0.32)]">
                     <CardHeader>
-                      <CardTitle className="text-lg flex items-center gap-2">
+                      <CardTitle className="text-lg flex items-center gap-2 text-slate-950">
                         <MessageSquare className="h-5 w-5" />
                         Anotações
                       </CardTitle>
@@ -598,25 +601,25 @@ export default function CRM() {
                     <CardContent className="space-y-4">
                       <div className="space-y-2">
                         <Textarea
-                          className="break-all"
+                          className={`${FIELD_CLASS} break-all`}
                           placeholder="Adicionar nova anotação..."
                           maxLength={500}
                           value={newNote}
                           onChange={(e) => setNewNote(e.target.value)}
                           rows={3}
                         />
-                        <Button className="mt-2" onClick={handleAddNote} size="sm" disabled={addNote.isPending}>
+                        <Button className="mt-2 rounded-full bg-slate-950 text-white hover:bg-slate-800" onClick={handleAddNote} size="sm" disabled={addNote.isPending}>
                           Adicionar Anotação
                         </Button>
                       </div>
 
                       {notes && notes.length > 0 ? (
-                        <div className="space-y-3 max-h-64 overflow-y-auto">
+                        <div className="space-y-3 max-h-64 overflow-y-auto scrollbar-hidden">
                           {notes.map((note) => (
-                            <Card key={note.id} className="border-l-4 border-l-primary break-all">
+                            <Card key={note.id} className="break-all rounded-2xl border border-slate-200 bg-white/90 shadow-sm">
                               <CardContent className="p-3">
                                 <p className="text-sm whitespace-pre-line">{note.anotacao}</p>
-                                <p className="text-xs text-muted-foreground mt-4">
+                                <p className="mt-4 text-xs text-slate-500">
                                   {formatDateTime(note.createdAt)}
                                 </p>
                               </CardContent>
@@ -624,7 +627,7 @@ export default function CRM() {
                           ))}
                         </div>
                       ) : (
-                        <p className="text-sm text-muted-foreground text-center py-4">
+                        <p className="py-4 text-center text-sm text-slate-600">
                           Nenhuma anotação ainda
                         </p>
                       )}
@@ -632,9 +635,9 @@ export default function CRM() {
                   </Card>
 
                   {/* Arquivos */}
-                  <Card>
+                  <Card className="rounded-[28px] border-white/80 bg-white/90 shadow-[0_20px_50px_-34px_rgba(15,23,42,0.32)]">
                     <CardHeader>
-                      <CardTitle className="text-lg flex items-center gap-2">
+                      <CardTitle className="text-lg flex items-center gap-2 text-slate-950">
                         <FileText className="h-5 w-5" />
                         Arquivos
                       </CardTitle>
@@ -643,11 +646,11 @@ export default function CRM() {
                       {files && files.length > 0 ? (
                         <div className="space-y-2">
                           {files.map((file) => (
-                            <Card key={file.id}>
+                            <Card key={file.id} className="rounded-2xl border border-slate-200 bg-white/90 shadow-sm">
                               <CardContent className="p-3 flex items-center justify-between">
                                 <div>
                                   <p className="text-sm font-medium">{file.nomeArquivo}</p>
-                                  <p className="text-xs text-muted-foreground">
+                                  <p className="text-xs text-slate-500">
                                     {formatDateTime(file.createdAt)}
                                   </p>
                                 </div>
@@ -661,7 +664,7 @@ export default function CRM() {
                           ))}
                         </div>
                       ) : (
-                        <p className="text-sm text-muted-foreground text-center py-4">
+                        <p className="py-4 text-center text-sm text-slate-600">
                           Nenhum arquivo anexado
                         </p>
                       )}
@@ -672,6 +675,7 @@ export default function CRM() {
             )}
           </DialogContent>
         </Dialog>
+      </div>
       </div>
     </Layout>
   );

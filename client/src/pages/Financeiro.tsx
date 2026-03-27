@@ -22,6 +22,11 @@ import {
   User,
 } from "lucide-react";
 
+const SURFACE_CARD_CLASS =
+  "rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)] backdrop-blur";
+const FIELD_CLASS =
+  "rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base";
+
 function normalizeSearchValue(value: string) {
   return value
     .normalize("NFD")
@@ -69,12 +74,12 @@ export default function Financeiro() {
 
   const renderSearchInput = (placeholder: string) => (
     <div className="relative mt-2 max-w-xl">
-      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
       <Input
         value={searchTerm}
         onChange={event => setSearchTerm(event.target.value)}
         placeholder={placeholder}
-        className="pl-9"
+        className={`${FIELD_CLASS} pl-9`}
       />
     </div>
   );
@@ -99,7 +104,7 @@ export default function Financeiro() {
           <User className="mx-auto mb-4 h-16 w-16 text-muted-foreground" />
           <h1 className="mb-2 text-2xl font-bold">Acesso Restrito</h1>
           <p className="mb-6 text-muted-foreground">
-            Voc\u00ea precisa estar autenticado para acessar o financeiro.
+            Você precisa estar autenticado para acessar o financeiro.
           </p>
           <Button asChild>
             <a href={getLoginUrl()}>Fazer Login</a>
@@ -116,7 +121,7 @@ export default function Financeiro() {
           <Shield className="mx-auto mb-4 h-16 w-16 text-destructive" />
           <h1 className="mb-2 text-2xl font-bold">Acesso Negado</h1>
           <p className="mb-6 text-muted-foreground">
-            Esta \u00e1rea \u00e9 exclusiva para administradores.
+            Esta área é exclusiva para administradores.
           </p>
           <Button asChild>
             <a href="/">Voltar para Home</a>
@@ -128,75 +133,76 @@ export default function Financeiro() {
 
   return (
     <Layout>
-      <div className="container py-8">
+      <div className="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.88),rgba(244,240,232,0.82)_45%,rgba(248,248,246,1)_100%)]">
+      <div className="container py-8 md:py-10">
         <div className="mb-8">
-          <h1 className="mb-2 text-3xl font-bold">Financeiro</h1>
-          <p className="text-muted-foreground">
-            Acompanhe repasses e comiss\u00f5es do sistema.
+          <h1 className="mb-2 text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">Financeiro</h1>
+          <p className="text-slate-600">
+            Acompanhe repasses e comissões do sistema.
           </p>
         </div>
 
         <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2">
-          <Card className="min-h-[124px] rounded-2xl border border-border/80 shadow-sm">
+          <Card className="min-h-[124px] rounded-[28px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)]">
             <CardHeader className="flex flex-row items-center justify-between px-6 pb-2 pt-5">
-              <CardTitle className="text-sm font-medium">Repasses</CardTitle>
-              <HandCoins className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium text-slate-600">Repasses</CardTitle>
+              <HandCoins className="h-6 w-6 text-slate-500" />
             </CardHeader>
             <CardContent className="px-6 pb-5 pt-0">
-              <div className="text-3xl font-bold tracking-tight">
+              <div className="text-3xl font-bold tracking-tight text-slate-950">
                 {filteredRepasseRows.length}
               </div>
-              <p className="text-xs text-muted-foreground">
+              <p className="mt-3 text-xs text-slate-500">
                 Itens financeiros para acompanhamento
               </p>
             </CardContent>
           </Card>
 
-          <Card className="min-h-[124px] rounded-2xl border border-border/80 shadow-sm">
+          <Card className="min-h-[124px] rounded-[28px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)]">
             <CardHeader className="flex flex-row items-center justify-between px-6 pb-2 pt-5">
-              <CardTitle className="text-sm font-medium">Comiss\u00f5es</CardTitle>
-              <CircleDollarSign className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium text-slate-600">Comissões</CardTitle>
+              <CircleDollarSign className="h-6 w-6 text-slate-500" />
             </CardHeader>
             <CardContent className="px-6 pb-5 pt-0">
-              <div className="text-3xl font-bold tracking-tight">
+              <div className="text-3xl font-bold tracking-tight text-slate-950">
                 {filteredCommissionRows.length}
               </div>
-              <p className="text-xs text-muted-foreground">
-                Comiss\u00f5es prontas para c\u00e1lculo e confer\u00eancia
+              <p className="mt-3 text-xs text-slate-500">
+                Comissões prontas para pagamento
               </p>
             </CardContent>
           </Card>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList>
+          <TabsList className="rounded-full border border-slate-200 bg-white/90">
             <TabsTrigger value="repasses" className="gap-2">
               <HandCoins className="h-4 w-4" />
               Repasses
             </TabsTrigger>
             <TabsTrigger value="comissoes" className="gap-2">
               <CircleDollarSign className="h-4 w-4" />
-              Comiss\u00f5es
+              Comissões
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="repasses">
-            <Card>
+            <Card className={SURFACE_CARD_CLASS}>
               <CardHeader>
-                <CardTitle>Todos os Repasses</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-slate-950">Todos os Repasses</CardTitle>
+                <CardDescription className="text-slate-600">
                   Visualize os repasses registrados no sistema.
                 </CardDescription>
                 {renderSearchInput("Pesquisar repasses")}
               </CardHeader>
               <CardContent>
                 {filteredRepasseRows.length > 0 ? (
-                  <div className="rounded-md border">
+                  <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white/80">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>T\u00edtulo</TableHead>
-                          <TableHead>Respons\u00e1vel</TableHead>
+                          <TableHead>Título</TableHead>
+                          <TableHead>Responsável</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead>Valor</TableHead>
                         </TableRow>
@@ -215,8 +221,8 @@ export default function Financeiro() {
                   </div>
                 ) : (
                   <div className="py-12 text-center">
-                    <HandCoins className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
-                    <p className="text-muted-foreground">
+                    <HandCoins className="mx-auto mb-4 h-12 w-12 text-slate-400" />
+                    <p className="text-slate-600">
                       {searchTerm
                         ? "Nenhum repasse encontrado para essa pesquisa"
                         : "Nenhum repasse cadastrado ainda"}
@@ -228,22 +234,22 @@ export default function Financeiro() {
           </TabsContent>
 
           <TabsContent value="comissoes">
-            <Card>
+            <Card className={SURFACE_CARD_CLASS}>
               <CardHeader>
-                <CardTitle>Todas as Comiss\u00f5es</CardTitle>
-                <CardDescription>
-                  Visualize as comiss\u00f5es registradas no sistema.
+                <CardTitle className="text-slate-950">Todas as Comissões</CardTitle>
+                <CardDescription className="text-slate-600">
+                  Visualize as Comissões registradas no sistema.
                 </CardDescription>
-                {renderSearchInput("Pesquisar comiss\u00f5es")}
+                {renderSearchInput("Pesquisar Comissões")}
               </CardHeader>
               <CardContent>
                 {filteredCommissionRows.length > 0 ? (
-                  <div className="rounded-md border">
+                  <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white/80">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>T\u00edtulo</TableHead>
-                          <TableHead>Respons\u00e1vel</TableHead>
+                          <TableHead>Título</TableHead>
+                          <TableHead>Responsável</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead>Valor</TableHead>
                         </TableRow>
@@ -262,8 +268,8 @@ export default function Financeiro() {
                   </div>
                 ) : (
                   <div className="py-12 text-center">
-                    <CircleDollarSign className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
-                    <p className="text-muted-foreground">
+                    <CircleDollarSign className="mx-auto mb-4 h-12 w-12 text-slate-400" />
+                    <p className="text-slate-600">
                       {searchTerm
                         ? "Nenhuma comiss\u00e3o encontrada para essa pesquisa"
                         : "Nenhuma comiss\u00e3o cadastrada ainda"}
@@ -274,6 +280,7 @@ export default function Financeiro() {
             </Card>
           </TabsContent>
         </Tabs>
+      </div>
       </div>
     </Layout>
   );
