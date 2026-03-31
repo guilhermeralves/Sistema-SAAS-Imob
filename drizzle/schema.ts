@@ -191,6 +191,10 @@ export const taskItems = pgTable("taskItems", {
     .$type<"tarefa" | "evento">()
     .default("tarefa")
     .notNull(),
+  sector: varchar("sector", { length: 40 })
+    .$type<"administrativo" | "financeiro" | "atendimento" | "comercial" | "juridico">()
+    .default("administrativo")
+    .notNull(),
   status: varchar("status", { length: 20 })
     .$type<"pendente" | "em_andamento">()
     .default("pendente")
@@ -204,6 +208,28 @@ export const taskItems = pgTable("taskItems", {
 
 export type TaskItem = typeof taskItems.$inferSelect;
 export type InsertTaskItem = typeof taskItems.$inferInsert;
+
+/**
+ * Modelos de registro para acelerar criacao de tarefas/eventos
+ */
+export const taskItemTemplates = pgTable("taskItemTemplates", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 120 }).notNull(),
+  kind: varchar("kind", { length: 20 })
+    .$type<"tarefa" | "evento">()
+    .notNull(),
+  sector: varchar("sector", { length: 40 })
+    .$type<"administrativo" | "financeiro" | "atendimento" | "comercial" | "juridico">()
+    .notNull(),
+  defaultTitle: varchar("defaultTitle", { length: 180 }).notNull(),
+  defaultDescription: text("defaultDescription"),
+  createdByUserId: integer("createdByUserId").notNull(),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export type TaskItemTemplate = typeof taskItemTemplates.$inferSelect;
+export type InsertTaskItemTemplate = typeof taskItemTemplates.$inferInsert;
 
 /**
  * Vinculos de usuarios associados a tarefa/evento

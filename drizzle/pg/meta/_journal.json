@@ -57,6 +57,13 @@
                         "when":  1773604800000,
                         "tag":  "0007_tasks_events",
                         "breakpoints":  true
+                    },
+                    {
+                        "idx":  8,
+                        "version":  "7",
+                        "when":  1773950400000,
+                        "tag":  "0008_task_templates_and_sector",
+                        "breakpoints":  true
                     }
                 ]
 }

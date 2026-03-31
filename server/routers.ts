@@ -191,12 +191,20 @@ const propertyOwnerDetailsSchema = z.object({
 });
 
 const taskKindSchema = z.enum(["tarefa", "evento"]);
+const taskSectorSchema = z.enum([
+  "administrativo",
+  "financeiro",
+  "atendimento",
+  "comercial",
+  "juridico",
+]);
 const taskPersistedStatusSchema = z.enum(["pendente", "em_andamento"]);
 const taskEditableStatusSchema = z.enum(["pendente", "em_andamento", "atrasado", "concluida"]);
 
 const taskUpsertBaseSchema = z.object({
   title: z.string().trim().min(2).max(180),
   kind: taskKindSchema,
+  sector: taskSectorSchema,
   dueAt: z.string().trim().optional().nullable(),
   description: z.string().trim().max(2000).optional().nullable(),
   assigneeIds: z.array(z.number().int().positive()).max(30).default([]),
@@ -214,6 +222,18 @@ const updateTaskItemSchema = taskUpsertBaseSchema.extend({
 const taskNoteSchema = z.object({
   taskId: z.number().int().positive(),
   note: z.string().trim().min(1).max(1200),
+});
+
+const createTaskTemplateSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+  kind: taskKindSchema,
+  sector: taskSectorSchema,
+  defaultTitle: z.string().trim().min(2).max(180),
+  defaultDescription: z.string().trim().max(2000).optional().nullable(),
+});
+
+const updateTaskTemplateSchema = createTaskTemplateSchema.extend({
+  id: z.number().int().positive(),
 });
 
 function setSessionCookie(ctx: { req: any; res: any }, sessionToken: string) {
@@ -1023,6 +1043,10 @@ export const appRouter = router({
         isAssignedToCurrentUser: taskItem.assignees.some(assignee => assignee.id === ctx.user.id),
       }));
     }),
+    templates: staffProcedure.query(async () => {
+      const { getAllTaskItemTemplatesWithCreator } = await import("./db");
+      return await getAllTaskItemTemplatesWithCreator();
+    }),
     users: staffProcedure.query(async () => {
       const { getAllUsers } = await import("./db");
       const users = await getAllUsers();
@@ -1035,6 +1059,52 @@ export const appRouter = router({
           email: user.email,
           role: user.role,
         }));
+    }),
+    createTemplate: adminProcedure
+      .input(createTaskTemplateSchema)
+      .mutation(async ({ ctx, input }) => {
+        const { createTaskItemTemplate } = await import("./db");
+        return await createTaskItemTemplate({
+          name: input.name.trim(),
+          kind: input.kind,
+          sector: input.sector,
+          defaultTitle: input.defaultTitle.trim(),
+          defaultDescription: input.defaultDescription?.trim() || null,
+          createdByUserId: ctx.user.id,
+        });
+      }),
+    updateTemplate: adminProcedure
+      .input(updateTaskTemplateSchema)
+      .mutation(async ({ input }) => {
+        const { getTaskItemTemplateById, updateTaskItemTemplate } = await import("./db");
+        const template = await getTaskItemTemplateById(input.id);
+        if (!template) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Modelo personalizado nao encontrado.",
+          });
+        }
+
+        return await updateTaskItemTemplate(input.id, {
+          name: input.name.trim(),
+          kind: input.kind,
+          sector: input.sector,
+          defaultTitle: input.defaultTitle.trim(),
+          defaultDescription: input.defaultDescription?.trim() || null,
+        });
+      }),
+    deleteTemplate: adminProcedure.input(idSchema).mutation(async ({ input }) => {
+      const { deleteTaskItemTemplate, getTaskItemTemplateById } = await import("./db");
+      const template = await getTaskItemTemplateById(input.id);
+      if (!template) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Modelo personalizado nao encontrado.",
+        });
+      }
+
+      await deleteTaskItemTemplate(input.id);
+      return { success: true } as const;
     }),
     summary: staffProcedure.query(async ({ ctx }) => {
       const { getAllTaskItemsWithRelations, getTaskItemsForUserWithRelations } = await import("./db");
@@ -1072,6 +1142,7 @@ export const appRouter = router({
       const created = await createTaskItem({
         title: input.title.trim(),
         kind: input.kind,
+        sector: input.sector,
         status: input.status,
         dueAt,
         description: input.description?.trim() || null,
@@ -1117,6 +1188,7 @@ export const appRouter = router({
       await updateTaskItem(input.id, {
         title: input.title.trim(),
         kind: input.kind,
+        sector: input.sector,
         dueAt,
         description: input.description?.trim() || null,
         status: input.status === "atrasado" ? "pendente" : input.status,

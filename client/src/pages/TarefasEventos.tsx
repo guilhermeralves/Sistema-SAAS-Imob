@@ -6,6 +6,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { formatStoredDateTime } from "@/lib/date";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -21,7 +22,10 @@ import {
 } from "@/components/ui/select";
 import {
   AlertTriangle,
+  CalendarDays,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   Loader2,
   PlayCircle,
@@ -36,8 +40,10 @@ type RouterOutput = inferRouterOutputs<AppRouter>;
 type TaskItem = RouterOutput["tasks"]["list"][number];
 type TaskUser = RouterOutput["tasks"]["users"][number];
 type TaskNote = RouterOutput["tasks"]["notes"][number];
+type TaskTemplate = RouterOutput["tasks"]["templates"][number];
 
 type TaskKind = "tarefa" | "evento";
+type TaskSector = "administrativo" | "financeiro" | "atendimento" | "comercial" | "juridico";
 type TaskFormStatus = "pendente" | "em_andamento" | "concluida";
 type TaskComputedStatus = "pendente" | "em_andamento" | "atrasado";
 type ViewMode = "todos" | "minhas";
@@ -60,9 +66,76 @@ const KIND_LABELS: Record<TaskKind, string> = {
   evento: "Evento",
 };
 
+const SECTOR_LABELS: Record<TaskSector, string> = {
+  administrativo: "Administrativo",
+  financeiro: "Financeiro",
+  atendimento: "Atendimento",
+  comercial: "Comercial",
+  juridico: "Juridico",
+};
+
+const SECTOR_OPTIONS: Array<{ value: TaskSector; label: string }> = [
+  { value: "administrativo", label: "Administrativo" },
+  { value: "financeiro", label: "Financeiro" },
+  { value: "atendimento", label: "Atendimento" },
+  { value: "comercial", label: "Comercial" },
+  { value: "juridico", label: "Juridico" },
+];
+
+const WEEKDAY_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"] as const;
+const MONTH_LABELS = [
+  "Janeiro",
+  "Fevereiro",
+  "Marco",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+] as const;
+
+function toDateKey(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function createMonthGrid(baseMonth: Date) {
+  const firstDayOfMonth = new Date(baseMonth.getFullYear(), baseMonth.getMonth(), 1);
+  const startWeekday = firstDayOfMonth.getDay();
+  const gridStart = new Date(firstDayOfMonth);
+  gridStart.setDate(firstDayOfMonth.getDate() - startWeekday);
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(gridStart);
+    date.setDate(gridStart.getDate() + index);
+
+    return {
+      date,
+      key: toDateKey(date),
+      inCurrentMonth: date.getMonth() === baseMonth.getMonth(),
+    };
+  });
+}
+
+function getFilterButtonClassName(isActive: boolean) {
+  return cn(
+    "rounded-full border px-4 py-2 text-sm font-medium transition-all",
+    isActive
+      ? "border-emerald-700 bg-emerald-700 text-white shadow-[0_14px_30px_-22px_rgba(4,120,87,0.85)] hover:bg-emerald-800"
+      : "border-slate-200 bg-white text-slate-700 hover:border-emerald-200 hover:bg-emerald-50/40 hover:text-emerald-800"
+  );
+}
+
 type TaskFormState = {
   title: string;
   kind: TaskKind;
+  sector: TaskSector;
   dueAt: string;
   description: string;
   status: TaskFormStatus;
@@ -72,10 +145,27 @@ type TaskFormState = {
 const EMPTY_TASK_FORM: TaskFormState = {
   title: "",
   kind: "tarefa",
+  sector: "administrativo",
   dueAt: "",
   description: "",
   status: "pendente",
   assigneeIds: [],
+};
+
+type TaskTemplateFormState = {
+  name: string;
+  kind: TaskKind;
+  sector: TaskSector;
+  defaultTitle: string;
+  defaultDescription: string;
+};
+
+const EMPTY_TASK_TEMPLATE_FORM: TaskTemplateFormState = {
+  name: "",
+  kind: "tarefa",
+  sector: "administrativo",
+  defaultTitle: "",
+  defaultDescription: "",
 };
 
 function toDateTimeLocalValue(value: Date | string | null | undefined) {
@@ -125,17 +215,40 @@ function taskMatchesSearch(task: TaskItem, normalizedTerm: string) {
   return normalizeSearch(chunks.join(" ")).includes(normalizedTerm);
 }
 
+function formatTaskDueDateTime(value: Date | string | null | undefined, fallback = "Data invalida") {
+  if (!value) return fallback;
+
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) return fallback;
+
+  const datePart = parsedDate.toLocaleDateString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+  });
+  const timePart = parsedDate.toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "America/Sao_Paulo",
+  });
+
+  return `${datePart} às ${timePart}`;
+}
+
 function TaskColumn({
   title,
   count,
   icon: Icon,
   iconClassName,
+  isExpandedMobile,
+  onToggleMobile,
   children,
 }: {
   title: string;
   count: number;
   icon: typeof Clock3;
   iconClassName: string;
+  isExpandedMobile: boolean;
+  onToggleMobile: () => void;
   children: React.ReactNode;
 }) {
   return (
@@ -150,8 +263,26 @@ function TaskColumn({
             {count}
           </span>
         </CardTitle>
+        <div className="md:hidden">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="rounded-full"
+            onClick={onToggleMobile}
+          >
+            {isExpandedMobile ? "Recolher" : "Expandir"}
+          </Button>
+        </div>
       </CardHeader>
-      <CardContent className="space-y-3">{children}</CardContent>
+      <CardContent
+        className={cn(
+          "space-y-3",
+          isExpandedMobile ? "block" : "hidden md:block"
+        )}
+      >
+        {children}
+      </CardContent>
     </Card>
   );
 }
@@ -160,6 +291,9 @@ export default function TarefasEventos() {
   const { user, loading, isAuthenticated } = useAuth();
   const utils = trpc.useUtils();
   const isStaff = user?.role === "administrativo" || user?.role === "corretor";
+  const isAdmin = user?.role === "administrativo";
+  const currentDate = useMemo(() => new Date(), []);
+  const currentYear = currentDate.getFullYear();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -169,6 +303,22 @@ export default function TarefasEventos() {
   const [kindFilter, setKindFilter] = useState<KindFilter>("todos");
   const [newNote, setNewNote] = useState("");
   const [taskForm, setTaskForm] = useState<TaskFormState>(EMPTY_TASK_FORM);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
+  const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
+  const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
+  const [isTemplateSectionExpandedMobile, setIsTemplateSectionExpandedMobile] = useState(false);
+  const [isPendingColumnExpandedMobile, setIsPendingColumnExpandedMobile] = useState(true);
+  const [isInProgressColumnExpandedMobile, setIsInProgressColumnExpandedMobile] = useState(true);
+  const [isOverdueColumnExpandedMobile, setIsOverdueColumnExpandedMobile] = useState(true);
+  const [isDoneColumnExpandedMobile, setIsDoneColumnExpandedMobile] = useState(true);
+  const [taskTemplateForm, setTaskTemplateForm] = useState<TaskTemplateFormState>(
+    EMPTY_TASK_TEMPLATE_FORM
+  );
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date>(currentDate);
+  const [isCalendarFilterActive, setIsCalendarFilterActive] = useState(true);
+  const [calendarMonth, setCalendarMonth] = useState<Date>(
+    new Date(currentYear, currentDate.getMonth(), 1)
+  );
 
   const { data: taskItems = [], isLoading: taskItemsLoading } = trpc.tasks.list.useQuery(undefined, {
     enabled: isAuthenticated && isStaff,
@@ -176,6 +326,11 @@ export default function TarefasEventos() {
   });
 
   const { data: taskUsers = [] } = trpc.tasks.users.useQuery(undefined, {
+    enabled: isAuthenticated && isStaff,
+    refetchOnWindowFocus: true,
+  });
+
+  const { data: taskTemplates = [] } = trpc.tasks.templates.useQuery(undefined, {
     enabled: isAuthenticated && isStaff,
     refetchOnWindowFocus: true,
   });
@@ -198,6 +353,7 @@ export default function TarefasEventos() {
       ]);
       toast.success("Tarefa/Evento criado com sucesso.");
       setTaskForm(EMPTY_TASK_FORM);
+      setSelectedTemplateId(null);
       setCreateOpen(false);
     },
     onError: error => {
@@ -263,6 +419,57 @@ export default function TarefasEventos() {
     },
   });
 
+  const createTemplateMutation = trpc.tasks.createTemplate.useMutation({
+    onSuccess: async () => {
+      await utils.tasks.templates.invalidate();
+      toast.success("Registro personalizado criado.");
+      setTaskTemplateForm(EMPTY_TASK_TEMPLATE_FORM);
+    },
+    onError: error => {
+      toast.error(error.message || "Nao foi possivel criar o registro personalizado.");
+    },
+  });
+
+  const updateTemplateMutation = trpc.tasks.updateTemplate.useMutation({
+    onSuccess: async () => {
+      await utils.tasks.templates.invalidate();
+      toast.success("Registro personalizado atualizado.");
+      setEditingTemplateId(null);
+      setTaskTemplateForm(EMPTY_TASK_TEMPLATE_FORM);
+    },
+    onError: error => {
+      toast.error(error.message || "Nao foi possivel atualizar o registro personalizado.");
+    },
+  });
+
+  const deleteTemplateMutation = trpc.tasks.deleteTemplate.useMutation({
+    onSuccess: async () => {
+      await utils.tasks.templates.invalidate();
+      toast.success("Registro personalizado removido.");
+      if (selectedTemplateId !== null) {
+        setSelectedTemplateId(null);
+      }
+    },
+    onError: error => {
+      toast.error(error.message || "Nao foi possivel remover o registro personalizado.");
+    },
+  });
+
+  const selectedCalendarDateKey = useMemo(
+    () => toDateKey(selectedCalendarDate),
+    [selectedCalendarDate]
+  );
+
+  const sortedTaskTemplates = useMemo(
+    () =>
+      [...taskTemplates].sort((a, b) => {
+        if (a.kind !== b.kind) return a.kind.localeCompare(b.kind);
+        if (a.sector !== b.sector) return a.sector.localeCompare(b.sector);
+        return a.name.localeCompare(b.name);
+      }),
+    [taskTemplates]
+  );
+
   const filteredTaskItems = useMemo(() => {
     const normalizedTerm = normalizeSearch(searchTerm.trim());
 
@@ -280,15 +487,63 @@ export default function TarefasEventos() {
         return false;
       }
 
+      if (isCalendarFilterActive) {
+        if (!taskItem.dueAt) return false;
+        const dueDate = new Date(taskItem.dueAt);
+        if (Number.isNaN(dueDate.getTime())) return false;
+        if (toDateKey(dueDate) !== selectedCalendarDateKey) return false;
+      }
+
       return true;
     });
-  }, [kindFilter, searchTerm, taskItems, user?.id, viewMode]);
+  }, [isCalendarFilterActive, kindFilter, searchTerm, selectedCalendarDateKey, taskItems, user?.id, viewMode]);
 
   const pendingTaskItems = filteredTaskItems.filter(taskItem => taskItem.computedStatus === "pendente");
   const inProgressTaskItems = filteredTaskItems.filter(
     taskItem => taskItem.computedStatus === "em_andamento"
   );
   const overdueTaskItems = filteredTaskItems.filter(taskItem => taskItem.computedStatus === "atrasado");
+
+  const calendarMonthGrid = useMemo(() => createMonthGrid(calendarMonth), [calendarMonth]);
+  const dayMarkers = useMemo(() => {
+    const markers = new Map<string, { hasTask: boolean; hasEvent: boolean }>();
+
+    for (const taskItem of taskItems) {
+      if (!taskItem.dueAt) continue;
+
+      const parsedDate = new Date(taskItem.dueAt);
+      if (Number.isNaN(parsedDate.getTime())) continue;
+
+      const key = toDateKey(parsedDate);
+      const currentMarker = markers.get(key) ?? { hasTask: false, hasEvent: false };
+
+      if (taskItem.kind === "tarefa") currentMarker.hasTask = true;
+      if (taskItem.kind === "evento") currentMarker.hasEvent = true;
+
+      markers.set(key, currentMarker);
+    }
+
+    return markers;
+  }, [taskItems]);
+
+  const goToPreviousMonth = () => {
+    setCalendarMonth(current => {
+      const previous = new Date(current.getFullYear(), current.getMonth() - 1, 1);
+      if (previous.getFullYear() !== currentYear) return current;
+      return previous;
+    });
+  };
+
+  const goToNextMonth = () => {
+    setCalendarMonth(current => {
+      const next = new Date(current.getFullYear(), current.getMonth() + 1, 1);
+      if (next.getFullYear() !== currentYear) return current;
+      return next;
+    });
+  };
+
+  const isAtFirstMonth = calendarMonth.getMonth() === 0;
+  const isAtLastMonth = calendarMonth.getMonth() === 11;
 
   const toggleAssignee = (userId: number) => {
     setTaskForm(current => {
@@ -302,6 +557,7 @@ export default function TarefasEventos() {
 
   const openCreateDialog = () => {
     setTaskForm(EMPTY_TASK_FORM);
+    setSelectedTemplateId(null);
     setCreateOpen(true);
   };
 
@@ -310,6 +566,7 @@ export default function TarefasEventos() {
     setTaskForm({
       title: taskItem.title,
       kind: taskItem.kind,
+      sector: taskItem.sector,
       dueAt: toDateTimeLocalValue(taskItem.dueAt),
       description: taskItem.description || "",
       status: taskItem.status,
@@ -327,6 +584,7 @@ export default function TarefasEventos() {
     await createTaskMutation.mutateAsync({
       title: taskForm.title,
       kind: taskForm.kind,
+      sector: taskForm.sector,
       dueAt: taskForm.dueAt || null,
       description: taskForm.description || null,
       status: taskForm.status === "concluida" ? "pendente" : taskForm.status,
@@ -345,6 +603,7 @@ export default function TarefasEventos() {
       id: selectedTaskId,
       title: taskForm.title,
       kind: taskForm.kind,
+      sector: taskForm.sector,
       dueAt: taskForm.dueAt || null,
       description: taskForm.description || null,
       status: taskForm.status,
@@ -366,6 +625,70 @@ export default function TarefasEventos() {
     await addNoteMutation.mutateAsync({
       taskId: selectedTaskId,
       note: newNote,
+    });
+  };
+
+  const handleApplyTemplateToTaskForm = (templateIdValue: string) => {
+    if (templateIdValue === "none") {
+      setSelectedTemplateId(null);
+      return;
+    }
+
+    const templateId = Number(templateIdValue);
+    if (!Number.isInteger(templateId) || templateId <= 0) {
+      setSelectedTemplateId(null);
+      return;
+    }
+
+    const template = taskTemplates.find(item => item.id === templateId);
+    if (!template) {
+      setSelectedTemplateId(null);
+      return;
+    }
+
+    setSelectedTemplateId(template.id);
+    setTaskForm(current => ({
+      ...current,
+      kind: template.kind,
+      sector: template.sector,
+      title: template.defaultTitle,
+      description: template.defaultDescription || "",
+    }));
+  };
+
+  const handleSaveTemplate = async () => {
+    if (!taskTemplateForm.name.trim() || !taskTemplateForm.defaultTitle.trim()) {
+      toast.warning("Preencha nome e titulo padrao do registro.");
+      return;
+    }
+
+    const payload = {
+      name: taskTemplateForm.name.trim(),
+      kind: taskTemplateForm.kind,
+      sector: taskTemplateForm.sector,
+      defaultTitle: taskTemplateForm.defaultTitle.trim(),
+      defaultDescription: taskTemplateForm.defaultDescription.trim() || null,
+    } as const;
+
+    if (editingTemplateId) {
+      await updateTemplateMutation.mutateAsync({
+        id: editingTemplateId,
+        ...payload,
+      });
+      return;
+    }
+
+    await createTemplateMutation.mutateAsync(payload);
+  };
+
+  const handleEditTemplate = (template: TaskTemplate) => {
+    setEditingTemplateId(template.id);
+    setTaskTemplateForm({
+      name: template.name,
+      kind: template.kind,
+      sector: template.sector,
+      defaultTitle: template.defaultTitle,
+      defaultDescription: template.defaultDescription || "",
     });
   };
 
@@ -426,7 +749,7 @@ export default function TarefasEventos() {
                 Tarefas e Eventos
               </h1>
               <p className="mt-2 text-slate-600">
-                Organize demandas atuais, vincule usuarios e acompanhe o que precisa de acao.
+                Organize demandas atuais, vincule usuários e acompanhe o que precisa de ação.
               </p>
             </div>
 
@@ -434,14 +757,14 @@ export default function TarefasEventos() {
               <DialogTrigger asChild>
                 <Button className="gap-2 rounded-full bg-slate-950 text-white hover:bg-slate-800" onClick={openCreateDialog}>
                   <Plus className="h-4 w-4" />
-                  Nova tarefa/evento
+                  Novo Registro
                 </Button>
               </DialogTrigger>
 
               <DialogContent className="max-h-[90vh] w-full max-w-2xl overflow-y-auto scrollbar-hidden rounded-[32px] border-white/80 bg-[#f7f6f2] p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)] sm:p-6">
                 <DialogHeader className="space-y-3 pb-2">
                   <DialogTitle className="text-2xl font-semibold tracking-tight text-slate-950">
-                    Criar tarefa/evento
+                    Criar Novo Registro
                   </DialogTitle>
                   <DialogDescription className="text-slate-600">
                     Vincule usuarios e acompanhe a demanda ate a conclusao.
@@ -449,6 +772,26 @@ export default function TarefasEventos() {
                 </DialogHeader>
 
                 <div className="space-y-5">
+                  <div className="space-y-2">
+                    <Label htmlFor="task-template">Registro personalizado</Label>
+                    <Select
+                      value={selectedTemplateId ? String(selectedTemplateId) : "none"}
+                      onValueChange={handleApplyTemplateToTaskForm}
+                    >
+                      <SelectTrigger id="task-template" className={FIELD_CLASS}>
+                        <SelectValue placeholder="Selecione um modelo pronto" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Sem modelo</SelectItem>
+                        {sortedTaskTemplates.map(template => (
+                          <SelectItem key={template.id} value={String(template.id)}>
+                            {template.name} • {KIND_LABELS[template.kind]} • {SECTOR_LABELS[template.sector]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                   <div className="space-y-2">
                     <Label htmlFor="task-title">Nome</Label>
                     <Input
@@ -460,7 +803,7 @@ export default function TarefasEventos() {
                     />
                   </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid gap-4 sm:grid-cols-3">
                     <div className="space-y-2">
                       <Label htmlFor="task-kind">Tipo</Label>
                       <Select
@@ -475,6 +818,27 @@ export default function TarefasEventos() {
                         <SelectContent>
                           <SelectItem value="tarefa">Tarefa</SelectItem>
                           <SelectItem value="evento">Evento</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="task-sector">Setor</Label>
+                      <Select
+                        value={taskForm.sector}
+                        onValueChange={value =>
+                          setTaskForm(current => ({ ...current, sector: value as TaskSector }))
+                        }
+                      >
+                        <SelectTrigger id="task-sector" className={FIELD_CLASS}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {SECTOR_OPTIONS.map(option => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -540,7 +904,7 @@ export default function TarefasEventos() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="task-description">Observacoes</Label>
+                    <Label htmlFor="task-description">Observações</Label>
                     <Textarea
                       id="task-description"
                       className={`${FIELD_CLASS} resize-none`}
@@ -557,69 +921,323 @@ export default function TarefasEventos() {
                     onClick={handleCreateTask}
                     disabled={createTaskMutation.isPending}
                   >
-                    {createTaskMutation.isPending ? "Criando..." : "Criar tarefa/evento"}
+                    {createTaskMutation.isPending ? "Criando..." : "Criar Registro"}
                   </Button>
                 </div>
               </DialogContent>
             </Dialog>
           </div>
 
-          <Card className={`${SURFACE_CARD_CLASS} mb-8`}>
-            <CardContent className="space-y-4 p-6 md:p-7">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  className={`${FIELD_CLASS} pl-9`}
-                  placeholder="Buscar por nome, id, observacao ou usuario..."
-                  value={searchTerm}
-                  onChange={event => setSearchTerm(event.target.value)}
-                />
-              </div>
+          <div className="mb-8 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <Card className={SURFACE_CARD_CLASS}>
+              <CardContent className="space-y-4 p-6 md:p-7">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    className={`${FIELD_CLASS} pl-9`}
+                    placeholder="Buscar por nome, id, observacao ou usuario..."
+                    value={searchTerm}
+                    onChange={event => setSearchTerm(event.target.value)}
+                  />
+                </div>
 
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  variant={viewMode === "todos" ? "default" : "outline"}
-                  className="rounded-full"
-                  onClick={() => setViewMode("todos")}
-                >
-                  Todos
-                </Button>
-                <Button
-                  type="button"
-                  variant={viewMode === "minhas" ? "default" : "outline"}
-                  className="rounded-full"
-                  onClick={() => setViewMode("minhas")}
-                >
-                  Minhas demandas
-                </Button>
-                <Button
-                  type="button"
-                  variant={kindFilter === "todos" ? "default" : "outline"}
-                  className="rounded-full"
-                  onClick={() => setKindFilter("todos")}
-                >
-                  Todos os tipos
-                </Button>
-                <Button
-                  type="button"
-                  variant={kindFilter === "tarefa" ? "default" : "outline"}
-                  className="rounded-full"
-                  onClick={() => setKindFilter("tarefa")}
-                >
-                  Tarefas
-                </Button>
-                <Button
-                  type="button"
-                  variant={kindFilter === "evento" ? "default" : "outline"}
-                  className="rounded-full"
-                  onClick={() => setKindFilter("evento")}
-                >
-                  Eventos
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className={getFilterButtonClassName(viewMode === "todos")}
+                    onClick={() => {
+                      setViewMode("todos");
+                      setIsCalendarFilterActive(false);
+                    }}
+                  >
+                    Todos
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className={getFilterButtonClassName(viewMode === "minhas")}
+                    onClick={() => setViewMode("minhas")}
+                  >
+                    Minhas demandas
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className={getFilterButtonClassName(kindFilter === "todos")}
+                    onClick={() => setKindFilter("todos")}
+                  >
+                    Todos os tipos
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className={getFilterButtonClassName(kindFilter === "tarefa")}
+                    onClick={() => setKindFilter("tarefa")}
+                  >
+                    Tarefas
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className={getFilterButtonClassName(kindFilter === "evento")}
+                    onClick={() => setKindFilter("evento")}
+                  >
+                    Eventos
+                  </Button>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200/80 bg-white/70 p-4">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">Personalizar Registro</p>
+                      <p className="text-xs text-slate-600">
+                        Crie modelos por tipo e setor para agilizar novos registros.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="rounded-full md:hidden"
+                      onClick={() =>
+                        setIsTemplateSectionExpandedMobile(current => !current)
+                      }
+                    >
+                      {isTemplateSectionExpandedMobile ? "Recolher" : "Expandir"}
+                    </Button>
+                  </div>
+
+                  <div
+                    className={cn(
+                      isTemplateSectionExpandedMobile ? "block" : "hidden",
+                      "md:block"
+                    )}
+                  >
+                    {isAdmin ? (
+                      <div className="space-y-3">
+                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="template-name">Nome do modelo</Label>
+                          <Input
+                            id="template-name"
+                            className={FIELD_CLASS}
+                            value={taskTemplateForm.name}
+                            onChange={event =>
+                              setTaskTemplateForm(current => ({
+                                ...current,
+                                name: event.target.value,
+                              }))
+                            }
+                            placeholder="Ex: Contrato locacao"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="template-kind">Tipo</Label>
+                          <Select
+                            value={taskTemplateForm.kind}
+                            onValueChange={value =>
+                              setTaskTemplateForm(current => ({
+                                ...current,
+                                kind: value as TaskKind,
+                              }))
+                            }
+                          >
+                            <SelectTrigger id="template-kind" className={FIELD_CLASS}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="tarefa">Tarefa</SelectItem>
+                              <SelectItem value="evento">Evento</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="template-sector">Setor</Label>
+                          <Select
+                            value={taskTemplateForm.sector}
+                            onValueChange={value =>
+                              setTaskTemplateForm(current => ({
+                                ...current,
+                                sector: value as TaskSector,
+                              }))
+                            }
+                          >
+                            <SelectTrigger id="template-sector" className={FIELD_CLASS}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {SECTOR_OPTIONS.map(option => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="template-title">Titulo padrao</Label>
+                          <Input
+                            id="template-title"
+                            className={FIELD_CLASS}
+                            value={taskTemplateForm.defaultTitle}
+                            onChange={event =>
+                              setTaskTemplateForm(current => ({
+                                ...current,
+                                defaultTitle: event.target.value,
+                              }))
+                            }
+                            placeholder="Ex: Redigir contrato de locacao"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="template-description">Observacao padrao</Label>
+                        <Textarea
+                          id="template-description"
+                          className={`${FIELD_CLASS} resize-none`}
+                          rows={3}
+                          value={taskTemplateForm.defaultDescription}
+                          onChange={event =>
+                            setTaskTemplateForm(current => ({
+                              ...current,
+                              defaultDescription: event.target.value,
+                            }))
+                          }
+                          placeholder="Ex: Confirmar dados, anexos e responsavel antes de enviar ao cliente."
+                        />
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          className="rounded-full bg-slate-950 text-white hover:bg-slate-800"
+                          onClick={handleSaveTemplate}
+                          disabled={createTemplateMutation.isPending || updateTemplateMutation.isPending}
+                        >
+                          {editingTemplateId ? "Atualizar modelo" : "Salvar modelo"}
+                        </Button>
+                        {sortedTaskTemplates.length > 0 ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="rounded-full border-slate-200 bg-white"
+                            onClick={() => setTemplateManagerOpen(true)}
+                          >
+                            Personalizados
+                          </Button>
+                        ) : null}
+                        {editingTemplateId ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="rounded-full border-slate-200"
+                            onClick={() => {
+                              setEditingTemplateId(null);
+                              setTaskTemplateForm(EMPTY_TASK_TEMPLATE_FORM);
+                            }}
+                          >
+                            Cancelar edicao
+                          </Button>
+                        ) : null}
+                      </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className={SURFACE_CARD_CLASS}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base text-slate-900">
+                  <CalendarDays className="h-4 w-4 text-slate-600" />
+                  Calendario {currentYear}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-0">
+                <div className="flex items-center justify-between gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 rounded-full border-slate-200"
+                    onClick={goToPreviousMonth}
+                    disabled={isAtFirstMonth}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <p className="text-sm font-semibold text-slate-800">
+                    {MONTH_LABELS[calendarMonth.getMonth()]}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 rounded-full border-slate-200"
+                    onClick={goToNextMonth}
+                    disabled={isAtLastMonth}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium text-slate-500">
+                  {WEEKDAY_LABELS.map(dayLabel => (
+                    <span key={dayLabel} className="py-1">
+                      {dayLabel}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-7 gap-1">
+                  {calendarMonthGrid.map(dayCell => {
+                    const marker = dayMarkers.get(dayCell.key);
+                    const isSelected = dayCell.key === selectedCalendarDateKey;
+
+                    return (
+                      <button
+                        key={dayCell.key}
+                        type="button"
+                        onClick={() => {
+                          setSelectedCalendarDate(dayCell.date);
+                          setIsCalendarFilterActive(true);
+                        }}
+                        className={cn(
+                          "group flex h-10 flex-col items-center justify-center rounded-lg border transition-colors",
+                          dayCell.inCurrentMonth
+                            ? "border-slate-200 bg-white/70 hover:bg-white"
+                            : "border-transparent bg-transparent",
+                          isSelected
+                            ? "!border-2 !border-emerald-800 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-800/30"
+                            : "text-slate-700"
+                        )}
+                      >
+                        <span
+                          className={`text-xs font-medium ${
+                            dayCell.inCurrentMonth ? "text-current" : "text-slate-300"
+                          }`}
+                        >
+                          {dayCell.date.getDate()}
+                        </span>
+                        {dayCell.inCurrentMonth && marker ? (
+                          <span className="mt-0.5 inline-flex items-center gap-1">
+                            {marker.hasTask ? (
+                              <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                            ) : null}
+                            {marker.hasEvent ? (
+                              <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
+                            ) : null}
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
           {taskItemsLoading ? (
             <div className="flex items-center justify-center rounded-[28px] border border-white/70 bg-white/90 p-10">
@@ -632,6 +1250,10 @@ export default function TarefasEventos() {
                 count={pendingTaskItems.length}
                 icon={Clock3}
                 iconClassName="text-sky-600"
+                isExpandedMobile={isPendingColumnExpandedMobile}
+                onToggleMobile={() =>
+                  setIsPendingColumnExpandedMobile(current => !current)
+                }
               >
                 {pendingTaskItems.length > 0 ? (
                   pendingTaskItems.map(taskItem => (
@@ -649,10 +1271,13 @@ export default function TarefasEventos() {
                           {KIND_LABELS[taskItem.kind]}
                         </span>
                       </div>
+                      <p className="text-[11px] font-medium text-slate-600">
+                        Setor: {SECTOR_LABELS[taskItem.sector]}
+                      </p>
                       <p className="line-clamp-2 text-sm font-semibold text-slate-900">{taskItem.title}</p>
                       <p className="mt-2 text-xs text-slate-500">
                         {taskItem.dueAt
-                          ? `Prazo: ${formatStoredDateTime(taskItem.dueAt)}`
+                          ? `Prazo: ${formatTaskDueDateTime(taskItem.dueAt)}`
                           : "Sem prazo definido"}
                       </p>
                       <div className="mt-3 flex items-center justify-between">
@@ -685,6 +1310,10 @@ export default function TarefasEventos() {
                 count={inProgressTaskItems.length}
                 icon={PlayCircle}
                 iconClassName="text-amber-600"
+                isExpandedMobile={isInProgressColumnExpandedMobile}
+                onToggleMobile={() =>
+                  setIsInProgressColumnExpandedMobile(current => !current)
+                }
               >
                 {inProgressTaskItems.length > 0 ? (
                   inProgressTaskItems.map(taskItem => (
@@ -702,10 +1331,13 @@ export default function TarefasEventos() {
                           {KIND_LABELS[taskItem.kind]}
                         </span>
                       </div>
+                      <p className="text-[11px] font-medium text-slate-600">
+                        Setor: {SECTOR_LABELS[taskItem.sector]}
+                      </p>
                       <p className="line-clamp-2 text-sm font-semibold text-slate-900">{taskItem.title}</p>
                       <p className="mt-2 text-xs text-slate-500">
                         {taskItem.dueAt
-                          ? `Prazo: ${formatStoredDateTime(taskItem.dueAt)}`
+                          ? `Prazo: ${formatTaskDueDateTime(taskItem.dueAt)}`
                           : "Sem prazo definido"}
                       </p>
                       <p className="mt-3 text-xs text-slate-500">
@@ -725,6 +1357,10 @@ export default function TarefasEventos() {
                 count={overdueTaskItems.length}
                 icon={AlertTriangle}
                 iconClassName="text-rose-600"
+                isExpandedMobile={isOverdueColumnExpandedMobile}
+                onToggleMobile={() =>
+                  setIsOverdueColumnExpandedMobile(current => !current)
+                }
               >
                 {overdueTaskItems.length > 0 ? (
                   overdueTaskItems.map(taskItem => (
@@ -742,9 +1378,12 @@ export default function TarefasEventos() {
                           {KIND_LABELS[taskItem.kind]}
                         </span>
                       </div>
+                      <p className="text-[11px] font-medium text-rose-700">
+                        Setor: {SECTOR_LABELS[taskItem.sector]}
+                      </p>
                       <p className="line-clamp-2 text-sm font-semibold text-rose-900">{taskItem.title}</p>
                       <p className="mt-2 text-xs text-rose-700">
-                        Prazo vencido em: {taskItem.dueAt ? formatStoredDateTime(taskItem.dueAt) : "-"}
+                        Prazo vencido em: {taskItem.dueAt ? formatTaskDueDateTime(taskItem.dueAt) : "-"}
                       </p>
                       <p className="mt-3 text-xs text-rose-700">
                         Ajuste o status ou conclua para remover.
@@ -763,6 +1402,10 @@ export default function TarefasEventos() {
                 count={0}
                 icon={CheckCircle2}
                 iconClassName="text-emerald-600"
+                isExpandedMobile={isDoneColumnExpandedMobile}
+                onToggleMobile={() =>
+                  setIsDoneColumnExpandedMobile(current => !current)
+                }
               >
                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-900">
                   Ao marcar uma tarefa/evento como <strong>Concluida</strong>, ela e removida do sistema
@@ -777,6 +1420,73 @@ export default function TarefasEventos() {
         </div>
       </div>
 
+      <Dialog open={templateManagerOpen} onOpenChange={setTemplateManagerOpen}>
+        <DialogContent className="max-h-[92vh] w-full max-w-[calc(100%-2rem)] overflow-y-auto scrollbar-hidden rounded-[32px] border-white/80 bg-[#f7f6f2] p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)] sm:max-w-3xl sm:p-6">
+          <DialogHeader className="space-y-3 pb-2">
+            <DialogTitle className="text-2xl font-semibold tracking-tight text-slate-950">
+              Registros Personalizados
+            </DialogTitle>
+            <DialogDescription className="text-slate-600">
+              Visualize e gerencie os modelos cadastrados para acelerar tarefas e eventos.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            {sortedTaskTemplates.length > 0 ? (
+              sortedTaskTemplates.map(template => (
+                <div
+                  key={template.id}
+                  className="rounded-2xl border border-slate-200 bg-white/90 p-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{template.name}</p>
+                      <p className="text-xs text-slate-600">
+                        {KIND_LABELS[template.kind]} • {SECTOR_LABELS[template.sector]}
+                      </p>
+                    </div>
+                    {isAdmin ? (
+                      <div className="flex gap-1">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-7 rounded-full border-slate-200 px-3 text-xs"
+                          onClick={() => {
+                            handleEditTemplate(template);
+                            setTemplateManagerOpen(false);
+                          }}
+                        >
+                          Editar
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-7 rounded-full border-rose-200 px-3 text-xs text-rose-700 hover:bg-rose-50"
+                          onClick={() => deleteTemplateMutation.mutate({ id: template.id })}
+                          disabled={deleteTemplateMutation.isPending}
+                        >
+                          Excluir
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                  <p className="mt-3 text-sm text-slate-700">{template.defaultTitle}</p>
+                  {template.defaultDescription ? (
+                    <p className="mt-2 text-xs text-slate-500 whitespace-pre-line">
+                      {template.defaultDescription}
+                    </p>
+                  ) : null}
+                </div>
+              ))
+            ) : (
+              <p className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">
+                Nenhum registro personalizado cadastrado.
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
         <DialogContent className="max-h-[95vh] w-full max-w-[calc(100%-2rem)] overflow-y-auto scrollbar-hidden rounded-[32px] border-white/80 bg-[#f7f6f2] p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)] sm:max-w-3xl sm:p-6">
           {selectedTask ? (
@@ -786,7 +1496,7 @@ export default function TarefasEventos() {
                   #{selectedTask.id} • {selectedTask.title}
                 </DialogTitle>
                 <DialogDescription className="text-slate-600">
-                  Tipo: {KIND_LABELS[selectedTask.kind]} • Status atual:{" "}
+                  Tipo: {KIND_LABELS[selectedTask.kind]} • Setor: {SECTOR_LABELS[selectedTask.sector]} • Status atual:{" "}
                   {STATUS_LABELS[selectedTask.computedStatus]} • Criado por{" "}
                   {selectedTask.createdBy?.name || selectedTask.createdBy?.email || "-"}
                 </DialogDescription>
@@ -807,7 +1517,7 @@ export default function TarefasEventos() {
                       />
                     </div>
 
-                    <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="grid gap-4 sm:grid-cols-3">
                       <div className="space-y-2">
                         <Label htmlFor="detail-kind">Tipo</Label>
                         <Select
@@ -822,6 +1532,27 @@ export default function TarefasEventos() {
                           <SelectContent>
                             <SelectItem value="tarefa">Tarefa</SelectItem>
                             <SelectItem value="evento">Evento</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="detail-sector">Setor</Label>
+                        <Select
+                          value={taskForm.sector}
+                          onValueChange={value =>
+                            setTaskForm(current => ({ ...current, sector: value as TaskSector }))
+                          }
+                        >
+                          <SelectTrigger id="detail-sector" className={FIELD_CLASS}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {SECTOR_OPTIONS.map(option => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>

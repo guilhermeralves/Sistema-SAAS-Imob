@@ -14,8 +14,10 @@ import {
   InsertTaskItem,
   InsertTaskItemAssignment,
   InsertTaskItemNote,
+  InsertTaskItemTemplate,
   InsertUser,
   TaskItem,
+  TaskItemTemplate,
   User,
   contracts,
   documents,
@@ -24,6 +26,7 @@ import {
   leads,
   taskItemAssignments,
   taskItemNotes,
+  taskItemTemplates,
   taskItems,
   propertyDocuments,
   propertyOwners,
@@ -668,6 +671,10 @@ export type TaskItemWithRelations = TaskItem & {
   assignees: TaskActor[];
 };
 
+export type TaskItemTemplateWithCreator = TaskItemTemplate & {
+  createdBy: TaskActor | null;
+};
+
 async function enrichTaskItemsWithRelations(taskRows: TaskItem[]): Promise<TaskItemWithRelations[]> {
   const db = await getDb();
   if (!db || taskRows.length === 0) {
@@ -730,10 +737,90 @@ async function enrichTaskItemsWithRelations(taskRows: TaskItem[]): Promise<TaskI
   }));
 }
 
+async function enrichTaskTemplatesWithCreator(
+  templateRows: TaskItemTemplate[]
+): Promise<TaskItemTemplateWithCreator[]> {
+  const db = await getDb();
+  if (!db || templateRows.length === 0) {
+    return templateRows.map(template => ({
+      ...template,
+      createdBy: null,
+    }));
+  }
+
+  const userIds = Array.from(new Set(templateRows.map(template => template.createdByUserId)));
+  const relatedUsers =
+    userIds.length > 0
+      ? await db.select().from(users).where(inArray(users.id, userIds))
+      : [];
+
+  const usersById = new Map<number, TaskActor>(
+    relatedUsers.map(user => [
+      user.id,
+      {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        isActive: user.isActive,
+      },
+    ])
+  );
+
+  return templateRows.map(template => ({
+    ...template,
+    createdBy: usersById.get(template.createdByUserId) ?? null,
+  }));
+}
+
 export async function getUsersByIds(userIds: number[]) {
   const db = await getDb();
   if (!db || userIds.length === 0) return [];
   return await db.select().from(users).where(inArray(users.id, userIds));
+}
+
+export async function getAllTaskItemTemplatesWithCreator() {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = await db.select().from(taskItemTemplates).orderBy(desc(taskItemTemplates.updatedAt));
+  return await enrichTaskTemplatesWithCreator(rows);
+}
+
+export async function getTaskItemTemplateById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const rows = await db.select().from(taskItemTemplates).where(eq(taskItemTemplates.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function createTaskItemTemplate(data: InsertTaskItemTemplate) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [created] = await db.insert(taskItemTemplates).values(data).returning();
+  return created;
+}
+
+export async function updateTaskItemTemplate(id: number, data: Partial<InsertTaskItemTemplate>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [updated] = await db
+    .update(taskItemTemplates)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(taskItemTemplates.id, id))
+    .returning();
+
+  return updated;
+}
+
+export async function deleteTaskItemTemplate(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.delete(taskItemTemplates).where(eq(taskItemTemplates.id, id));
 }
 
 export async function getAllTaskItemsWithRelations() {
