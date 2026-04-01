@@ -189,10 +189,48 @@ const propertyMutationSchema = z.object({
   confirmedOwnerEmailConflict: z.boolean().optional(),
 });
 
+const propertyListSchema = z.object({
+  showDeletedOnly: z.boolean().optional(),
+});
+
 const createPropertySchema = propertyMutationSchema;
 
 const updatePropertySchema = propertyMutationSchema.extend({
   id: z.number().int().positive(),
+});
+
+const deletePropertySchema = z.object({
+  id: z.number().int().positive(),
+  confirmationText: z.string().trim(),
+  motivoExclusao: z.string().trim().min(3).max(2000),
+});
+
+const updatePropertyLegalDetailsSchema = z.object({
+  id: z.number().int().positive(),
+  inscricaoImobiliaria: z.string().trim().max(120).optional().nullable(),
+  matriculaRegistro: z.string().trim().max(120).optional().nullable(),
+  cartorioRegistro: z.string().trim().max(160).optional().nullable(),
+  registroMunicipal: z.string().trim().max(120).optional().nullable(),
+  informacoesLegais: z.string().trim().max(4000).optional().nullable(),
+  observacoesJuridicas: z.string().trim().max(4000).optional().nullable(),
+});
+
+const propertyKeyStatusSchema = z.enum(["disponivel", "retirada", "indisponivel"]);
+
+const propertyKeyStatusRequestsListSchema = z.object({
+  idImovel: z.number().int().positive(),
+});
+
+const requestPropertyKeyStatusChangeSchema = z.object({
+  idImovel: z.number().int().positive(),
+  requestedStatus: propertyKeyStatusSchema,
+  requestedObservation: z.string().trim().min(3).max(2000),
+});
+
+const reviewPropertyKeyStatusRequestSchema = z.object({
+  requestId: z.number().int().positive(),
+  decision: z.enum(["approved", "rejected"]),
+  reviewNote: z.string().trim().max(2000).optional(),
 });
 
 const propertyOwnerDetailsSchema = z.object({
@@ -776,9 +814,11 @@ export const appRouter = router({
   }),
 
   properties: router({
-    list: publicProcedure.query(async () => {
+    list: publicProcedure.input(propertyListSchema.optional()).query(async ({ ctx, input }) => {
       const { getAllProperties } = await import("./db");
-      return await getAllProperties();
+      const isAdmin = ctx.user?.role === "administrativo";
+      const showDeletedOnly = isAdmin && input?.showDeletedOnly === true;
+      return await getAllProperties({ deletedOnly: showDeletedOnly });
     }),
     getById: publicProcedure.input(idSchema).query(async ({ ctx, input }) => {
       const { getPropertyById, getPropertyByIdWithRelations } = await import("./db");
@@ -800,6 +840,16 @@ export const appRouter = router({
         proprietario: propertyWithRelations.proprietario ?? null,
         cadastradoPor: null,
       };
+    }),
+    getByIdAdmin: adminProcedure.input(idSchema).query(async ({ input }) => {
+      const { getPropertyByIdWithRelations } = await import("./db");
+      const propertyWithRelations = await getPropertyByIdWithRelations(input.id, { includeDeleted: true });
+
+      if (!propertyWithRelations) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Imovel nao encontrado" });
+      }
+
+      return propertyWithRelations;
     }),
     getDestacados: publicProcedure.query(async () => {
       const { getDestacados } = await import("./db");
@@ -939,11 +989,47 @@ export const appRouter = router({
         idProprietario: owner.id,
       });
     }),
-    delete: adminProcedure.input(idSchema).mutation(async ({ input }) => {
-      const { deleteProperty } = await import("./db");
-      await ensurePropertyExists(input.id);
-      return await deleteProperty(input.id);
+    delete: adminProcedure.input(deletePropertySchema).mutation(async ({ ctx, input }) => {
+      const { softDeleteProperty } = await import("./db");
+      const property = await ensurePropertyExists(input.id);
+
+      if (input.confirmationText !== "EXCLUIR IMOVEL") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Confirme a exclusao digitando EXCLUIR IMOVEL.",
+        });
+      }
+
+      if (property.lixeira === 1) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Este imovel ja esta na lixeira.",
+        });
+      }
+
+      return await softDeleteProperty(input.id, {
+        motivoExclusao: input.motivoExclusao.trim(),
+        excluidoPorUserId: ctx.user.id,
+      });
     }),
+    updateLegalDetails: adminProcedure
+      .input(updatePropertyLegalDetailsSchema)
+      .mutation(async ({ input }) => {
+        const { getPropertyById, updatePropertyLegalDetails } = await import("./db");
+        const property = await getPropertyById(input.id, { includeDeleted: true });
+        if (!property) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Imovel nao encontrado" });
+        }
+
+        return await updatePropertyLegalDetails(input.id, {
+          inscricaoImobiliaria: normalizeOptionalText(input.inscricaoImobiliaria) ?? null,
+          matriculaRegistro: normalizeOptionalText(input.matriculaRegistro) ?? null,
+          cartorioRegistro: normalizeOptionalText(input.cartorioRegistro) ?? null,
+          registroMunicipal: normalizeOptionalText(input.registroMunicipal) ?? null,
+          informacoesLegais: normalizeOptionalText(input.informacoesLegais) ?? null,
+          observacoesJuridicas: normalizeOptionalText(input.observacoesJuridicas) ?? null,
+        });
+      }),
     documents: staffProcedure
       .input(propertyDocumentsSchema)
       .query(async ({ ctx, input }) => {
@@ -1003,6 +1089,109 @@ export const appRouter = router({
 
         const normalizedFileName = normalizePropertyDocumentFileName(input.nomeArquivo);
         return await updatePropertyDocumentName(input.id, normalizedFileName);
+      }),
+    keyStatusRequests: staffProcedure
+      .input(propertyKeyStatusRequestsListSchema)
+      .query(async ({ ctx, input }) => {
+        const { getPropertyKeyStatusRequestsByPropertyId } = await import("./db");
+        await ensurePropertyManagementAccess(ctx.user, input.idImovel);
+        return await getPropertyKeyStatusRequestsByPropertyId(input.idImovel);
+      }),
+    requestKeyStatusChange: staffProcedure
+      .input(requestPropertyKeyStatusChangeSchema)
+      .mutation(async ({ ctx, input }) => {
+        const { createPropertyKeyStatusRequest, updatePropertyKeyStatus } = await import("./db");
+        await ensurePropertyManagementAccess(ctx.user, input.idImovel);
+
+        const requestedObservation = input.requestedObservation.trim();
+
+        if (ctx.user.role === "administrativo") {
+          const approvedRequest = await createPropertyKeyStatusRequest({
+            idImovel: input.idImovel,
+            requestedByUserId: ctx.user.id,
+            requestedStatus: input.requestedStatus,
+            requestedObservation,
+            status: "approved",
+            reviewedByUserId: ctx.user.id,
+            reviewNote: "Aprovacao automatica de administrador.",
+            reviewedAt: new Date(),
+          });
+
+          const updatedProperty = await updatePropertyKeyStatus(input.idImovel, {
+            keyStatus: input.requestedStatus,
+            keyStatusObservation: requestedObservation,
+            keyStatusUpdatedByUserId: ctx.user.id,
+            keyStatusUpdatedAt: new Date(),
+          });
+
+          return {
+            mode: "applied" as const,
+            request: approvedRequest,
+            property: updatedProperty,
+          };
+        }
+
+        const pendingRequest = await createPropertyKeyStatusRequest({
+          idImovel: input.idImovel,
+          requestedByUserId: ctx.user.id,
+          requestedStatus: input.requestedStatus,
+          requestedObservation,
+          status: "pending",
+        });
+
+        return {
+          mode: "requested" as const,
+          request: pendingRequest,
+          property: null,
+        };
+      }),
+    reviewKeyStatusRequest: adminProcedure
+      .input(reviewPropertyKeyStatusRequestSchema)
+      .mutation(async ({ ctx, input }) => {
+        const { getPropertyKeyStatusRequestById, updatePropertyKeyStatus, updatePropertyKeyStatusRequest } =
+          await import("./db");
+
+        const request = await getPropertyKeyStatusRequestById(input.requestId);
+        if (!request) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Solicitacao de chave nao encontrada" });
+        }
+
+        if (request.status !== "pending") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Essa solicitacao ja foi analisada anteriormente",
+          });
+        }
+
+        const reviewNote = normalizeOptionalText(input.reviewNote) ?? null;
+        const nextStatus = input.decision === "approved" ? "approved" : "rejected";
+
+        const reviewedRequest = await updatePropertyKeyStatusRequest(request.id, {
+          status: nextStatus,
+          reviewedByUserId: ctx.user.id,
+          reviewedAt: new Date(),
+          reviewNote,
+        });
+
+        if (nextStatus === "rejected") {
+          return {
+            request: reviewedRequest,
+            property: null,
+          };
+        }
+
+        await ensurePropertyExists(request.idImovel);
+        const updatedProperty = await updatePropertyKeyStatus(request.idImovel, {
+          keyStatus: request.requestedStatus,
+          keyStatusObservation: request.requestedObservation,
+          keyStatusUpdatedByUserId: ctx.user.id,
+          keyStatusUpdatedAt: new Date(),
+        });
+
+        return {
+          request: reviewedRequest,
+          property: updatedProperty,
+        };
       }),
   }),
 

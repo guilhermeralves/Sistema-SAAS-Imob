@@ -114,6 +114,25 @@ export const properties = pgTable("properties", {
   fotos: text("fotos"), // JSON array de URLs das fotos
   destaque: integer("destaque").default(0).notNull(), // 0 = nao, 1 = sim
   status: varchar("status", { length: 20 }).default("ativo").notNull(), // ativo, vendido, alugado, inativo
+  keyStatus: varchar("keyStatus", { length: 20 })
+    .$type<"disponivel" | "retirada" | "indisponivel">()
+    .default("disponivel")
+    .notNull(),
+  keyStatusObservation: text("keyStatusObservation")
+    .default("Chaves disponíveis na imobiliária.")
+    .notNull(),
+  keyStatusUpdatedByUserId: integer("keyStatusUpdatedByUserId"),
+  keyStatusUpdatedAt: timestamp("keyStatusUpdatedAt", { mode: "date" }).defaultNow().notNull(),
+  lixeira: integer("lixeira").default(0).notNull(),
+  motivoExclusao: text("motivoExclusao"),
+  excluidoPorUserId: integer("excluidoPorUserId"),
+  excluidoAt: timestamp("excluidoAt", { mode: "date" }),
+  inscricaoImobiliaria: varchar("inscricaoImobiliaria", { length: 120 }),
+  matriculaRegistro: varchar("matriculaRegistro", { length: 120 }),
+  cartorioRegistro: varchar("cartorioRegistro", { length: 160 }),
+  registroMunicipal: varchar("registroMunicipal", { length: 120 }),
+  informacoesLegais: text("informacoesLegais"),
+  observacoesJuridicas: text("observacoesJuridicas"),
   idCorretor: integer("idCorretor").notNull(), // ID do corretor responsavel
   idProprietario: integer("idProprietario"),
   createdByUserId: integer("createdByUserId").notNull(),
@@ -123,6 +142,28 @@ export const properties = pgTable("properties", {
 
 export type Property = typeof properties.$inferSelect;
 export type InsertProperty = typeof properties.$inferInsert;
+
+export const propertyKeyStatusRequests = pgTable("propertyKeyStatusRequests", {
+  id: serial("id").primaryKey(),
+  idImovel: integer("idImovel").notNull(),
+  requestedByUserId: integer("requestedByUserId").notNull(),
+  requestedStatus: varchar("requestedStatus", { length: 20 })
+    .$type<"disponivel" | "retirada" | "indisponivel">()
+    .notNull(),
+  requestedObservation: text("requestedObservation").notNull(),
+  status: varchar("status", { length: 20 })
+    .$type<"pending" | "approved" | "rejected">()
+    .default("pending")
+    .notNull(),
+  reviewedByUserId: integer("reviewedByUserId"),
+  reviewNote: text("reviewNote"),
+  reviewedAt: timestamp("reviewedAt", { mode: "date" }),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export type PropertyKeyStatusRequest = typeof propertyKeyStatusRequests.$inferSelect;
+export type InsertPropertyKeyStatusRequest = typeof propertyKeyStatusRequests.$inferInsert;
 
 /**
  * Tabela de leads do CRM

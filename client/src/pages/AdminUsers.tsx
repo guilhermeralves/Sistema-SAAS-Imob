@@ -269,6 +269,9 @@ export default function AdminUsers() {
         if (!normalizedSearch) return true;
 
         const searchableValues = [
+          String(user.id),
+          `id ${user.id}`,
+          user.role === "corretor" ? `corretor id ${user.id}` : "",
           user.name || "",
           user.email || "",
           formatCpf(user.cpf),
@@ -553,7 +556,7 @@ export default function AdminUsers() {
               <Input
                 value={search}
                 onChange={event => setSearch(event.target.value)}
-                placeholder="Pesquisar por nome, e-mail, papel, status ou ultimo login"
+                placeholder="Pesquisar por ID, nome, e-mail, papel, status ou ultimo login"
                 className="h-11 rounded-2xl border-slate-200 bg-white/90 pl-9 text-sm shadow-sm sm:text-base"
               />
             </div>

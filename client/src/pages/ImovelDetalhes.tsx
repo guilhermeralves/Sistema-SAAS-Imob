@@ -94,6 +94,7 @@ export default function ImovelDetalhes() {
   const id = params?.id ? parseInt(params.id, 10) : 0;
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [documentsOpen, setDocumentsOpen] = useState(false);
+  const [locationChoiceOpen, setLocationChoiceOpen] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [documentPendingDelete, setDocumentPendingDelete] = useState<number | null>(null);
   const [documentPendingRename, setDocumentPendingRename] = useState<{ id: number; nomeArquivo: string } | null>(null);
@@ -206,6 +207,11 @@ export default function ImovelDetalhes() {
   const fotos = imovel.fotos ? JSON.parse(imovel.fotos) : [];
   const temFotos = fotos.length > 0;
   const whatsappMessage = `Ola! Tenho interesse no imovel: ${imovel.titulo}`;
+  const propertyAddressText = `${imovel.endereco}${imovel.numero ? `, ${imovel.numero}` : ""}${imovel.bairro ? `, ${imovel.bairro}` : ""}, ${imovel.cidade}/${imovel.estado}`;
+  const encodedPropertyAddress = encodeURIComponent(propertyAddressText);
+  const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodedPropertyAddress}`;
+  const androidMapsAppUrl = `geo:0,0?q=${encodedPropertyAddress}`;
+  const iosMapsAppUrl = `https://maps.apple.com/?q=${encodedPropertyAddress}`;
 
   const nextImage = () => {
     setCurrentImageIndex(prev => (prev + 1) % fotos.length);
@@ -322,6 +328,44 @@ export default function ImovelDetalhes() {
 
     setLocation(targetPath);
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  };
+
+  const isMobileDevice = () => {
+    if (typeof navigator === "undefined") return false;
+    return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  };
+
+  const isIOSDevice = () => {
+    if (typeof navigator === "undefined") return false;
+    return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  };
+
+  const openLocationInBrowser = () => {
+    window.open(googleMapsUrl, "_blank", "noopener,noreferrer");
+  };
+
+  const handleAddressClick = () => {
+    if (isMobileDevice()) {
+      setLocationChoiceOpen(true);
+      return;
+    }
+
+    openLocationInBrowser();
+  };
+
+  const handleOpenLocationInApp = () => {
+    setLocationChoiceOpen(false);
+    if (isIOSDevice()) {
+      window.location.href = iosMapsAppUrl;
+      return;
+    }
+
+    window.location.href = androidMapsAppUrl;
+  };
+
+  const handleOpenLocationInBrowser = () => {
+    setLocationChoiceOpen(false);
+    openLocationInBrowser();
   };
 
   return (
@@ -479,11 +523,13 @@ export default function ImovelDetalhes() {
                   </h1>
                   <div className="flex items-start gap-2 text-slate-600">
                     <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-700" />
-                    <span>
-                      {imovel.endereco}
-                      {imovel.numero ? `, ${imovel.numero}` : ""}
-                      {imovel.bairro ? `, ${imovel.bairro}` : ""}, {imovel.cidade}/{imovel.estado}
-                    </span>
+                    <button
+                      type="button"
+                      onClick={handleAddressClick}
+                      className="text-left underline decoration-emerald-700/40 underline-offset-4 hover:text-emerald-800"
+                    >
+                      {propertyAddressText}
+                    </button>
                   </div>
                 </div>
 
@@ -619,6 +665,34 @@ export default function ImovelDetalhes() {
           </div>
         </div>
         </div>
+
+        <Dialog open={locationChoiceOpen} onOpenChange={setLocationChoiceOpen}>
+          <DialogContent className="w-full max-w-sm rounded-[24px] border-white/80 bg-[#f7f6f2] p-5 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
+            <DialogHeader>
+              <DialogTitle>Abrir localizacao</DialogTitle>
+              <DialogDescription>
+                Deseja abrir no app de mapas instalado ou no navegador?
+              </DialogDescription>
+            </DialogHeader>
+            <div className="mt-2 flex flex-col gap-2">
+              <Button
+                type="button"
+                className="rounded-full bg-emerald-700 text-white hover:bg-emerald-800"
+                onClick={handleOpenLocationInApp}
+              >
+                Abrir com App
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full"
+                onClick={handleOpenLocationInBrowser}
+              >
+                Abrir no navegador
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <Dialog open={documentsOpen} onOpenChange={setDocumentsOpen}>
           <DialogContent className="w-full max-h-[90vh] overflow-y-auto scrollbar-hidden lg:max-w-2xl">

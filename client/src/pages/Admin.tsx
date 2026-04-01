@@ -4,7 +4,15 @@ import Layout from "@/components/Layout";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -21,10 +29,22 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { formatStoredDate } from "@/lib/date";
 import { trpc } from "@/lib/trpc";
 import { getLoginUrl } from "@/const";
-import { Building2, FileText, Search, Shield, TrendingUp, User } from "lucide-react";
+import {
+  Building2,
+  FileText,
+  KeyRound,
+  MoreHorizontal,
+  Search,
+  Settings2,
+  Shield,
+  Trash2,
+  TrendingUp,
+  User,
+} from "lucide-react";
 import { toast } from "sonner";
 
 const SURFACE_CARD_CLASS =
@@ -32,11 +52,61 @@ const SURFACE_CARD_CLASS =
 const FIELD_CLASS =
   "rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base";
 
+type PropertyKeyStatus = "disponivel" | "retirada" | "indisponivel";
+
+const KEY_STATUS_META: Record<
+  PropertyKeyStatus,
+  { label: string; iconClass: string; badgeClass: string }
+> = {
+  disponivel: {
+    label: "Disponível",
+    iconClass: "text-emerald-600",
+    badgeClass: "bg-emerald-100 text-emerald-700",
+  },
+  retirada: {
+    label: "Retirada",
+    iconClass: "text-amber-600",
+    badgeClass: "bg-amber-100 text-amber-700",
+  },
+  indisponivel: {
+    label: "Indisponível",
+    iconClass: "text-rose-600",
+    badgeClass: "bg-rose-100 text-rose-700",
+  },
+};
+
 function normalizeSearchValue(value: string) {
   return value
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
+}
+
+function isTerrenoType(value: string | null | undefined) {
+  if (!value) return false;
+  return normalizeSearchValue(value).includes("terreno");
+}
+
+function formatDateTimeInSaoPaulo(value: Date | string | null | undefined, fallback = "-") {
+  if (!value) return fallback;
+
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return fallback;
+  }
+
+  const formatter = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  const formatted = formatter.format(parsedDate);
+  return formatted.replace(",", " às");
 }
 
 function buildSearchText(
@@ -69,8 +139,16 @@ function buildSearchText(
 
 export default function Admin() {
   const { user, loading, isAuthenticated } = useAuth();
+  const utils = trpc.useUtils();
   const [activeTab, setActiveTab] = useState("imoveis");
   const [searchTerm, setSearchTerm] = useState("");
+  const [showDeletedProperties, setShowDeletedProperties] = useState(false);
+  const [keyStatusDialogPropertyId, setKeyStatusDialogPropertyId] = useState<number | null>(null);
+  const [keyStatusDraft, setKeyStatusDraft] = useState<PropertyKeyStatus>("disponivel");
+  const [keyStatusObservationDraft, setKeyStatusObservationDraft] = useState("");
+  const [propertyPendingDelete, setPropertyPendingDelete] = useState<{ id: number; titulo: string } | null>(null);
+  const [deleteConfirmationText, setDeleteConfirmationText] = useState("");
+  const [deleteReason, setDeleteReason] = useState("");
 
   const highlightedPropertyId = useMemo(() => {
     if (typeof window === "undefined") return null;
@@ -82,9 +160,12 @@ export default function Admin() {
     enabled: isAuthenticated && user?.role === "administrativo",
   });
 
-  const { data: properties, isLoading: loadingProperties } = trpc.properties.list.useQuery(undefined, {
+  const { data: properties, isLoading: loadingProperties } = trpc.properties.list.useQuery(
+    { showDeletedOnly: showDeletedProperties },
+    {
     enabled: isAuthenticated && user?.role === "administrativo",
-  });
+    }
+  );
 
   const { data: leads, isLoading: loadingLeads } = trpc.leads.list.useQuery(undefined, {
     enabled: isAuthenticated && user?.role === "administrativo",
@@ -93,6 +174,12 @@ export default function Admin() {
   const { data: contracts, isLoading: loadingContracts } = trpc.contracts.list.useQuery(undefined, {
     enabled: isAuthenticated && user?.role === "administrativo",
   });
+  const { data: keyStatusRequests, isLoading: loadingKeyStatusRequests } = trpc.properties.keyStatusRequests.useQuery(
+    { idImovel: keyStatusDialogPropertyId ?? 0 },
+    {
+      enabled: isAuthenticated && user?.role === "administrativo" && keyStatusDialogPropertyId !== null,
+    }
+  );
 
   const assignLead = trpc.leads.assign.useMutation({
     onSuccess: () => {
@@ -100,6 +187,42 @@ export default function Admin() {
     },
     onError: () => {
       toast.error("Erro ao atribuir lead");
+    },
+  });
+  const requestKeyStatusChange = trpc.properties.requestKeyStatusChange.useMutation({
+    onSuccess: async () => {
+      toast.success("Status das chaves atualizado com sucesso!");
+      await utils.properties.list.invalidate();
+      if (keyStatusDialogPropertyId !== null) {
+        await utils.properties.keyStatusRequests.invalidate({ idImovel: keyStatusDialogPropertyId });
+      }
+    },
+    onError: error => {
+      toast.error(error.message || "Nao foi possivel atualizar o status das chaves");
+    },
+  });
+  const reviewKeyStatusRequest = trpc.properties.reviewKeyStatusRequest.useMutation({
+    onSuccess: async () => {
+      toast.success("Solicitacao analisada com sucesso!");
+      await utils.properties.list.invalidate();
+      if (keyStatusDialogPropertyId !== null) {
+        await utils.properties.keyStatusRequests.invalidate({ idImovel: keyStatusDialogPropertyId });
+      }
+    },
+    onError: error => {
+      toast.error(error.message || "Nao foi possivel analisar a solicitacao");
+    },
+  });
+  const deleteProperty = trpc.properties.delete.useMutation({
+    onSuccess: async () => {
+      toast.success("Imovel enviado para a lixeira com sucesso.");
+      setPropertyPendingDelete(null);
+      setDeleteConfirmationText("");
+      setDeleteReason("");
+      await utils.properties.list.invalidate();
+    },
+    onError: error => {
+      toast.error(error.message || "Nao foi possivel excluir o imovel.");
     },
   });
 
@@ -141,6 +264,21 @@ export default function Admin() {
     );
   }, [contracts, normalizedSearchTerm]);
 
+  const selectedProperty = useMemo(() => {
+    if (!properties || keyStatusDialogPropertyId === null) return null;
+    return properties.find(property => property.id === keyStatusDialogPropertyId) ?? null;
+  }, [keyStatusDialogPropertyId, properties]);
+
+  const usersById = useMemo(
+    () => new Map((users ?? []).map(current => [current.id, current])),
+    [users]
+  );
+
+  const pendingKeyStatusRequests = useMemo(
+    () => (keyStatusRequests ?? []).filter(request => request.status === "pending"),
+    [keyStatusRequests]
+  );
+
   const totalImoveis = properties?.length || 0;
   const imoveisAtivos = properties?.filter(property => property.status === "ativo").length || 0;
   const totalLeads = leads?.length || 0;
@@ -157,6 +295,70 @@ export default function Admin() {
     }
   }, [activeTab, highlightedPropertyId, properties]);
 
+  useEffect(() => {
+    if (!selectedProperty) return;
+    setKeyStatusDraft((selectedProperty.keyStatus as PropertyKeyStatus) ?? "disponivel");
+    setKeyStatusObservationDraft(selectedProperty.keyStatusObservation ?? "");
+  }, [selectedProperty]);
+
+  const openKeyStatusDialog = (property: {
+    id: number;
+    keyStatus: string;
+    keyStatusObservation: string | null;
+  }) => {
+    setKeyStatusDialogPropertyId(property.id);
+    setKeyStatusDraft((property.keyStatus as PropertyKeyStatus) ?? "disponivel");
+    setKeyStatusObservationDraft(property.keyStatusObservation ?? "");
+  };
+
+  const closeKeyStatusDialog = () => {
+    setKeyStatusDialogPropertyId(null);
+    setKeyStatusDraft("disponivel");
+    setKeyStatusObservationDraft("");
+  };
+
+  const submitKeyStatusChange = () => {
+    if (keyStatusDialogPropertyId === null) return;
+
+    const requestedObservation = keyStatusObservationDraft.trim();
+    if (!requestedObservation) {
+      toast.error("Informe uma observacao para atualizar o status das chaves.");
+      return;
+    }
+
+    requestKeyStatusChange.mutate({
+      idImovel: keyStatusDialogPropertyId,
+      requestedStatus: keyStatusDraft,
+      requestedObservation,
+    });
+  };
+
+  const openDeletePropertyDialog = (property: { id: number; titulo: string }) => {
+    setPropertyPendingDelete({ id: property.id, titulo: property.titulo });
+    setDeleteConfirmationText("");
+    setDeleteReason("");
+  };
+
+  const submitSoftDeleteProperty = () => {
+    if (!propertyPendingDelete) return;
+
+    if (deleteConfirmationText.trim() !== "EXCLUIR IMOVEL") {
+      toast.error("Digite exatamente EXCLUIR IMOVEL para confirmar.");
+      return;
+    }
+
+    if (!deleteReason.trim()) {
+      toast.error("Informe o motivo da exclusao.");
+      return;
+    }
+
+    deleteProperty.mutate({
+      id: propertyPendingDelete.id,
+      confirmationText: deleteConfirmationText.trim(),
+      motivoExclusao: deleteReason.trim(),
+    });
+  };
+
   const renderSearchInput = (placeholder: string) => (
     <div className="relative mt-2 max-w-xl">
       <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -168,6 +370,12 @@ export default function Admin() {
       />
     </div>
   );
+
+  const getUserLabelById = (userId: number | null | undefined) => {
+    if (!userId) return "Usuario";
+    const foundUser = usersById.get(userId);
+    return foundUser?.name || foundUser?.email || `ID ${userId}`;
+  };
 
   if (loading) {
     return (
@@ -277,8 +485,33 @@ export default function Admin() {
           <TabsContent value="imoveis">
             <Card className={SURFACE_CARD_CLASS}>
               <CardHeader>
-                <CardTitle className="text-slate-950">Todos os Imóveis</CardTitle>
-                <CardDescription className="text-slate-600">Visualize todos os imóveis cadastrados no sistema</CardDescription>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-slate-950">
+                      {showDeletedProperties ? "Imóveis Apagados" : "Todos os Imóveis"}
+                    </CardTitle>
+                    <CardDescription className="text-slate-600">
+                      {showDeletedProperties
+                        ? "Visualize os imóveis que estão na lixeira"
+                        : "Visualize todos os imóveis cadastrados no sistema"}
+                    </CardDescription>
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" aria-label="Abrir ações da lista de imóveis">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuCheckboxItem
+                        checked={showDeletedProperties}
+                        onCheckedChange={checked => setShowDeletedProperties(checked === true)}
+                      >
+                        Imóveis apagados
+                      </DropdownMenuCheckboxItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
                 {renderSearchInput("Pesquisar imóveis")}
               </CardHeader>
               <CardContent>
@@ -299,6 +532,7 @@ export default function Admin() {
                           <TableHead>Status</TableHead>
                           <TableHead>Corretor</TableHead>
                           <TableHead>Cadastro</TableHead>
+                          <TableHead className="w-28 text-right">Ações</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -308,7 +542,39 @@ export default function Admin() {
                             data-property-row={property.id}
                             className={property.id === highlightedPropertyId ? "bg-primary/5 ring-1 ring-primary/20" : ""}
                           >
-                            <TableCell className="font-medium">{property.titulo}</TableCell>
+                            <TableCell className="font-medium">
+                              {(() => {
+                                const currentKeyStatus =
+                                  (property.keyStatus as PropertyKeyStatus) ?? "disponivel";
+                                const hideKeyControl = isTerrenoType(property.tipo);
+                                const canOpenDetails = property.lixeira !== 1;
+
+                                return (
+                              <div className="flex items-center gap-2">
+                                {canOpenDetails ? (
+                                  <Link href={`/imoveis/${property.id}`}>
+                                    <a className="text-slate-900 hover:text-emerald-700 hover:underline">
+                                      {property.titulo}
+                                    </a>
+                                  </Link>
+                                ) : (
+                                  <span className="text-slate-700">{property.titulo}</span>
+                                )}
+                                    {!hideKeyControl ? (
+                                      <button
+                                        type="button"
+                                        className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white/80 hover:bg-slate-100"
+                                        onClick={() => openKeyStatusDialog(property)}
+                                        title={`Status da chave: ${KEY_STATUS_META[currentKeyStatus].label}`}
+                                        aria-label={`Abrir status da chave do imóvel ${property.titulo}`}
+                                      >
+                                        <KeyRound className={`h-4 w-4 ${KEY_STATUS_META[currentKeyStatus].iconClass}`} />
+                                      </button>
+                                    ) : null}
+                              </div>
+                                );
+                              })()}
+                            </TableCell>
                             <TableCell className="capitalize">{property.tipo}</TableCell>
                             <TableCell>{property.cidade}/{property.estado}</TableCell>
                             <TableCell>
@@ -324,6 +590,26 @@ export default function Admin() {
                             </TableCell>
                             <TableCell>ID {property.idCorretor}</TableCell>
                             <TableCell>{formatStoredDate(property.createdAt)}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center justify-end gap-2">
+                                <Button variant="outline" size="icon" asChild className="h-8 w-8">
+                                  <Link href={`/admin/imoveis/${property.id}`}>
+                                    <a aria-label={`Abrir ficha do imóvel ${property.titulo}`}>
+                                      <Settings2 className="h-4 w-4" />
+                                    </a>
+                                  </Link>
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-8 w-8 text-red-600 hover:text-red-700"
+                                  aria-label={`Excluir imóvel ${property.titulo}`}
+                                  onClick={() => openDeletePropertyDialog(property)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -333,7 +619,11 @@ export default function Admin() {
                   <div className="py-12 text-center">
                     <Building2 className="mx-auto mb-4 h-12 w-12 text-slate-400" />
                     <p className="text-slate-600">
-                      {searchTerm ? "Nenhum imóvel encontrado para essa pesquisa" : "Nenhum imóvel cadastrado"}
+                      {searchTerm
+                        ? "Nenhum imóvel encontrado para essa pesquisa"
+                        : showDeletedProperties
+                          ? "Nenhum imóvel apagado"
+                          : "Nenhum imóvel cadastrado"}
                     </p>
                   </div>
                 )}
@@ -485,6 +775,203 @@ export default function Admin() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        <Dialog open={keyStatusDialogPropertyId !== null} onOpenChange={open => !open && closeKeyStatusDialog()}>
+          <DialogContent className="max-h-[92vh] w-full max-w-[calc(100%-2rem)] overflow-y-auto scrollbar-hidden rounded-[32px] border-white/80 bg-[#f7f6f2] p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)] sm:max-w-lg lg:max-w-[640px] sm:p-6">
+            <DialogHeader className="space-y-3 pb-1">
+              <DialogTitle className="text-2xl font-semibold tracking-tight text-slate-950">
+                Controle de Chaves
+              </DialogTitle>
+              <DialogDescription className="text-slate-600">
+                {selectedProperty
+                  ? `Imovel: ${selectedProperty.titulo}`
+                  : "Selecione um imovel para gerenciar o status das chaves."}
+              </DialogDescription>
+            </DialogHeader>
+
+            {selectedProperty ? (
+              <div className="space-y-5">
+                <div className="rounded-2xl border border-white/80 bg-white/90 p-4 shadow-sm">
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Status atual</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <span
+                      className={`rounded-full px-2 py-1 text-xs font-semibold ${KEY_STATUS_META[(selectedProperty.keyStatus as PropertyKeyStatus) ?? "disponivel"].badgeClass}`}
+                    >
+                      {KEY_STATUS_META[(selectedProperty.keyStatus as PropertyKeyStatus) ?? "disponivel"].label}
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      Atualizado em {formatDateTimeInSaoPaulo(selectedProperty.keyStatusUpdatedAt)}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-sm text-slate-700">{selectedProperty.keyStatusObservation || "Sem observacao."}</p>
+                </div>
+
+                <div className="space-y-3 rounded-2xl border border-white/80 bg-white/90 p-4 shadow-sm">
+                  <p className="text-sm font-semibold text-slate-900">Atualizar status da chave</p>
+                  <div className="space-y-2">
+                    <Label htmlFor="key-status-select">Novo status</Label>
+                    <Select value={keyStatusDraft} onValueChange={value => setKeyStatusDraft(value as PropertyKeyStatus)}>
+                      <SelectTrigger id="key-status-select" className={`${FIELD_CLASS} w-full max-w-[260px]`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="disponivel">Disponível (verde)</SelectItem>
+                        <SelectItem value="retirada">Retirada (amarelo)</SelectItem>
+                        <SelectItem value="indisponivel">Indisponível (vermelho)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="key-status-observation">Observacao obrigatoria</Label>
+                    <Textarea
+                      id="key-status-observation"
+                      value={keyStatusObservationDraft}
+                      onChange={event => setKeyStatusObservationDraft(event.target.value)}
+                      rows={4}
+                      className="min-h-[100px] rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
+                      placeholder="Descreva o motivo da alteracao de status das chaves."
+                    />
+                  </div>
+                  <Button
+                    onClick={submitKeyStatusChange}
+                    disabled={requestKeyStatusChange.isPending}
+                    className="w-full rounded-full bg-emerald-700 text-white shadow-[0_18px_40px_-28px_rgba(4,120,87,0.75)] hover:bg-emerald-800"
+                  >
+                    {requestKeyStatusChange.isPending ? "Salvando..." : "Salvar status"}
+                  </Button>
+                </div>
+
+                <div className="space-y-3 rounded-2xl border border-white/80 bg-white/90 p-4 shadow-sm">
+                  <p className="text-sm font-semibold text-slate-900">Solicitacoes pendentes</p>
+                  {loadingKeyStatusRequests ? (
+                    <p className="text-sm text-slate-500">Carregando solicitacoes...</p>
+                  ) : pendingKeyStatusRequests.length > 0 ? (
+                    <div className="space-y-3">
+                      {pendingKeyStatusRequests.map(request => (
+                        <div key={request.id} className="rounded-2xl border border-slate-200 bg-white p-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span
+                              className={`rounded-full px-2 py-1 text-xs font-semibold ${KEY_STATUS_META[(request.requestedStatus as PropertyKeyStatus) ?? "disponivel"].badgeClass}`}
+                            >
+                              {KEY_STATUS_META[(request.requestedStatus as PropertyKeyStatus) ?? "disponivel"].label}
+                            </span>
+                            <span className="text-xs text-slate-500">{formatStoredDate(request.createdAt)}</span>
+                          </div>
+                          <p className="mt-2 text-xs text-slate-500">
+                            Solicitado por {getUserLabelById(request.requestedByUserId)}
+                          </p>
+                          <p className="mt-2 text-sm text-slate-700">{request.requestedObservation}</p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              className="rounded-full bg-emerald-700 text-white hover:bg-emerald-800"
+                              disabled={reviewKeyStatusRequest.isPending}
+                              onClick={() =>
+                                reviewKeyStatusRequest.mutate({
+                                  requestId: request.id,
+                                  decision: "approved",
+                                })
+                              }
+                            >
+                              Aprovar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="rounded-full border-rose-300 text-rose-700 hover:bg-rose-50"
+                              disabled={reviewKeyStatusRequest.isPending}
+                              onClick={() =>
+                                reviewKeyStatusRequest.mutate({
+                                  requestId: request.id,
+                                  decision: "rejected",
+                                })
+                              }
+                            >
+                              Reprovar
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500">Nao ha solicitacoes pendentes para este imovel.</p>
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={propertyPendingDelete !== null}
+          onOpenChange={open => {
+            if (!open) {
+              setPropertyPendingDelete(null);
+              setDeleteConfirmationText("");
+              setDeleteReason("");
+            }
+          }}
+        >
+          <DialogContent className="max-h-[92vh] w-full max-w-[calc(100%-2rem)] overflow-y-auto scrollbar-hidden rounded-[32px] border-white/80 bg-[#f7f6f2] p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)] sm:max-w-lg sm:p-6">
+            <DialogHeader className="space-y-3 pb-1">
+              <DialogTitle className="text-2xl font-semibold tracking-tight text-slate-950">
+                Confirmar exclusão do imóvel
+              </DialogTitle>
+              <DialogDescription className="text-slate-600">
+                {propertyPendingDelete
+                  ? `Você está enviando "${propertyPendingDelete.titulo}" para a lixeira.`
+                  : "Confirme a exclusão lógica do imóvel."}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="delete-property-confirmation">
+                  Digite EXCLUIR IMOVEL para confirmar
+                </Label>
+                <Input
+                  id="delete-property-confirmation"
+                  value={deleteConfirmationText}
+                  onChange={event => setDeleteConfirmationText(event.target.value)}
+                  className={`${FIELD_CLASS} w-full`}
+                  placeholder="EXCLUIR IMOVEL"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="delete-property-reason">Motivo da exclusão (obrigatório)</Label>
+                <Textarea
+                  id="delete-property-reason"
+                  value={deleteReason}
+                  onChange={event => setDeleteReason(event.target.value)}
+                  rows={4}
+                  className="min-h-[100px] rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
+                  placeholder="Descreva o motivo da exclusão do imóvel."
+                />
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setPropertyPendingDelete(null);
+                    setDeleteConfirmationText("");
+                    setDeleteReason("");
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  variant="destructive"
+                  disabled={deleteProperty.isPending}
+                  onClick={submitSoftDeleteProperty}
+                >
+                  {deleteProperty.isPending ? "Excluindo..." : "Excluir imóvel"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
       </div>
     </Layout>

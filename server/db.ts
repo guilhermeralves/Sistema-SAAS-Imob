@@ -9,6 +9,7 @@ import {
   InsertLeadFile,
   InsertLeadNote,
   InsertPropertyDocument,
+  InsertPropertyKeyStatusRequest,
   InsertPropertyOwner,
   InsertProperty,
   InsertTaskItem,
@@ -29,6 +30,7 @@ import {
   taskItemTemplates,
   taskItems,
   propertyDocuments,
+  propertyKeyStatusRequests,
   propertyOwners,
   properties,
   users,
@@ -420,47 +422,89 @@ async function enrichPropertiesWithRelations(propertyRows: Array<any>) {
   }));
 }
 
-export async function getAllProperties() {
+export async function getAllProperties(options?: {
+  deletedOnly?: boolean;
+  includeDeleted?: boolean;
+}) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(properties).orderBy(desc(properties.createdAt));
-}
 
-export async function getPropertyById(id: number) {
-  const db = await getDb();
-  if (!db) return undefined;
-  const result = await db
+  if (options?.deletedOnly) {
+    return await db
+      .select()
+      .from(properties)
+      .where(eq(properties.lixeira, 1))
+      .orderBy(desc(properties.createdAt));
+  }
+
+  if (options?.includeDeleted) {
+    return await db.select().from(properties).orderBy(desc(properties.createdAt));
+  }
+
+  return await db
     .select()
     .from(properties)
-    .where(eq(properties.id, id))
-    .limit(1);
+    .where(eq(properties.lixeira, 0))
+    .orderBy(desc(properties.createdAt));
+}
+
+export async function getPropertyById(id: number, options?: { includeDeleted?: boolean }) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const whereClause = options?.includeDeleted
+    ? eq(properties.id, id)
+    : and(eq(properties.id, id), eq(properties.lixeira, 0));
+
+  const result = await db.select().from(properties).where(whereClause).limit(1);
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function getPropertyByIdWithRelations(id: number) {
-  const property = await getPropertyById(id);
+export async function getPropertyByIdWithRelations(id: number, options?: { includeDeleted?: boolean }) {
+  const property = await getPropertyById(id, options);
   if (!property) return undefined;
 
   const [enrichedProperty] = await enrichPropertiesWithRelations([property]);
   return enrichedProperty;
 }
 
-export async function getPropertiesByCorretor(idCorretor: number) {
+export async function getPropertiesByCorretor(idCorretor: number, options?: { deletedOnly?: boolean }) {
   const db = await getDb();
   if (!db) return [];
+
+  const whereClause = options?.deletedOnly
+    ? and(eq(properties.idCorretor, idCorretor), eq(properties.lixeira, 1))
+    : and(eq(properties.idCorretor, idCorretor), eq(properties.lixeira, 0));
+
   const result = await db
     .select()
     .from(properties)
-    .where(eq(properties.idCorretor, idCorretor))
+    .where(whereClause)
     .orderBy(desc(properties.createdAt));
   return await enrichPropertiesWithRelations(result);
 }
 
-export async function getAllPropertiesWithRelations() {
+export async function getAllPropertiesWithRelations(options?: {
+  deletedOnly?: boolean;
+  includeDeleted?: boolean;
+}) {
   const db = await getDb();
   if (!db) return [];
 
-  const result = await db.select().from(properties).orderBy(desc(properties.createdAt));
+  const result = options?.deletedOnly
+    ? await db
+        .select()
+        .from(properties)
+        .where(eq(properties.lixeira, 1))
+        .orderBy(desc(properties.createdAt))
+    : options?.includeDeleted
+      ? await db.select().from(properties).orderBy(desc(properties.createdAt))
+      : await db
+          .select()
+          .from(properties)
+          .where(eq(properties.lixeira, 0))
+          .orderBy(desc(properties.createdAt));
+
   return await enrichPropertiesWithRelations(result);
 }
 
@@ -470,7 +514,7 @@ export async function getDestacados() {
   return await db
     .select()
     .from(properties)
-    .where(eq(properties.destaque, 1))
+    .where(and(eq(properties.destaque, 1), eq(properties.lixeira, 0)))
     .orderBy(desc(properties.createdAt))
     .limit(6);
 }
@@ -488,10 +532,139 @@ export async function updateProperty(id: number, data: Partial<InsertProperty>) 
   await db.update(properties).set(data).where(eq(properties.id, id));
 }
 
+export async function updatePropertyKeyStatus(
+  idImovel: number,
+  data: {
+    keyStatus: "disponivel" | "retirada" | "indisponivel";
+    keyStatusObservation: string;
+    keyStatusUpdatedByUserId: number | null;
+    keyStatusUpdatedAt?: Date;
+  }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [updated] = await db
+    .update(properties)
+    .set({
+      keyStatus: data.keyStatus,
+      keyStatusObservation: data.keyStatusObservation,
+      keyStatusUpdatedByUserId: data.keyStatusUpdatedByUserId,
+      keyStatusUpdatedAt: data.keyStatusUpdatedAt ?? new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(properties.id, idImovel))
+    .returning();
+
+  return updated;
+}
+
+export async function getPropertyKeyStatusRequestsByPropertyId(idImovel: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(propertyKeyStatusRequests)
+    .where(eq(propertyKeyStatusRequests.idImovel, idImovel))
+    .orderBy(desc(propertyKeyStatusRequests.createdAt));
+}
+
+export async function getPropertyKeyStatusRequestById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const rows = await db
+    .select()
+    .from(propertyKeyStatusRequests)
+    .where(eq(propertyKeyStatusRequests.id, id))
+    .limit(1);
+
+  return rows[0];
+}
+
+export async function createPropertyKeyStatusRequest(data: InsertPropertyKeyStatusRequest) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [created] = await db.insert(propertyKeyStatusRequests).values(data).returning();
+  return created;
+}
+
+export async function updatePropertyKeyStatusRequest(
+  id: number,
+  data: Partial<InsertPropertyKeyStatusRequest>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [updated] = await db
+    .update(propertyKeyStatusRequests)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(propertyKeyStatusRequests.id, id))
+    .returning();
+
+  return updated;
+}
+
 export async function deleteProperty(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.delete(properties).where(eq(properties.id, id));
+}
+
+export async function softDeleteProperty(
+  id: number,
+  data: {
+    motivoExclusao: string;
+    excluidoPorUserId: number;
+  }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [updated] = await db
+    .update(properties)
+    .set({
+      lixeira: 1,
+      motivoExclusao: data.motivoExclusao,
+      excluidoPorUserId: data.excluidoPorUserId,
+      excluidoAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(properties.id, id))
+    .returning();
+
+  return updated;
+}
+
+export async function updatePropertyLegalDetails(
+  id: number,
+  data: Partial<
+    Pick<
+      InsertProperty,
+      | "inscricaoImobiliaria"
+      | "matriculaRegistro"
+      | "cartorioRegistro"
+      | "registroMunicipal"
+      | "informacoesLegais"
+      | "observacoesJuridicas"
+    >
+  >
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [updated] = await db
+    .update(properties)
+    .set({
+      ...data,
+      updatedAt: new Date(),
+    })
+    .where(eq(properties.id, id))
+    .returning();
+
+  return updated;
 }
 
 export async function getAllLeads() {

@@ -145,7 +145,7 @@ export default function MeusImoveis() {
 
   const deleteProperty = trpc.properties.delete.useMutation({
     onSuccess: async () => {
-      toast.success("Im?vel removido com sucesso!");
+      toast.success("Imóvel enviado para a lixeira com sucesso!");
       await refetch();
       await utils.properties.myProperties.invalidate();
     },
@@ -308,9 +308,27 @@ export default function MeusImoveis() {
   };
 
   const handleDelete = (id: number) => {
-    if (confirm("Tem certeza que deseja remover este imóvel?")) {
-      deleteProperty.mutate({ id });
+    if (user?.role !== "administrativo") {
+      toast.error("Somente administradores podem excluir imóveis.");
+      return;
     }
+
+    const confirmationText = window.prompt('Digite EXCLUIR IMOVEL para confirmar a exclusão');
+    if (confirmationText === null) return;
+
+    const motivoExclusao = window.prompt("Informe o motivo da exclusão do imóvel");
+    if (motivoExclusao === null) return;
+
+    if (!motivoExclusao.trim()) {
+      toast.error("Informe o motivo da exclusão.");
+      return;
+    }
+
+    deleteProperty.mutate({
+      id,
+      confirmationText: confirmationText.trim(),
+      motivoExclusao: motivoExclusao.trim(),
+    });
   };
 
   const totalImoveis = imoveis?.length ?? 0;

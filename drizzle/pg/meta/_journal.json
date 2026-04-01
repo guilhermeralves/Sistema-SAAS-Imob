@@ -1,69 +1,90 @@
 {
-    "version":  "7",
-    "dialect":  "postgresql",
-    "entries":  [
-                    {
-                        "idx":  0,
-                        "version":  "7",
-                        "when":  1773352166071,
-                        "tag":  "0000_round_gauntlet",
-                        "breakpoints":  true
-                    },
-                    {
-                        "idx":  1,
-                        "version":  "7",
-                        "when":  1773361758837,
-                        "tag":  "0001_freezing_shadow_king",
-                        "breakpoints":  true
-                    },
-                    {
-                        "idx":  2,
-                        "version":  "7",
-                        "when":  1773429898694,
-                        "tag":  "0002_lead_user_links",
-                        "breakpoints":  true
-                    },
-                    {
-                        "idx":  3,
-                        "version":  "7",
-                        "when":  1773433739248,
-                        "tag":  "0003_add_user_creci",
-                        "breakpoints":  true
-                    },
-                    {
-                        "idx":  4,
-                        "version":  "7",
-                        "when":  1773435621176,
-                        "tag":  "0004_creci_status_flow",
-                        "breakpoints":  true
-                    },
-                    {
-                        "idx":  5,
-                        "version":  "7",
-                        "when":  1773523200000,
-                        "tag":  "0005_property_documents",
-                        "breakpoints":  true
-                    },
-                    {
-                        "idx":  6,
-                        "version":  "7",
-                        "when":  1773526800000,
-                        "tag":  "0006_chilly_eddie_brock",
-                        "breakpoints":  true
-                    },
-                    {
-                        "idx":  7,
-                        "version":  "7",
-                        "when":  1773604800000,
-                        "tag":  "0007_tasks_events",
-                        "breakpoints":  true
-                    },
-                    {
-                        "idx":  8,
-                        "version":  "7",
-                        "when":  1773950400000,
-                        "tag":  "0008_task_templates_and_sector",
-                        "breakpoints":  true
-                    }
-                ]
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1773352166071,
+      "tag": "0000_round_gauntlet",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1773361758837,
+      "tag": "0001_freezing_shadow_king",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1773429898694,
+      "tag": "0002_lead_user_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1773433739248,
+      "tag": "0003_add_user_creci",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1773435621176,
+      "tag": "0004_creci_status_flow",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1773523200000,
+      "tag": "0005_property_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1773526800000,
+      "tag": "0006_chilly_eddie_brock",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1773604800000,
+      "tag": "0007_tasks_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1773950400000,
+      "tag": "0008_task_templates_and_sector",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1775006400000,
+      "tag": "0009_property_key_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1775051733324,
+      "tag": "0010_supreme_miek",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1775056487995,
+      "tag": "0011_tearful_karnak",
+      "breakpoints": true
+    }
+  ]
 }

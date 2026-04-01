@@ -22,6 +22,7 @@ import MeusImoveis from "./pages/MeusImoveis";
 import Admin from "./pages/Admin";
 import AdminUsers from "./pages/AdminUsers";
 import AdminUserDetails from "./pages/AdminUserDetails";
+import AdminPropertyDetails from "./pages/AdminPropertyDetails";
 import Financeiro from "./pages/Financeiro";
 import Dashboard from "./pages/Dashboard";
 import TarefasEventos from "./pages/TarefasEventos";
@@ -87,6 +88,9 @@ function Router() {
       </Route>
       <Route path={"/admin/proprietarios/:id"}>
         <ProtectedRoute component={AdminUserDetails} roles={["administrativo"]} />
+      </Route>
+      <Route path={"/admin/imoveis/:id"}>
+        <ProtectedRoute component={AdminPropertyDetails} roles={["administrativo"]} />
       </Route>
       <Route path={"/admin"}>
         <ProtectedRoute component={Admin} roles={["administrativo"]} />
