@@ -140,6 +140,20 @@ const deletePropertyDocumentSchema = z.object({
   id: z.number().int().positive(),
 });
 
+const renamePropertyDocumentSchema = z.object({
+  id: z.number().int().positive(),
+  nomeArquivo: z.string().trim().min(1).max(255),
+});
+
+const propertyPhotoUploadSchema = z.object({
+  fileName: z.string().trim().max(255).optional(),
+  dataUrl: z.string().trim().min(1).max(30_000_000),
+});
+
+const propertyUploadedPhotoDeleteSchema = z.object({
+  url: z.string().trim().min(1).max(500),
+});
+
 const propertyOwnerInputSchema = z.object({
   name: z.string().trim().min(2).max(120),
   email: z.string().trim().toLowerCase().email(),
@@ -434,6 +448,34 @@ function parseOptionalTaskDueAt(value: string | null | undefined) {
   }
 
   return parsedDate;
+}
+
+function normalizePropertyDocumentFileName(fileName: string) {
+  const sanitized = fileName
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .replace(/[\\/:*?"<>|]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!sanitized) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Informe um nome de arquivo valido.",
+    });
+  }
+
+  const withExtension = sanitized.toLowerCase().endsWith(".pdf")
+    ? sanitized
+    : `${sanitized}.pdf`;
+
+  if (withExtension.length > 255) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Nome de arquivo muito longo (maximo de 255 caracteres).",
+    });
+  }
+
+  return withExtension;
 }
 
 function getComputedTaskStatus(task: {
@@ -740,10 +782,24 @@ export const appRouter = router({
     }),
     getById: publicProcedure.input(idSchema).query(async ({ ctx, input }) => {
       const { getPropertyById, getPropertyByIdWithRelations } = await import("./db");
-      if (ctx.user?.role === "administrativo") {
-        return await getPropertyByIdWithRelations(input.id);
+      if (!ctx.user || ctx.user.role === "cliente") {
+        return await getPropertyById(input.id);
       }
-      return await getPropertyById(input.id);
+
+      const propertyWithRelations = await getPropertyByIdWithRelations(input.id);
+      if (!propertyWithRelations) {
+        return propertyWithRelations;
+      }
+
+      if (ctx.user.role === "administrativo") {
+        return propertyWithRelations;
+      }
+
+      return {
+        ...propertyWithRelations,
+        proprietario: propertyWithRelations.proprietario ?? null,
+        cadastradoPor: null,
+      };
     }),
     getDestacados: publicProcedure.query(async () => {
       const { getDestacados } = await import("./db");
@@ -803,6 +859,33 @@ export const appRouter = router({
         createdByUserId: ctx.user.id,
       });
     }),
+    uploadPhoto: staffProcedure
+      .input(propertyPhotoUploadSchema)
+      .mutation(async ({ input }) => {
+        const { optimizeAndStorePropertyImage } = await import("./_core/property-images");
+
+        try {
+          return await optimizeAndStorePropertyImage({
+            fileName: input.fileName,
+            dataUrl: input.dataUrl,
+          });
+        } catch (error) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              error instanceof Error
+                ? error.message
+                : "Nao foi possivel processar a imagem enviada.",
+          });
+        }
+      }),
+    deleteUploadedPhoto: staffProcedure
+      .input(propertyUploadedPhotoDeleteSchema)
+      .mutation(async ({ input }) => {
+        const { removeStoredPropertyImageByUrl } = await import("./_core/property-images");
+        await removeStoredPropertyImageByUrl(input.url);
+        return { success: true } as const;
+      }),
     update: staffProcedure.input(updatePropertySchema).mutation(async ({ ctx, input }) => {
       const { updateProperty } = await import("./db");
       const { id, owner: ownerInput, confirmedOwnerEmailConflict, ...data } = input;
@@ -905,6 +988,21 @@ export const appRouter = router({
         await deletePropertyDocument(input.id);
 
         return { success: true } as const;
+      }),
+    renameDocument: staffProcedure
+      .input(renamePropertyDocumentSchema)
+      .mutation(async ({ ctx, input }) => {
+        const { getPropertyDocumentById, updatePropertyDocumentName } = await import("./db");
+        const document = await getPropertyDocumentById(input.id);
+
+        if (!document) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Documento nao encontrado" });
+        }
+
+        await ensurePropertyManagementAccess(ctx.user, document.idImovel);
+
+        const normalizedFileName = normalizePropertyDocumentFileName(input.nomeArquivo);
+        return await updatePropertyDocumentName(input.id, normalizedFileName);
       }),
   }),
 

@@ -1,6 +1,7 @@
 ﻿import { useEffect, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import Layout from "@/components/Layout";
+import ProtectedPropertyImage from "@/components/ProtectedPropertyImage";
 import MoneyInput from "@/components/MoneyInput";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,8 +20,9 @@ import {
 } from "@/components/ui/select";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
+import { saveNewPropertyDraft, saveNewPropertyDraftPhotos } from "@/lib/property-draft";
 import { Building2, MapPin, Bed, Bath, Car, Search, SlidersHorizontal, Plus } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 
 /**
@@ -53,8 +55,6 @@ const NUMBER_FILTER_OPTIONS = [
   { value: "5", label: "5" },
 ];
 // ========== FIM DA AREA DE EDICAO ==========
-
-const OWNER_EMAIL_CONFLICT_PREFIX = "OWNER_EMAIL_CONFLICT::";
 
 function formatZipCode(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 8);
@@ -99,7 +99,8 @@ function buildPropertySearchText(property: Record<string, unknown>) {
 
 export default function Imoveis() {
   const { user, isAuthenticated } = useAuth();
-  const { data: imoveis, isLoading, refetch} = trpc.properties.list.useQuery();
+  const [, setLocation] = useLocation();
+  const { data: imoveis, isLoading } = trpc.properties.list.useQuery();
   const canManageProperties =
     isAuthenticated && (user?.role === "corretor" || user?.role === "administrativo");
   // Estado para controlar o dialog (Aberto ou fechado)
@@ -146,50 +147,7 @@ export default function Imoveis() {
 
   const activeBrokers = adminUsers?.filter(candidate => candidate.role === "corretor" && candidate.isActive === 1) || [];
 
-  // Mutation para criar imovel
-  const createProperty = trpc.properties.create.useMutation({
-    onSuccess: () => {
-      toast.success("Imóvel cadastrado com sucesso!");
-      refetch();  // Atualiza a lista
-      setNewPropertyOpen(false);  // Fecha o dialog
-      // Limpa o formulário
-      setNewPropertyData({
-        titulo: "",
-        descricao: "",
-        tipo: "apartamento",
-        finalidade: "venda",
-        idCorretor: "",
-        valor: "",
-        area: "",
-        quartos: "",
-        banheiros: "",
-        vagas: "",
-        endereco: "",
-        numero: "",
-        bairro: "",
-        cidade: "",
-        estado: "",
-        cep: "",
-        ownerName: "",
-        ownerEmail: "",
-        ownerCpf: "",
-        ownerPhone: "",
-      });
-    },
-    onError: error => {
-      if (error.message.startsWith(OWNER_EMAIL_CONFLICT_PREFIX)) {
-        const warningMessage = error.message.replace(OWNER_EMAIL_CONFLICT_PREFIX, "");
-        if (window.confirm(warningMessage)) {
-          submitCreateProperty(true);
-        }
-        return;
-      }
-
-      toast.error(error.message || "Erro ao cadastrar imóvel");
-    },
-  });
-
-  const submitCreateProperty = (confirmedOwnerEmailConflict = false) => {
+  const handleProceedToPhotoStep = () => {
     // Valida campos obrigatorios
     if (!newPropertyData.titulo || !newPropertyData.valor || !newPropertyData.endereco) {
       toast.error("Preencha t�tulo, valor e endere�o");
@@ -216,28 +174,13 @@ export default function Imoveis() {
       return;
     }
 
-    // Envia para o backend
-    createProperty.mutate({
+    saveNewPropertyDraft({
       ...newPropertyData,
-      valor: parseMoneyCentsInput(newPropertyData.valor) ?? 0,
-      area: newPropertyData.area ? parseInt(newPropertyData.area, 10) : null,
-      quartos: newPropertyData.quartos ? parseInt(newPropertyData.quartos, 10) : null,
-      banheiros: newPropertyData.banheiros ? parseInt(newPropertyData.banheiros, 10) : null,
-      vagas: newPropertyData.vagas ? parseInt(newPropertyData.vagas, 10) : null,
-      idCorretor: newPropertyData.idCorretor ? Number(newPropertyData.idCorretor) : undefined,
-      confirmedOwnerEmailConflict,
-      owner: {
-        name: newPropertyData.ownerName,
-        email: newPropertyData.ownerEmail.trim().toLowerCase(),
-        cpf: normalizeCpf(newPropertyData.ownerCpf),
-        phone: newPropertyData.ownerPhone,
-      },
+      ownerCpf: formatCpf(normalizeCpf(newPropertyData.ownerCpf)),
     });
-  };
-
-  // Funcao para validar e criar o imovel
-  const handleCreateProperty = () => {
-    submitCreateProperty(false);
+    saveNewPropertyDraftPhotos([]);
+    setNewPropertyOpen(false);
+    setLocation("/imoveis/novo/preview");
   };
 
   // ========== FUNCAO PARA LIDAR COM CEP ==========
@@ -363,9 +306,6 @@ export default function Imoveis() {
                 <DialogTitle className="text-2xl font-semibold tracking-tight text-slate-950">
                   Cadastrar Novo Imóvel
                 </DialogTitle>
-                <DialogDescription className="text-slate-600">
-                  Preencha as informações do imóvel
-                </DialogDescription>
               </DialogHeader>
 
               <div className="space-y-5">
@@ -482,7 +422,7 @@ export default function Imoveis() {
                 <div className="rounded-[28px] border border-white/80 bg-white/90 p-4 shadow-[0_20px_50px_-34px_rgba(15,23,42,0.32)] sm:p-5">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div className="space-y-1 sm:space-y-2">
-                    <Label htmlFor="area" className="text-sm sm:text-base">�rea (m�)</Label>
+                    <Label htmlFor="area" className="text-sm sm:text-base">Área (m²)</Label>
                     <Input
                       id="area"
                       type="number"
@@ -533,7 +473,7 @@ export default function Imoveis() {
 
                 {/* Campos de Localizacao */}
                 <div className="space-y-1 sm:space-y-2">
-                  <Label htmlFor="endereco" className="text-sm sm:text-base">Endere�o *</Label>
+                  <Label htmlFor="endereco" className="text-sm sm:text-base">Endereço *</Label>
                   <Input
                     id="endereco"
                     value={newPropertyData.endereco}
@@ -548,7 +488,7 @@ export default function Imoveis() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div className="space-y-1 sm:space-y-2">
-                    <Label htmlFor="numero" className="text-sm sm:text-base">N�mero</Label>
+                    <Label htmlFor="numero" className="text-sm sm:text-base">Número</Label>
                     <Input
                       id="numero"
                       value={newPropertyData.numero}
@@ -625,9 +565,9 @@ export default function Imoveis() {
 
                 <div className="rounded-[28px] border border-emerald-100/70 bg-[linear-gradient(180deg,rgba(245,250,247,0.95),rgba(255,255,255,0.92))] p-4 shadow-[0_20px_50px_-34px_rgba(15,23,42,0.32)] sm:p-5">
                   <div className="mb-3">
-                    <h3 className="text-base font-semibold text-slate-950">Propriet�rio do im�vel</h3>
+                    <h3 className="text-base font-semibold text-slate-950">Proprietário do imóvel</h3>
                     <p className="text-sm text-slate-600">
-                      O CPF do propriet�rio � obrigat�rio e evita duplicidade de cadastro.
+                      O CPF do proprietário obrigatório e evita duplicidade de cadastro.
                     </p>
                   </div>
 
@@ -690,11 +630,10 @@ export default function Imoveis() {
 
                 {/* Botao de Criar */}
                 <Button
-                  onClick={handleCreateProperty}
+                  onClick={handleProceedToPhotoStep}
                   className="mt-2 w-full rounded-full bg-emerald-700 py-3 text-sm text-white shadow-[0_18px_40px_-28px_rgba(4,120,87,0.75)] transition-all hover:bg-emerald-800 sm:mt-4 sm:text-base"
-                  disabled={createProperty.isPending}
                 >
-                  {createProperty.isPending ? "Criando..." : "Criar Im�vel"}
+                  Adicionar Fotos
                 </Button>
               </div>
             </DialogContent>
@@ -915,7 +854,7 @@ export default function Imoveis() {
                 <Link key={imovel.id} href={`/imoveis/${imovel.id}`}>
                   <Card className="h-full cursor-pointer overflow-hidden rounded-[28px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_30px_90px_-42px_rgba(15,23,42,0.52)]">
                     <div className="relative h-56 overflow-hidden">
-                      <img
+                      <ProtectedPropertyImage
                         src={primeiraFoto}
                         alt={imovel.titulo}
                         className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"

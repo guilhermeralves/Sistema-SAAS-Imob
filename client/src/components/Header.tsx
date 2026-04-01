@@ -37,7 +37,7 @@ export default function Header() {
   const isRootAdmin =
     user?.role === "administrativo" && user?.registrationSource === "bootstrap";
   const isStaff = user?.role === "administrativo" || user?.role === "corretor";
-  const brandHref = user?.role === "administrativo" ? "/dashboard" : "/";
+  const brandHref = isStaff ? "/dashboard" : "/";
 
   const { data: hasNewUsers } = trpc.admin.hasNewUsers.useQuery(undefined, {
     enabled: isAuthenticated && user?.role === "administrativo",
@@ -82,7 +82,7 @@ export default function Header() {
             item => item.href !== "/" && item.href !== "/contato" && item.href !== "/servicos"
           )]
         : isAuthenticated && user?.role === "corretor"
-          ? [dashboardItem, ...publicMenuItems.filter(item => item.href !== "/contato")]
+          ? [dashboardItem, ...publicMenuItems.filter(item => item.href !== "/" && item.href !== "/contato")]
           : [...publicMenuItems];
 
     if (isAuthenticated && user) {

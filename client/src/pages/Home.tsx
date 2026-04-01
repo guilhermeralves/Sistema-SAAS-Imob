@@ -2,6 +2,7 @@
 import React from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Banner } from "@/components/Banner";
+import ProtectedPropertyImage from "@/components/ProtectedPropertyImage";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getLoginUrl } from "@/const";
@@ -266,7 +267,7 @@ export default function Home() {
                   <Link key={imovel.id} href={`/imoveis/${imovel.id}`}>
                     <Card className="h-full cursor-pointer overflow-hidden rounded-[28px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_30px_90px_-42px_rgba(15,23,42,0.52)]">
                       <div className="relative h-56 overflow-hidden">
-                        <img
+                        <ProtectedPropertyImage
                           src={getFirstPhoto(imovel.fotos)}
                           alt={imovel.titulo}
                           className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"

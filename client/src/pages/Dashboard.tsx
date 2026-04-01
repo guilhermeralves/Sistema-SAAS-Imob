@@ -478,7 +478,7 @@ export default function Dashboard() {
               <CardContent className="grid gap-8 p-6 md:p-8 xl:grid-cols-[1.2fr_0.9fr] xl:items-center">
                 <div className="space-y-5">
                   <div className="flex items-center gap-4">
-                    <div className="flex h-16 w-16 items-center justify-center rounded-[24px] bg-emerald-700/10 text-emerald-800">
+                    <div className="hidden h-16 w-16 items-center justify-center rounded-[24px] bg-emerald-700/10 text-emerald-800 md:flex">
                       <LayoutDashboard className="h-8 w-8" />
                     </div>
                     <div>
@@ -498,13 +498,12 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                <div className="space-y-4 rounded-[30px] border border-white/80 bg-white/70 p-5 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.35)]">
+                <div className="space-y-4 rounded-[30px] border-0 bg-white/70 p-5 pl-0 shadow-none md:border md:border-white/80 md:pl-5 md:shadow-[0_18px_40px_-30px_rgba(15,23,42,0.35)]">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="text-sm font-medium text-slate-900">Dados por Período</p>
                       <p className="text-xs text-slate-600">Altere a janela de análise sem mudar o restante do fluxo.</p>
                     </div>
-                    <Badge className="rounded-full bg-emerald-700/90 px-3 py-1 text-white">{PERIOD_LABELS[period]}</Badge>
                   </div>
 
                   <div className="flex flex-wrap gap-2">

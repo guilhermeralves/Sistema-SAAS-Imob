@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import ProtectedPropertyImage from "@/components/ProtectedPropertyImage";
 import {
   Dialog,
   DialogContent,
@@ -41,6 +42,7 @@ import {
   MapPin,
   MessageCircle,
   MoreHorizontal,
+  Pencil,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -94,6 +96,7 @@ export default function ImovelDetalhes() {
   const [documentsOpen, setDocumentsOpen] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [documentPendingDelete, setDocumentPendingDelete] = useState<number | null>(null);
+  const [documentPendingRename, setDocumentPendingRename] = useState<{ id: number; nomeArquivo: string } | null>(null);
 
   const { data: imovel, isLoading } = trpc.properties.getById.useQuery({ id });
 
@@ -135,15 +138,35 @@ export default function ImovelDetalhes() {
     },
   });
 
+  const renamePropertyDocument = trpc.properties.renameDocument.useMutation({
+    onSuccess: async () => {
+      toast.success("Documento renomeado com sucesso!");
+      setDocumentPendingRename(null);
+      await propertyDocuments.refetch();
+    },
+    onError: error => {
+      toast.error(error.message || "Erro ao renomear documento");
+    },
+  });
+
   const propertyStatus = useMemo(
     () => getPropertyStatusPresentation(imovel?.status),
     [imovel?.status]
+  );
+  const shouldShowContactActions = !user || user.role === "cliente";
+  const isBrokerViewer = user?.role === "corretor";
+  const shouldShowOwnerInVinculos = Boolean(
+    isAdminViewer || (isBrokerViewer && imovel?.proprietario)
+  );
+  const shouldShowVinculosCard = Boolean(
+    (isAdminViewer || isBrokerViewer) &&
+      (imovel?.corretorResponsavel || (shouldShowOwnerInVinculos && imovel?.proprietario))
   );
 
   if (isLoading) {
     return (
       <Layout>
-        <div className="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.88),rgba(244,240,232,0.82)_45%,rgba(248,248,246,1)_100%)] pb-20">
+        <div className="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.88),rgba(244,240,232,0.82)_45%,rgba(248,248,246,1)_100%)] pb-12">
           <div className="container py-10 md:py-12">
             <div className="animate-pulse space-y-5">
               <div className="h-10 w-40 rounded-full bg-white/80" />
@@ -160,7 +183,7 @@ export default function ImovelDetalhes() {
   if (!imovel) {
     return (
       <Layout>
-        <div className="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.88),rgba(244,240,232,0.82)_45%,rgba(248,248,246,1)_100%)] pb-20">
+        <div className="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.88),rgba(244,240,232,0.82)_45%,rgba(248,248,246,1)_100%)] pb-12">
           <div className="container py-16">
             <Card className="rounded-[32px] border-white/70 bg-white/90 p-12 text-center shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
               <Building2 className="mx-auto mb-4 h-16 w-16 text-slate-400" />
@@ -239,18 +262,25 @@ export default function ImovelDetalhes() {
   };
 
   const handleOpenDocument = async (url: string) => {
+    // No Safari mobile, abrir a aba de forma assincrona costuma ser bloqueado.
+    // Abrimos uma unica aba no gesto do clique e depois navegamos nela.
+    const previewWindow = window.open("about:blank", "_blank");
+
+    if (!previewWindow) {
+      toast.error("Nao foi possivel abrir o documento em uma nova aba.");
+      return;
+    }
+
     try {
       const resolved = await resolveDocumentUrl(url);
-      const newWindow = window.open(resolved.href, "_blank");
-
-      if (!newWindow) {
-        resolved.revoke();
-        toast.error("Nao foi possivel abrir o documento em uma nova aba.");
-        return;
-      }
+      previewWindow.opener = null;
+      previewWindow.location.replace(resolved.href);
 
       setTimeout(() => resolved.revoke(), 60_000);
     } catch (error) {
+      if (!previewWindow.closed) {
+        previewWindow.close();
+      }
       console.error("[PropertyDocument] Erro ao abrir documento", error);
       toast.error("Nao foi possivel visualizar o documento.");
     }
@@ -269,6 +299,21 @@ export default function ImovelDetalhes() {
     setTimeout(() => resolved.revoke(), 5_000);
   };
 
+  const handleConfirmRenameDocument = () => {
+    if (!documentPendingRename) return;
+
+    const normalizedName = documentPendingRename.nomeArquivo.trim();
+    if (!normalizedName) {
+      toast.error("Informe um nome valido para o documento.");
+      return;
+    }
+
+    renamePropertyDocument.mutate({
+      id: documentPendingRename.id,
+      nomeArquivo: normalizedName,
+    });
+  };
+
   const handleGoToPropertyDetails = () => {
     const targetPath =
       user?.role === "administrativo"
@@ -281,14 +326,14 @@ export default function ImovelDetalhes() {
 
   return (
     <Layout>
-      <div className="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.88),rgba(244,240,232,0.82)_45%,rgba(248,248,246,1)_100%)] pb-20">
-        <div className="container py-8 md:py-10">
-          <div className="mb-6 lg:mb-4">
+      <div className="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.88),rgba(244,240,232,0.82)_45%,rgba(248,248,246,1)_100%)] pb-12">
+        <div className="container py-6 md:py-7">
+          <div className="mb-4 lg:mb-3">
             <Link href="/imoveis">
               <Button
                 variant="ghost"
                 size="sm"
-                className="mb-4 gap-2 rounded-full border border-white/70 bg-white/80 text-slate-700 shadow-sm hover:bg-white lg:mb-3"
+                className="mb-2 gap-2 rounded-full border border-white/70 bg-white/80 text-slate-700 shadow-sm hover:bg-white lg:mb-2"
               >
                 <ArrowLeft className="h-4 w-4" />
                 Voltar para Imóveis
@@ -301,8 +346,8 @@ export default function ImovelDetalhes() {
             <Card className="overflow-hidden rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
               {temFotos ? (
                 <div className="relative">
-                  <div className="relative h-[420px] bg-slate-100 lg:h-[340px] xl:h-[390px]">
-                    <img
+                  <div className="relative h-[500px] bg-slate-100 lg:h-[460px] xl:h-[520px]">
+                    <ProtectedPropertyImage
                       src={fotos[currentImageIndex]}
                       alt={`${imovel.titulo} - Foto ${currentImageIndex + 1}`}
                       className="h-full w-full object-cover"
@@ -312,18 +357,18 @@ export default function ImovelDetalhes() {
                         <Button
                           variant="secondary"
                           size="icon"
-                          className="absolute left-4 top-1/2 h-11 w-11 -translate-y-1/2 rounded-full border border-white/30 bg-white/85 text-slate-800 shadow-lg hover:bg-white"
+                          className="absolute left-4 top-1/2 h-9 w-9 -translate-y-1/2 rounded-full border border-white/25 bg-white/60 text-slate-800 shadow-md hover:bg-white/75"
                           onClick={prevImage}
                         >
-                          <ChevronLeft className="h-5 w-5" />
+                          <ChevronLeft className="h-4 w-4" />
                         </Button>
                         <Button
                           variant="secondary"
                           size="icon"
-                          className="absolute right-4 top-1/2 h-11 w-11 -translate-y-1/2 rounded-full border border-white/30 bg-white/85 text-slate-800 shadow-lg hover:bg-white"
+                          className="absolute right-4 top-1/2 h-9 w-9 -translate-y-1/2 rounded-full border border-white/25 bg-white/60 text-slate-800 shadow-md hover:bg-white/75"
                           onClick={nextImage}
                         >
-                          <ChevronRight className="h-5 w-5" />
+                          <ChevronRight className="h-4 w-4" />
                         </Button>
                         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full border border-white/20 bg-slate-950/80 px-3 py-1 text-sm font-medium text-white backdrop-blur">
                           {currentImageIndex + 1} / {fotos.length}
@@ -331,30 +376,9 @@ export default function ImovelDetalhes() {
                       </>
                     ) : null}
                   </div>
-                  {fotos.length > 1 ? (
-                    <div className="flex gap-3 overflow-x-auto p-4 md:p-5">
-                      {fotos.map((foto: string, index: number) => (
-                        <button
-                          key={index}
-                          onClick={() => setCurrentImageIndex(index)}
-                          className={`h-20 w-20 flex-shrink-0 overflow-hidden rounded-2xl border-2 bg-white transition-all ${
-                            index === currentImageIndex
-                              ? "border-emerald-600 shadow-md"
-                              : "border-transparent hover:border-slate-300"
-                          }`}
-                        >
-                          <img
-                            src={foto}
-                            alt={`Miniatura ${index + 1}`}
-                            className="h-full w-full object-cover"
-                          />
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
                 </div>
               ) : (
-                <div className="flex h-[420px] items-center justify-center bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(241,245,243,0.88))] lg:h-[340px] xl:h-[390px]">
+                <div className="flex h-[500px] items-center justify-center bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(241,245,243,0.88))] lg:h-[460px] xl:h-[520px]">
                   <Building2 className="h-16 w-16 text-slate-400" />
                 </div>
               )}
@@ -376,22 +400,26 @@ export default function ImovelDetalhes() {
                   ) : null}
                 </div>
 
-                <Button className="h-12 w-full rounded-full bg-white text-slate-900 shadow-sm hover:bg-slate-100" asChild>
-                  <a
-                    href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(whatsappMessage)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <MessageCircle className="h-5 w-5" />
-                    Falar com Corretor
-                  </a>
-                </Button>
+                {shouldShowContactActions ? (
+                  <>
+                    <Button className="h-12 w-full rounded-full bg-white text-slate-900 shadow-sm hover:bg-slate-100" asChild>
+                      <a
+                        href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(whatsappMessage)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <MessageCircle className="h-5 w-5" />
+                        Falar com Corretor
+                      </a>
+                    </Button>
 
-                <Link href="/contato">
-                  <Button variant="outline" className="h-12 w-full rounded-full border-white/30 bg-white/10 text-white hover:bg-white/15">
-                    Enviar Mensagem
-                  </Button>
-                </Link>
+                    <Link href="/contato">
+                      <Button variant="outline" className="h-12 w-full rounded-full border-white/30 bg-white/10 text-white hover:bg-white/15">
+                        Enviar Mensagem
+                      </Button>
+                    </Link>
+                  </>
+                ) : null}
               </CardContent>
             </Card>
           </div>
@@ -402,7 +430,7 @@ export default function ImovelDetalhes() {
                 <div>
                   <div className="mb-3 flex items-start justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2 text-sm">
-                      <span className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 font-medium text-emerald-800">
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 font-medium text-slate-700">
                         {imovel.finalidade === "venda"
                           ? "Venda"
                           : imovel.finalidade === "locacao"
@@ -459,104 +487,34 @@ export default function ImovelDetalhes() {
                   </div>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="grid grid-cols-4 gap-2 sm:gap-4">
                   {imovel.area ? (
-                    <div className="border-b border-slate-200/80 pb-3 xl:border-b-0 xl:border-r xl:pb-0 xl:pr-4">
-                      <p className="text-2xl font-semibold tracking-tight text-slate-950">{imovel.area}</p>
-                      <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-500">m2</p>
+                    <div className="xl:border-r xl:border-slate-200/80 xl:pr-4">
+                      <p className="text-lg font-semibold tracking-tight text-slate-950 sm:text-2xl">{imovel.area}</p>
+                      <p className="mt-1 text-[10px] uppercase tracking-[0.08em] text-slate-500 sm:mt-2 sm:text-xs sm:tracking-[0.18em]">m2</p>
                     </div>
                   ) : null}
                   {imovel.quartos ? (
-                    <div className="border-b border-slate-200/80 pb-3 sm:border-b-0 sm:pb-0 xl:border-r xl:pr-4">
-                      <p className="text-2xl font-semibold tracking-tight text-slate-950">{imovel.quartos}</p>
-                      <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-500">Quartos</p>
+                    <div className="xl:border-r xl:border-slate-200/80 xl:pr-4">
+                      <p className="text-lg font-semibold tracking-tight text-slate-950 sm:text-2xl">{imovel.quartos}</p>
+                      <p className="mt-1 text-[10px] uppercase tracking-[0.08em] text-slate-500 sm:mt-2 sm:text-xs sm:tracking-[0.18em]">Quartos</p>
                     </div>
                   ) : null}
                   {imovel.banheiros ? (
-                    <div className="border-b border-slate-200/80 pb-3 xl:border-b-0 xl:border-r xl:pb-0 xl:pr-4">
-                      <p className="text-2xl font-semibold tracking-tight text-slate-950">{imovel.banheiros}</p>
-                      <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-500">Banheiros</p>
+                    <div className="xl:border-r xl:border-slate-200/80 xl:pr-4">
+                      <p className="text-lg font-semibold tracking-tight text-slate-950 sm:text-2xl">{imovel.banheiros}</p>
+                      <p className="mt-1 text-[10px] uppercase tracking-[0.08em] text-slate-500 sm:mt-2 sm:text-xs sm:tracking-[0.18em]">Banheiros</p>
                     </div>
                   ) : null}
                   {imovel.vagas ? (
                     <div>
-                      <p className="text-2xl font-semibold tracking-tight text-slate-950">{imovel.vagas}</p>
-                      <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-500">Vagas</p>
+                      <p className="text-lg font-semibold tracking-tight text-slate-950 sm:text-2xl">{imovel.vagas}</p>
+                      <p className="mt-1 text-[10px] uppercase tracking-[0.08em] text-slate-500 sm:mt-2 sm:text-xs sm:tracking-[0.18em]">Vagas</p>
                     </div>
                   ) : null}
                 </div>
               </CardContent>
             </Card>
-
-            {isAdminViewer && (imovel.proprietario || imovel.cadastradoPor || imovel.corretorResponsavel) ? (
-              <Card className="rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
-                <CardContent className="space-y-5 p-6 md:p-7">
-                  <div>
-                    <p className="inline-flex rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-800">
-                      Vinculos do imovel
-                    </p>
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2 rounded-[28px] border border-slate-100 bg-slate-50/70 p-5">
-                      <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Proprietario</p>
-                      {imovel.proprietario ? (
-                        <>
-                          <Link href={`/admin/proprietarios/${imovel.proprietario.id}?fromProperty=${imovel.id}`}>
-                            <a className="text-base font-semibold text-emerald-800 underline">
-                              {imovel.proprietario.name}
-                            </a>
-                          </Link>
-                          <p className="text-sm text-slate-600">{imovel.proprietario.email}</p>
-                          <p className="text-sm text-slate-600">{imovel.proprietario.phone}</p>
-                        </>
-                      ) : (
-                        <p className="text-sm text-slate-600">Nao informado</p>
-                      )}
-                    </div>
-
-                    <div className="space-y-2 rounded-[28px] border border-slate-100 bg-slate-50/70 p-5">
-                      <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Corretor Responsável</p>
-                      {imovel.corretorResponsavel ? (
-                        <Link href={`/admin/users/${imovel.corretorResponsavel.id}?fromProperty=${imovel.id}`}>
-                          <a className="text-base font-semibold text-emerald-800 underline">
-                            {imovel.corretorResponsavel.name || imovel.corretorResponsavel.email}
-                          </a>
-                        </Link>
-                      ) : (
-                        <p className="text-sm text-slate-600">Nao informado</p>
-                      )}
-                    </div>
-
-                    <div className="space-y-2 rounded-[28px] border border-slate-100 bg-slate-50/70 p-5 md:col-span-2">
-                      <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Cadastrado por</p>
-                      {imovel.cadastradoPor ? (
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                          {imovel.cadastradoPor.registrationSource === "bootstrap" ? (
-                            <span className="text-base font-semibold text-slate-950">
-                              {imovel.cadastradoPor.name || "Administrador"}
-                            </span>
-                          ) : (
-                            <Link href={`/admin/users/${imovel.cadastradoPor.id}?fromProperty=${imovel.id}`}>
-                              <a className="text-base font-semibold text-emerald-800 underline">
-                                {imovel.cadastradoPor.name || imovel.cadastradoPor.email}
-                              </a>
-                            </Link>
-                          )}
-                          {imovel.createdAt ? (
-                            <span className="text-sm text-slate-500">
-                              {formatStoredDateTime(imovel.createdAt)}
-                            </span>
-                          ) : null}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-slate-600">Nao informado</p>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : null}
 
             <Card className="rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
               <CardContent className="space-y-4 p-6 md:p-7">
@@ -584,12 +542,86 @@ export default function ImovelDetalhes() {
                 </CardContent>
               </Card>
             ) : null}
+
+            {shouldShowVinculosCard ? (
+              <Card className="rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
+                <CardContent className="space-y-5 p-6 md:p-7">
+                  <div>
+                    <p className="inline-flex rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-800">
+                      Vinculos do imovel
+                    </p>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {shouldShowOwnerInVinculos ? (
+                      <div className="space-y-2 rounded-[28px] border border-slate-100 bg-slate-50/70 p-5">
+                        <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Proprietario</p>
+                        {imovel.proprietario ? (
+                          <>
+                            {isAdminViewer ? (
+                              <Link href={`/admin/proprietarios/${imovel.proprietario.id}?fromProperty=${imovel.id}`}>
+                                <a className="text-base font-semibold text-emerald-800 underline">
+                                  {imovel.proprietario.name}
+                                </a>
+                              </Link>
+                            ) : (
+                              <p className="text-base font-semibold text-slate-950">
+                                {imovel.proprietario.name}
+                              </p>
+                            )}
+                            <p className="text-sm text-slate-600">{imovel.proprietario.email}</p>
+                            <p className="text-sm text-slate-600">{imovel.proprietario.phone}</p>
+                          </>
+                        ) : (
+                          <p className="text-sm text-slate-600">Nao informado</p>
+                        )}
+                      </div>
+                    ) : null}
+
+                    <div className="space-y-2 rounded-[28px] border border-slate-100 bg-slate-50/70 p-5">
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Corretor Responsável</p>
+                      {imovel.corretorResponsavel ? (
+                        isAdminViewer ? (
+                          <Link href={`/admin/users/${imovel.corretorResponsavel.id}?fromProperty=${imovel.id}`}>
+                            <a className="text-base font-semibold text-emerald-800 underline">
+                              {imovel.corretorResponsavel.name || imovel.corretorResponsavel.email}
+                            </a>
+                          </Link>
+                        ) : (
+                          <p className="text-base font-semibold text-slate-950">
+                            {imovel.corretorResponsavel.name || imovel.corretorResponsavel.email}
+                          </p>
+                        )
+                      ) : (
+                        <p className="text-sm text-slate-600">Nao informado</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {isAdminViewer ? (
+                    <div className="border-t border-slate-200/80 pt-3 text-xs text-slate-500">
+                      <span className="font-medium text-slate-600">Cadastrado por:</span>{" "}
+                      {imovel.cadastradoPor ? (
+                        <Link href={`/admin/users/${imovel.cadastradoPor.id}?fromProperty=${imovel.id}`}>
+                          <a className="font-medium text-emerald-800 underline">
+                            {imovel.cadastradoPor.name || imovel.cadastradoPor.email}
+                          </a>
+                        </Link>
+                      ) : (
+                        "Nao informado"
+                      )}
+                      {imovel.createdAt ? ` • ${formatStoredDateTime(imovel.createdAt)}` : ""}
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+            ) : null}
           </div>
         </div>
         </div>
 
         <Dialog open={documentsOpen} onOpenChange={setDocumentsOpen}>
-          <DialogContent className="w-full max-w-3xl max-h-[90vh] overflow-y-auto scrollbar-hidden">
+          <DialogContent className="w-full max-h-[90vh] overflow-y-auto scrollbar-hidden lg:max-w-2xl">
             <DialogHeader>
               <DialogTitle>Documentos do imovel</DialogTitle>
               <DialogDescription>
@@ -643,7 +675,44 @@ export default function ImovelDetalhes() {
                           <FileText className="h-5 w-5" />
                         </div>
                         <div>
-                          <p className="font-medium">{document.nomeArquivo}</p>
+                          {documentPendingRename?.id === document.id ? (
+                            <div className="space-y-2">
+                              <Input
+                                value={documentPendingRename.nomeArquivo}
+                                onChange={event =>
+                                  setDocumentPendingRename({
+                                    id: document.id,
+                                    nomeArquivo: event.target.value,
+                                  })
+                                }
+                                className="h-9 w-full min-w-[220px]"
+                                autoFocus
+                              />
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="h-8 rounded-full bg-emerald-700 px-3 text-white hover:bg-emerald-800"
+                                  onClick={handleConfirmRenameDocument}
+                                  disabled={renamePropertyDocument.isPending}
+                                >
+                                  Salvar
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 rounded-full px-3"
+                                  onClick={() => setDocumentPendingRename(null)}
+                                  disabled={renamePropertyDocument.isPending}
+                                >
+                                  Cancelar
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="font-medium">{document.nomeArquivo}</p>
+                          )}
                           <p className="text-sm text-muted-foreground">
                             Enviado em {formatStoredDate(document.createdAt)}
                           </p>
@@ -651,6 +720,21 @@ export default function ImovelDetalhes() {
                       </div>
 
                       <div className="flex items-center gap-2 self-end sm:self-auto">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          onClick={() =>
+                            setDocumentPendingRename({
+                              id: document.id,
+                              nomeArquivo: document.nomeArquivo,
+                            })
+                          }
+                          aria-label="Renomear documento"
+                          disabled={renamePropertyDocument.isPending && documentPendingRename?.id === document.id}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
                         <Button
                           type="button"
                           variant="outline"

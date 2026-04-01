@@ -112,8 +112,11 @@ export default function Footer() {
           <p className="text-slate-50">
             © {currentYear} {APP_TITLE} - Todos os direitos reservados.
           </p>
-          <p className="mt-2 text-slate-200">
-            Created by <span className="font-bold text-slate-50">Noxilon®</span>
+          <p className="mt-2 text-slate-50">
+            <span className="font-bold text-slate-50">CNPJ</span> 12.345.678/0001-99 / <span className="font-bold text-slate-50">CRECI/SP</span> J-56842 
+          </p>
+          <p className="mt-4 text-slate-50">
+            Created by <span className="font-bold text-slate-50">Noxilon®</span> 
           </p>
           <p className="text-slate-200">Software Version {APP_VERSION}</p>
         </div>

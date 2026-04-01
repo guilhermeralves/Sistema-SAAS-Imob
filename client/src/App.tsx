@@ -6,11 +6,13 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { useAuth } from "./_core/hooks/useAuth";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Home from "./pages/Home";
 import Imoveis from "./pages/Imoveis";
+import ImovelNovoPreview from "./pages/ImovelNovoPreview";
 import Servicos from "./pages/Servicos";
 import Contato from "./pages/Contato";
 import ImovelDetalhes from "./pages/ImovelDetalhes";
@@ -24,12 +26,39 @@ import Financeiro from "./pages/Financeiro";
 import Dashboard from "./pages/Dashboard";
 import TarefasEventos from "./pages/TarefasEventos";
 
+function RootEntryRoute() {
+  const { user, loading, isAuthenticated } = useAuth();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (loading) return;
+    if (!isAuthenticated || !user) return;
+
+    if (user.role === "administrativo" || user.role === "corretor") {
+      setLocation("/dashboard");
+    }
+  }, [isAuthenticated, loading, setLocation, user]);
+
+  if (loading) {
+    return null;
+  }
+
+  if (isAuthenticated && user && (user.role === "administrativo" || user.role === "corretor")) {
+    return null;
+  }
+
+  return <Home />;
+}
+
 function Router() {
   // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
-      <Route path={"/"} component={Home} />
+      <Route path={"/"} component={RootEntryRoute} />
       <Route path={"/imoveis"} component={Imoveis} />
+      <Route path={"/imoveis/novo/preview"}>
+        <ProtectedRoute component={ImovelNovoPreview} roles={["corretor", "administrativo"]} />
+      </Route>
       <Route path={"/imoveis/:id"} component={ImovelDetalhes} />
       <Route path={"/servicos"} component={Servicos} />
       <Route path={"/contato"} component={Contato} />

@@ -3,11 +3,17 @@ import express from "express";
 import { createServer } from "http";
 import net from "net";
 import os from 'os';
+import fs from "fs/promises";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { ensureBootstrapAdmin } from "./bootstrapAdmin";
 import { createContext } from "./context";
+import {
+  ensurePropertyUploadDir,
+  getPropertyImageAbsolutePath,
+  PROPERTY_IMAGE_REQUEST_HEADER,
+} from "./property-images";
 import { serveStatic, setupVite } from "./vite";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -31,12 +37,53 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 
 async function startServer() {
   await ensureBootstrapAdmin();
+  await ensurePropertyUploadDir();
 
   const app = express();
   const server = createServer(app);
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+  app.get("/api/media/properties/:fileName", async (req, res) => {
+    const mediaIntent = req.header(PROPERTY_IMAGE_REQUEST_HEADER) === "1";
+
+    if (!mediaIntent) {
+      res.status(404).end();
+      return;
+    }
+
+    const fileName = String(req.params.fileName || "").trim();
+    const absolutePath = getPropertyImageAbsolutePath(fileName);
+
+    if (!absolutePath) {
+      res.status(404).end();
+      return;
+    }
+
+    try {
+      await fs.access(absolutePath);
+    } catch {
+      res.status(404).end();
+      return;
+    }
+
+    res.setHeader("Content-Type", "image/webp");
+    res.setHeader("Content-Disposition", `inline; filename="${fileName}"`);
+    res.setHeader("Cache-Control", "private, no-store, no-cache, must-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Robots-Tag", "noindex, noimageindex, noarchive");
+    res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+
+    res.sendFile(absolutePath, error => {
+      if (error && !res.headersSent) {
+        res.status(404).end();
+      }
+    });
+  });
+
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
   // tRPC API

@@ -478,7 +478,8 @@ export async function getDestacados() {
 export async function createProperty(data: InsertProperty) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return await db.insert(properties).values(data);
+  const [created] = await db.insert(properties).values(data).returning();
+  return created;
 }
 
 export async function updateProperty(id: number, data: Partial<InsertProperty>) {
@@ -1029,6 +1030,22 @@ export async function deletePropertyDocument(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.delete(propertyDocuments).where(eq(propertyDocuments.id, id));
+}
+
+export async function updatePropertyDocumentName(id: number, nomeArquivo: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [updatedDocument] = await db
+    .update(propertyDocuments)
+    .set({
+      nomeArquivo,
+      updatedAt: new Date(),
+    })
+    .where(eq(propertyDocuments.id, id))
+    .returning();
+
+  return updatedDocument;
 }
 
 export async function getAllUsers() {
