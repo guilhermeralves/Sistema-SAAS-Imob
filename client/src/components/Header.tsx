@@ -14,16 +14,19 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ROLE_LABELS } from "@shared/auth";
 import {
+  Bot,
   CalendarDays,
   CircleDollarSign,
   Briefcase,
   Building2,
   Home,
+  KeyRound,
   LayoutDashboard,
   LogOut,
   Menu,
   Moon,
   Phone,
+  PlugZap,
   Sun,
   User,
   Users,
@@ -230,6 +233,35 @@ export default function Header() {
                           <Moon className="h-4 w-4" />
                         )}
                         {theme === "dark" ? "Voltar para modo claro" : "Ativar modo escuro (Beta)"}
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
+                  {user.role === "administrativo" ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link href="/controle-de-chaves">
+                          <a className="flex items-center gap-2">
+                            <KeyRound className="h-4 w-4" />
+                            Controle de Chaves
+                          </a>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/automacao">
+                          <a className="flex items-center gap-2">
+                            <Bot className="h-4 w-4" />
+                            Automações
+                          </a>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/plataformas-integradas">
+                          <a className="flex items-center gap-2">
+                            <PlugZap className="h-4 w-4" />
+                            Plataformas Integradas
+                          </a>
+                        </Link>
                       </DropdownMenuItem>
                     </>
                   ) : null}

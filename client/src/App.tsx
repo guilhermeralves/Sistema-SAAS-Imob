@@ -25,6 +25,9 @@ import AdminUserDetails from "./pages/AdminUserDetails";
 import AdminPropertyDetails from "./pages/AdminPropertyDetails";
 import Financeiro from "./pages/Financeiro";
 import Dashboard from "./pages/Dashboard";
+import PlataformasIntegradas from "./pages/PlataformasIntegradas";
+import ControleDeChaves from "./pages/ControleDeChaves";
+import Automacao from "./pages/Automacao";
 import TarefasEventos from "./pages/TarefasEventos";
 
 function RootEntryRoute() {
@@ -97,6 +100,15 @@ function Router() {
       </Route>
       <Route path={"/financeiro"}>
         <ProtectedRoute component={Financeiro} roles={["administrativo"]} />
+      </Route>
+      <Route path={"/plataformas-integradas"}>
+        <ProtectedRoute component={PlataformasIntegradas} roles={["administrativo"]} />
+      </Route>
+      <Route path={"/controle-de-chaves"}>
+        <ProtectedRoute component={ControleDeChaves} roles={["administrativo"]} />
+      </Route>
+      <Route path={"/automacao"}>
+        <ProtectedRoute component={Automacao} roles={["administrativo"]} />
       </Route>
       <Route path={"/tarefas-eventos"}>
         <ProtectedRoute component={TarefasEventos} roles={["corretor", "administrativo"]} />
