@@ -42,7 +42,6 @@ import {
   Settings2,
   Shield,
   Trash2,
-  TrendingUp,
   User,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -167,10 +166,6 @@ export default function Admin() {
     }
   );
 
-  const { data: leads, isLoading: loadingLeads } = trpc.leads.list.useQuery(undefined, {
-    enabled: isAuthenticated && user?.role === "administrativo",
-  });
-
   const { data: contracts, isLoading: loadingContracts } = trpc.contracts.list.useQuery(undefined, {
     enabled: isAuthenticated && user?.role === "administrativo",
   });
@@ -181,14 +176,6 @@ export default function Admin() {
     }
   );
 
-  const assignLead = trpc.leads.assign.useMutation({
-    onSuccess: () => {
-      toast.success("Lead atribuído com sucesso!");
-    },
-    onError: () => {
-      toast.error("Erro ao atribuir lead");
-    },
-  });
   const requestKeyStatusChange = trpc.properties.requestKeyStatusChange.useMutation({
     onSuccess: async () => {
       toast.success("Status das chaves atualizado com sucesso!");
@@ -226,7 +213,6 @@ export default function Admin() {
     },
   });
 
-  const corretoresAtivos = users?.filter(candidate => candidate.role === "corretor" && candidate.isActive === 1) || [];
   const normalizedSearchTerm = normalizeSearchValue(searchTerm.trim());
 
   const filteredProperties = useMemo(() => {
@@ -241,15 +227,6 @@ export default function Admin() {
       ]).includes(normalizedSearchTerm)
     );
   }, [properties, normalizedSearchTerm]);
-
-  const filteredLeads = useMemo(() => {
-    if (!leads) return [];
-    if (!normalizedSearchTerm) return leads;
-
-    return leads.filter(lead =>
-      buildSearchText(lead as Record<string, unknown>, [formatStoredDate(lead.createdAt)]).includes(normalizedSearchTerm)
-    );
-  }, [leads, normalizedSearchTerm]);
 
   const filteredContracts = useMemo(() => {
     if (!contracts) return [];
@@ -281,8 +258,6 @@ export default function Admin() {
 
   const totalImoveis = properties?.length || 0;
   const imoveisAtivos = properties?.filter(property => property.status === "ativo").length || 0;
-  const totalLeads = leads?.length || 0;
-  const leadsFechados = leads?.filter(lead => lead.status === "fechado").length || 0;
   const totalContratos = contracts?.length || 0;
   const contratosAtivos = contracts?.filter(contract => contract.status === "ativo").length || 0;
 
@@ -428,10 +403,10 @@ export default function Admin() {
       <div className="container py-8 md:py-10">
         <div className="mb-8">
           <h1 className="mb-2 text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">Administrativo</h1>
-          <p className="text-slate-600">Gerencie imóveis, leads e contratos do sistema</p>
+          <p className="text-slate-600">Gerencie imóveis e contratos do sistema</p>
         </div>
 
-        <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2">
           <Card className="min-h-[124px] rounded-[28px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)]">
             <CardHeader className="flex flex-row items-center justify-between px-6 pb-2 pt-5">
               <CardTitle className="text-sm font-medium text-slate-600">Imóveis</CardTitle>
@@ -440,17 +415,6 @@ export default function Admin() {
             <CardContent className="px-6 pb-5 pt-0">
               <div className="text-3xl font-bold tracking-tight text-slate-950">{totalImoveis}</div>
               <p className="text-xs text-slate-500">{imoveisAtivos} ativos</p>
-            </CardContent>
-          </Card>
-
-          <Card className="min-h-[124px] rounded-[28px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)]">
-            <CardHeader className="flex flex-row items-center justify-between px-6 pb-2 pt-5">
-              <CardTitle className="text-sm font-medium text-slate-600">Leads</CardTitle>
-              <TrendingUp className="h-6 w-6 text-slate-500" />
-            </CardHeader>
-            <CardContent className="px-6 pb-5 pt-0">
-              <div className="text-3xl font-bold tracking-tight text-slate-950">{totalLeads}</div>
-              <p className="text-xs text-slate-500">{leadsFechados} fechados</p>
             </CardContent>
           </Card>
 
@@ -471,10 +435,6 @@ export default function Admin() {
             <TabsTrigger value="imoveis" className="gap-2">
               <Building2 className="h-4 w-4" />
               Imóveis
-            </TabsTrigger>
-            <TabsTrigger value="leads" className="gap-2">
-              <TrendingUp className="h-4 w-4" />
-              Leads
             </TabsTrigger>
             <TabsTrigger value="contratos" className="gap-2">
               <FileText className="h-4 w-4" />
@@ -624,87 +584,6 @@ export default function Admin() {
                         : showDeletedProperties
                           ? "Nenhum imóvel apagado"
                           : "Nenhum imóvel cadastrado"}
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="leads">
-            <Card className={SURFACE_CARD_CLASS}>
-              <CardHeader>
-                <CardTitle className="text-slate-950">Todos os Leads</CardTitle>
-                <CardDescription className="text-slate-600">Visualize todos os leads do sistema</CardDescription>
-                {renderSearchInput("Pesquisar leads")}
-              </CardHeader>
-              <CardContent>
-                {loadingLeads ? (
-                  <div className="space-y-3">
-                    {[1, 2, 3].map(item => (
-                      <div key={item} className="h-16 animate-pulse rounded bg-muted" />
-                    ))}
-                  </div>
-                ) : filteredLeads.length > 0 ? (
-                  <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white/80">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Nome</TableHead>
-                          <TableHead>E-mail</TableHead>
-                          <TableHead>Telefone</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Origem</TableHead>
-                          <TableHead>Responsável</TableHead>
-                          <TableHead>Cadastro</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredLeads.map(lead => (
-                          <TableRow key={lead.id}>
-                            <TableCell className="font-medium">{lead.nome}</TableCell>
-                            <TableCell>{lead.email || "—"}</TableCell>
-                            <TableCell>{lead.telefone || "—"}</TableCell>
-                            <TableCell>
-                              <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium capitalize text-primary">
-                                {lead.status}
-                              </span>
-                            </TableCell>
-                            <TableCell className="capitalize">{lead.origem || "—"}</TableCell>
-                            <TableCell>
-                              <Select
-                                value={lead.idResponsavel ? String(lead.idResponsavel) : "unassigned"}
-                                onValueChange={value =>
-                                  assignLead.mutate({
-                                    leadId: lead.id,
-                                    userId: value === "unassigned" ? null : Number(value),
-                                  })
-                                }
-                              >
-                                <SelectTrigger className={`${FIELD_CLASS} w-44`}>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="unassigned">Não atribuído</SelectItem>
-                                  {corretoresAtivos.map(corretor => (
-                                    <SelectItem key={corretor.id} value={String(corretor.id)}>
-                                      {corretor.name || corretor.email || `Corretor #${corretor.id}`}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </TableCell>
-                            <TableCell>{formatStoredDate(lead.createdAt)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ) : (
-                  <div className="py-12 text-center">
-                    <TrendingUp className="mx-auto mb-4 h-12 w-12 text-slate-400" />
-                    <p className="text-slate-600">
-                      {searchTerm ? "Nenhum lead encontrado para essa pesquisa" : "Nenhum lead encontrado"}
                     </p>
                   </div>
                 )}

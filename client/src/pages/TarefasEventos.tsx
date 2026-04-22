@@ -45,7 +45,7 @@ type TaskTemplate = RouterOutput["tasks"]["templates"][number];
 type TaskKind = "tarefa" | "evento";
 type TaskSector = "administrativo" | "financeiro" | "atendimento" | "comercial" | "juridico";
 type TaskFormStatus = "pendente" | "em_andamento" | "concluida";
-type TaskComputedStatus = "pendente" | "em_andamento" | "atrasado";
+type TaskComputedStatus = "pendente" | "em_andamento" | "atrasado" | "concluida";
 type ViewMode = "todos" | "minhas";
 type KindFilter = "todos" | TaskKind;
 
@@ -54,7 +54,7 @@ const SURFACE_CARD_CLASS =
 const FIELD_CLASS =
   "rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base";
 
-const STATUS_LABELS: Record<TaskComputedStatus | "concluida", string> = {
+const STATUS_LABELS: Record<TaskComputedStatus, string> = {
   pendente: "Pendente",
   em_andamento: "Em andamento",
   atrasado: "Atrasado",
@@ -299,6 +299,7 @@ export default function TarefasEventos() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [createAssigneeSearchTerm, setCreateAssigneeSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("todos");
   const [kindFilter, setKindFilter] = useState<KindFilter>("todos");
   const [newNote, setNewNote] = useState("");
@@ -307,10 +308,10 @@ export default function TarefasEventos() {
   const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
   const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
   const [isTemplateSectionExpandedMobile, setIsTemplateSectionExpandedMobile] = useState(false);
-  const [isPendingColumnExpandedMobile, setIsPendingColumnExpandedMobile] = useState(true);
-  const [isInProgressColumnExpandedMobile, setIsInProgressColumnExpandedMobile] = useState(true);
-  const [isOverdueColumnExpandedMobile, setIsOverdueColumnExpandedMobile] = useState(true);
-  const [isDoneColumnExpandedMobile, setIsDoneColumnExpandedMobile] = useState(true);
+  const [isPendingColumnExpandedMobile, setIsPendingColumnExpandedMobile] = useState(false);
+  const [isInProgressColumnExpandedMobile, setIsInProgressColumnExpandedMobile] = useState(false);
+  const [isOverdueColumnExpandedMobile, setIsOverdueColumnExpandedMobile] = useState(false);
+  const [isDoneColumnExpandedMobile, setIsDoneColumnExpandedMobile] = useState(false);
   const [taskTemplateForm, setTaskTemplateForm] = useState<TaskTemplateFormState>(
     EMPTY_TASK_TEMPLATE_FORM
   );
@@ -339,6 +340,10 @@ export default function TarefasEventos() {
     () => taskItems.find(taskItem => taskItem.id === selectedTaskId) ?? null,
     [selectedTaskId, taskItems]
   );
+  const canEditSelectedTask = useMemo(() => {
+    if (!selectedTask || !user) return false;
+    return user.role === "administrativo" || selectedTask.createdByUserId === user.id;
+  }, [selectedTask, user]);
 
   const { data: selectedTaskNotes = [] } = trpc.tasks.notes.useQuery(
     { taskId: selectedTaskId ?? 0 },
@@ -369,15 +374,11 @@ export default function TarefasEventos() {
         selectedTaskId ? utils.tasks.notes.invalidate({ taskId: selectedTaskId }) : Promise.resolve(),
       ]);
 
-      if (result.action === "deleted") {
-        toast.success("Tarefa/Evento concluido e removido.");
-        setSelectedTaskId(null);
-        setDetailsOpen(false);
-        setTaskForm(EMPTY_TASK_FORM);
-        return;
+      if (result.task.computedStatus === "concluida") {
+        toast.success("Tarefa/Evento concluido e mantido no historico dos ultimos 30 dias.");
+      } else {
+        toast.success("Tarefa/Evento atualizado com sucesso.");
       }
-
-      toast.success("Tarefa/Evento atualizado com sucesso.");
       setDetailsOpen(false);
       setSelectedTaskId(null);
       setTaskForm(EMPTY_TASK_FORM);
@@ -460,6 +461,20 @@ export default function TarefasEventos() {
     [selectedCalendarDate]
   );
 
+  const filteredCreateAssigneeUsers = useMemo(() => {
+    const rawTerm = createAssigneeSearchTerm.trim();
+    if (!rawTerm) return taskUsers;
+
+    const normalizedTerm = normalizeSearch(rawTerm);
+
+    return taskUsers.filter(taskUser => {
+      const displayName = getUserDisplayName(taskUser);
+      const email = taskUser.email || "";
+      const role = taskUser.role || "";
+      return normalizeSearch(`${displayName} ${email} ${role}`).includes(normalizedTerm);
+    });
+  }, [createAssigneeSearchTerm, taskUsers]);
+
   const sortedTaskTemplates = useMemo(
     () =>
       [...taskTemplates].sort((a, b) => {
@@ -487,7 +502,7 @@ export default function TarefasEventos() {
         return false;
       }
 
-      if (isCalendarFilterActive) {
+      if (isCalendarFilterActive && taskItem.computedStatus !== "concluida") {
         if (!taskItem.dueAt) return false;
         const dueDate = new Date(taskItem.dueAt);
         if (Number.isNaN(dueDate.getTime())) return false;
@@ -503,6 +518,7 @@ export default function TarefasEventos() {
     taskItem => taskItem.computedStatus === "em_andamento"
   );
   const overdueTaskItems = filteredTaskItems.filter(taskItem => taskItem.computedStatus === "atrasado");
+  const completedTaskItems = filteredTaskItems.filter(taskItem => taskItem.computedStatus === "concluida");
 
   const calendarMonthGrid = useMemo(() => createMonthGrid(calendarMonth), [calendarMonth]);
   const dayMarkers = useMemo(() => {
@@ -556,8 +572,12 @@ export default function TarefasEventos() {
   };
 
   const openCreateDialog = () => {
-    setTaskForm(EMPTY_TASK_FORM);
+    setTaskForm({
+      ...EMPTY_TASK_FORM,
+      dueAt: toDateTimeLocalValue(new Date()),
+    });
     setSelectedTemplateId(null);
+    setCreateAssigneeSearchTerm("");
     setCreateOpen(true);
   };
 
@@ -594,16 +614,13 @@ export default function TarefasEventos() {
 
   const handleUpdateTask = async () => {
     if (!selectedTaskId) return;
-    if (!taskForm.title.trim()) {
-      toast.warning("Informe um nome para a tarefa/evento.");
+    if (!canEditSelectedTask) {
+      toast.warning("Somente o criador ou um administrador pode alterar esta tarefa/evento.");
       return;
     }
 
     await updateTaskMutation.mutateAsync({
       id: selectedTaskId,
-      title: taskForm.title,
-      kind: taskForm.kind,
-      sector: taskForm.sector,
       dueAt: taskForm.dueAt || null,
       description: taskForm.description || null,
       status: taskForm.status,
@@ -613,11 +630,19 @@ export default function TarefasEventos() {
 
   const handleDeleteTask = async () => {
     if (!selectedTaskId) return;
+    if (!canEditSelectedTask) {
+      toast.warning("Somente o criador ou um administrador pode excluir esta tarefa/evento.");
+      return;
+    }
     await deleteTaskMutation.mutateAsync({ id: selectedTaskId });
   };
 
   const handleAddNote = async () => {
     if (!selectedTaskId) return;
+    if (!canEditSelectedTask) {
+      toast.warning("Somente o criador ou um administrador pode adicionar observacoes.");
+      return;
+    }
     if (!newNote.trim()) {
       toast.warning("Digite uma observacao antes de adicionar.");
       return;
@@ -761,7 +786,7 @@ export default function TarefasEventos() {
                 </Button>
               </DialogTrigger>
 
-              <DialogContent className="max-h-[90vh] w-full max-w-2xl overflow-y-auto scrollbar-hidden rounded-[32px] border-white/80 bg-[#f7f6f2] p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)] sm:p-6">
+              <DialogContent className="max-h-[90vh] w-full max-w-[calc(100%-2rem)] overflow-y-auto scrollbar-hidden rounded-[32px] border-white/80 bg-[#f7f6f2] p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)] sm:max-w-xl lg:max-w-xl sm:p-6">
                 <DialogHeader className="space-y-3 pb-2">
                   <DialogTitle className="text-2xl font-semibold tracking-tight text-slate-950">
                     Criar Novo Registro
@@ -881,8 +906,17 @@ export default function TarefasEventos() {
 
                   <div className="space-y-2">
                     <Label>Usuarios vinculados</Label>
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <Input
+                        className={`${FIELD_CLASS} pl-9`}
+                        placeholder="Buscar usuario vinculado..."
+                        value={createAssigneeSearchTerm}
+                        onChange={event => setCreateAssigneeSearchTerm(event.target.value)}
+                      />
+                    </div>
                     <div className="grid max-h-48 grid-cols-1 gap-2 overflow-y-auto scrollbar-hidden rounded-2xl border border-slate-200 bg-white/80 p-3 sm:grid-cols-2">
-                      {taskUsers.map(taskUser => {
+                      {filteredCreateAssigneeUsers.map(taskUser => {
                         const isSelected = taskForm.assigneeIds.includes(taskUser.id);
                         return (
                           <button
@@ -900,6 +934,11 @@ export default function TarefasEventos() {
                           </button>
                         );
                       })}
+                      {filteredCreateAssigneeUsers.length === 0 ? (
+                        <p className="col-span-full rounded-xl border border-dashed border-slate-200 bg-white px-3 py-4 text-center text-sm text-slate-500">
+                          Nenhum usuario encontrado para esta busca.
+                        </p>
+                      ) : null}
                     </div>
                   </div>
 
@@ -1386,7 +1425,7 @@ export default function TarefasEventos() {
                         Prazo vencido em: {taskItem.dueAt ? formatTaskDueDateTime(taskItem.dueAt) : "-"}
                       </p>
                       <p className="mt-3 text-xs text-rose-700">
-                        Ajuste o status ou conclua para remover.
+                        Ajuste o status para atualizar esta pendencia.
                       </p>
                     </button>
                   ))
@@ -1399,7 +1438,7 @@ export default function TarefasEventos() {
 
               <TaskColumn
                 title="Concluidas"
-                count={0}
+                count={completedTaskItems.length}
                 icon={CheckCircle2}
                 iconClassName="text-emerald-600"
                 isExpandedMobile={isDoneColumnExpandedMobile}
@@ -1407,13 +1446,36 @@ export default function TarefasEventos() {
                   setIsDoneColumnExpandedMobile(current => !current)
                 }
               >
-                <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-emerald-900">
-                  Ao marcar uma tarefa/evento como <strong>Concluida</strong>, ela e removida do sistema
-                  automaticamente.
-                </div>
-                <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">
-                  Sem historico persistente nesta etapa, conforme solicitado para foco em demandas atuais.
-                </div>
+                {completedTaskItems.length > 0 ? (
+                  completedTaskItems.map(taskItem => (
+                    <button
+                      key={taskItem.id}
+                      type="button"
+                      onClick={() => openDetailsDialog(taskItem)}
+                      className="w-full rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-left transition-colors hover:bg-emerald-50"
+                    >
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <span className="rounded-full bg-white px-2 py-1 text-[11px] font-semibold text-emerald-700">
+                          #{taskItem.id}
+                        </span>
+                        <span className="rounded-full bg-emerald-100 px-2 py-1 text-[11px] font-semibold text-emerald-700">
+                          {KIND_LABELS[taskItem.kind]}
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-medium text-emerald-800">
+                        Setor: {SECTOR_LABELS[taskItem.sector]}
+                      </p>
+                      <p className="line-clamp-2 text-sm font-semibold text-emerald-950">{taskItem.title}</p>
+                      <p className="mt-2 text-xs text-emerald-800">
+                        Concluida em: {formatStoredDateTime(taskItem.updatedAt)}
+                      </p>
+                    </button>
+                  ))
+                ) : (
+                  <p className="rounded-2xl border border-dashed border-slate-200 p-4 text-center text-sm text-slate-500">
+                    Nenhum item concluido nos ultimos 30 dias.
+                  </p>
+                )}
               </TaskColumn>
             </div>
           )}
@@ -1496,8 +1558,7 @@ export default function TarefasEventos() {
                   #{selectedTask.id} • {selectedTask.title}
                 </DialogTitle>
                 <DialogDescription className="text-slate-600">
-                  Tipo: {KIND_LABELS[selectedTask.kind]} • Setor: {SECTOR_LABELS[selectedTask.sector]} • Status atual:{" "}
-                  {STATUS_LABELS[selectedTask.computedStatus]} • Criado por{" "}
+                  Status atual: {STATUS_LABELS[selectedTask.computedStatus]} • Criado por{" "}
                   {selectedTask.createdBy?.name || selectedTask.createdBy?.email || "-"}
                 </DialogDescription>
               </DialogHeader>
@@ -1505,79 +1566,32 @@ export default function TarefasEventos() {
               <div className="space-y-6">
                 <Card className="rounded-[28px] border-white/80 bg-white/90 shadow-[0_20px_50px_-34px_rgba(15,23,42,0.32)]">
                   <CardContent className="space-y-4 p-5">
+                    {!canEditSelectedTask ? (
+                      <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-3 text-sm text-amber-900">
+                        Visualizacao somente leitura: apenas o criador ou um usuario administrativo pode alterar.
+                      </div>
+                    ) : null}
                     <div className="space-y-2">
-                      <Label htmlFor="detail-title">Nome</Label>
-                      <Input
-                        id="detail-title"
-                        className={FIELD_CLASS}
-                        value={taskForm.title}
-                        onChange={event =>
-                          setTaskForm(current => ({ ...current, title: event.target.value }))
+                      <Label htmlFor="detail-status">Status</Label>
+                      <Select
+                        value={taskForm.status}
+                        disabled={!canEditSelectedTask}
+                        onValueChange={value =>
+                          setTaskForm(current => ({ ...current, status: value as TaskFormStatus }))
                         }
-                      />
-                    </div>
-
-                    <div className="grid gap-4 sm:grid-cols-3">
-                      <div className="space-y-2">
-                        <Label htmlFor="detail-kind">Tipo</Label>
-                        <Select
-                          value={taskForm.kind}
-                          onValueChange={value =>
-                            setTaskForm(current => ({ ...current, kind: value as TaskKind }))
-                          }
-                        >
-                          <SelectTrigger id="detail-kind" className={FIELD_CLASS}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="tarefa">Tarefa</SelectItem>
-                            <SelectItem value="evento">Evento</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="detail-sector">Setor</Label>
-                        <Select
-                          value={taskForm.sector}
-                          onValueChange={value =>
-                            setTaskForm(current => ({ ...current, sector: value as TaskSector }))
-                          }
-                        >
-                          <SelectTrigger id="detail-sector" className={FIELD_CLASS}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {SECTOR_OPTIONS.map(option => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="detail-status">Status</Label>
-                        <Select
-                          value={taskForm.status}
-                          onValueChange={value =>
-                            setTaskForm(current => ({ ...current, status: value as TaskFormStatus }))
-                          }
-                        >
-                          <SelectTrigger id="detail-status" className={FIELD_CLASS}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="pendente">Pendente</SelectItem>
-                            <SelectItem value="em_andamento">Em andamento</SelectItem>
-                            <SelectItem value="concluida">Concluida (remove)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-slate-500">
-                          "Atrasado" e automatico quando o prazo vence.
-                        </p>
-                      </div>
+                      >
+                        <SelectTrigger id="detail-status" className={FIELD_CLASS}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pendente">Pendente</SelectItem>
+                          <SelectItem value="em_andamento">Em andamento</SelectItem>
+                          <SelectItem value="concluida">Concluida</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-slate-500">
+                        "Atrasado" e automatico quando o prazo vence.
+                      </p>
                     </div>
 
                     <div className="space-y-2">
@@ -1587,6 +1601,7 @@ export default function TarefasEventos() {
                         type="datetime-local"
                         className={FIELD_CLASS}
                         value={taskForm.dueAt}
+                        disabled={!canEditSelectedTask}
                         onChange={event =>
                           setTaskForm(current => ({ ...current, dueAt: event.target.value }))
                         }
@@ -1602,11 +1617,13 @@ export default function TarefasEventos() {
                             <button
                               key={taskUser.id}
                               type="button"
+                              disabled={!canEditSelectedTask}
                               onClick={() => toggleAssignee(taskUser.id)}
                               className={`rounded-xl border px-3 py-2 text-left text-sm transition-colors ${
                                 isSelected
                                   ? "border-emerald-300 bg-emerald-50 text-emerald-900"
-                                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                                  : "border-slate-200 bg-white text-slate-700"
+                              } ${!canEditSelectedTask ? "cursor-not-allowed opacity-70" : "hover:bg-slate-50"
                               }`}
                             >
                               <p className="font-medium">{getUserDisplayName(taskUser)}</p>
@@ -1623,6 +1640,7 @@ export default function TarefasEventos() {
                         id="detail-description"
                         className={`${FIELD_CLASS} resize-none`}
                         value={taskForm.description}
+                        disabled={!canEditSelectedTask}
                         onChange={event =>
                           setTaskForm(current => ({ ...current, description: event.target.value }))
                         }
@@ -1634,7 +1652,7 @@ export default function TarefasEventos() {
                       <Button
                         className="rounded-full bg-emerald-700 text-white hover:bg-emerald-800"
                         onClick={handleUpdateTask}
-                        disabled={updateTaskMutation.isPending}
+                        disabled={!canEditSelectedTask || updateTaskMutation.isPending}
                       >
                         {updateTaskMutation.isPending ? "Salvando..." : "Salvar alteracoes"}
                       </Button>
@@ -1642,7 +1660,7 @@ export default function TarefasEventos() {
                         variant="outline"
                         className="rounded-full border-rose-200 text-rose-700 hover:bg-rose-50"
                         onClick={handleDeleteTask}
-                        disabled={deleteTaskMutation.isPending}
+                        disabled={!canEditSelectedTask || deleteTaskMutation.isPending}
                       >
                         Excluir tarefa/evento
                       </Button>
@@ -1654,7 +1672,9 @@ export default function TarefasEventos() {
                   <CardHeader>
                     <CardTitle className="text-lg text-slate-950">Observacoes da tarefa</CardTitle>
                     <CardDescription className="text-slate-600">
-                      Adicione observacoes enquanto a tarefa/evento estiver ativa.
+                      {canEditSelectedTask
+                        ? "Adicione observacoes enquanto a tarefa/evento estiver ativa."
+                        : "Somente leitura para usuarios vinculados sem permissao de edicao."}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -1662,6 +1682,7 @@ export default function TarefasEventos() {
                       <Textarea
                         className={`${FIELD_CLASS} resize-none`}
                         value={newNote}
+                        disabled={!canEditSelectedTask}
                         onChange={event => setNewNote(event.target.value)}
                         rows={3}
                         placeholder="Adicionar observacao..."
@@ -1669,7 +1690,7 @@ export default function TarefasEventos() {
                       <Button
                         className="rounded-full bg-slate-950 text-white hover:bg-slate-800"
                         onClick={handleAddNote}
-                        disabled={addNoteMutation.isPending}
+                        disabled={!canEditSelectedTask || addNoteMutation.isPending}
                       >
                         Adicionar observacao
                       </Button>

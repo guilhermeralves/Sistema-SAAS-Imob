@@ -1,5 +1,7 @@
 ﻿import { useState } from "react";
 import Layout from "@/components/Layout";
+import { useEffect } from "react";
+import { useMemo } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,9 +10,18 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue,} from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger,} from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { formatCpf, isValidCpf } from "@/lib/cpf";
 import { trpc } from "@/lib/trpc";
-import { Users, Plus, Phone, Mail, MessageSquare, FileText, User } from "lucide-react";
+import { Users, Plus, Phone, Mail, MessageSquare, FileText, Search, User, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
 import { getLoginUrl } from "@/const";
 
@@ -20,18 +31,22 @@ import { getLoginUrl } from "@/const";
  * Sistema de gestão de leads com pipeline para corretores e administrativos.
  * 
  * EDIÇÃO:
- * - Para modificar os status do pipeline: edite PIPELINE_STATUS
- * - Para alterar cores dos status: edite PIPELINE_STATUS
+ * - Para modificar os status do pipeline: edite LEAD_STATUS_OPTIONS
+ * - Para alterar filtros/cores dos cards: edite LEAD_FILTER_OPTIONS
  */
 
 // ========== ÁREA DE EDIÇÃO - PIPELINE ==========
-const PIPELINE_STATUS = [
+const LEAD_STATUS_OPTIONS = [
   { value: "novo", label: "Novos Leads", color: "bg-blue-100 text-blue-700" },
   { value: "atendimento", label: "Em Atendimento", color: "bg-purple-100 text-purple-700" },
   { value: "proposta", label: "Proposta", color: "bg-yellow-100 text-yellow-700" },
   { value: "negociacao", label: "Negociação", color: "bg-orange-100 text-orange-700" },
   { value: "fechado", label: "Fechado", color: "bg-green-100 text-green-700" },
   { value: "perdidos", label: "Perdidos", color: "bg-red-100 text-red-700" },
+];
+const LEAD_FILTER_OPTIONS = [
+  { value: "todos", label: "Todos os Leads", color: "bg-emerald-100 text-emerald-700" },
+  ...LEAD_STATUS_OPTIONS,
 ];
 
 const MANUAL_ORIGIN_OPTIONS = [
@@ -45,6 +60,9 @@ const SURFACE_CARD_CLASS =
   "rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)] backdrop-blur";
 const FIELD_CLASS =
   "rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base";
+const BUSINESS_TIMEZONE = "America/Sao_Paulo";
+const ASSIGNMENT_TIMEOUT_MINUTES = 15;
+const ATTENDANCE_TIMEOUT_MINUTES = 40;
 
 function formatDateTime(date: Date | string | null) {
   if (!date) return "Data não disponível";
@@ -88,13 +106,223 @@ function getLeadOriginLabel(origin: string | null | undefined) {
   }
 }
 
+function getAgeFromBirthDate(value: Date | string | null | undefined) {
+  if (!value) return null;
+
+  let birthDate: Date | null = null;
+
+  if (value instanceof Date) {
+    birthDate = Number.isNaN(value.getTime()) ? null : value;
+  } else if (typeof value === "string") {
+    const rawValue = value.trim();
+    const isoDateMatch = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const brDateMatch = rawValue.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+
+    if (isoDateMatch) {
+      const [, year, month, day] = isoDateMatch;
+      birthDate = new Date(Number(year), Number(month) - 1, Number(day));
+    } else if (brDateMatch) {
+      const [, day, month, year] = brDateMatch;
+      birthDate = new Date(Number(year), Number(month) - 1, Number(day));
+    } else {
+      const parsedDate = new Date(rawValue);
+      birthDate = Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+    }
+  }
+
+  if (!birthDate) {
+    return null;
+  }
+
+  if (Number.isNaN(birthDate.getTime())) {
+    return null;
+  }
+
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age -= 1;
+  }
+
+  return age >= 0 ? age : null;
+}
+
+function getSaoPauloWeekdayAndTime(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: BUSINESS_TIMEZONE,
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+
+  const weekday = parts.find(part => part.type === "weekday")?.value ?? "Sun";
+  const hour = Number(parts.find(part => part.type === "hour")?.value ?? "0");
+  const minute = Number(parts.find(part => part.type === "minute")?.value ?? "0");
+
+  return { weekday, hour, minute };
+}
+
+function isBusinessTime(date: Date) {
+  const { weekday, hour, minute } = getSaoPauloWeekdayAndTime(date);
+  const totalMinutes = hour * 60 + minute;
+
+  if (["Mon", "Tue", "Wed", "Thu", "Fri"].includes(weekday)) {
+    return totalMinutes >= 9 * 60 && totalMinutes < 18 * 60;
+  }
+
+  if (weekday === "Sat") {
+    return totalMinutes >= 9 * 60 && totalMinutes < 13 * 60;
+  }
+
+  return false;
+}
+
+function findNextBusinessMinute(fromDate: Date) {
+  const cursor = new Date(fromDate.getTime());
+  for (let i = 0; i < 60 * 24 * 10; i += 1) {
+    if (isBusinessTime(cursor)) return cursor;
+    cursor.setMinutes(cursor.getMinutes() + 1, 0, 0);
+  }
+  return cursor;
+}
+
+function addBusinessMinutes(startDate: Date, minutes: number) {
+  const cursor = isBusinessTime(startDate)
+    ? new Date(startDate.getTime())
+    : findNextBusinessMinute(startDate);
+
+  let remaining = Math.max(0, minutes);
+  while (remaining > 0) {
+    cursor.setMinutes(cursor.getMinutes() + 1, 0, 0);
+    if (isBusinessTime(cursor)) {
+      remaining -= 1;
+    }
+  }
+
+  return cursor;
+}
+
+function businessMinutesUntil(fromDate: Date, toDate: Date) {
+  if (fromDate >= toDate) return 0;
+
+  const cursor = new Date(fromDate.getTime());
+  let minutes = 0;
+
+  for (let i = 0; i < 60 * 24 * 10; i += 1) {
+    if (cursor >= toDate) break;
+    if (isBusinessTime(cursor)) minutes += 1;
+    cursor.setMinutes(cursor.getMinutes() + 1, 0, 0);
+  }
+
+  return minutes;
+}
+
+function toDate(value: Date | string | null | undefined) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getLeadTimeStatus(
+  lead: {
+    status: string;
+    idResponsavel: number | null;
+    createdAt?: Date | string | null;
+    assignmentCycleStartedAt?: Date | string | null;
+    assignedAt?: Date | string | null;
+    attendedAt?: Date | string | null;
+  },
+  now: Date
+) {
+  if (lead.status === "fechado" || lead.status === "perdidos") {
+    return { label: "Encerrado", className: "bg-slate-100 text-slate-600" };
+  }
+
+  if (lead.status === "atendimento" || lead.attendedAt) {
+    return { label: "Atendido", className: "bg-emerald-100 text-emerald-700" };
+  }
+
+  if (!lead.idResponsavel) {
+    const baseDate = toDate(lead.assignmentCycleStartedAt) ?? toDate(lead.createdAt) ?? now;
+    const deadline = addBusinessMinutes(baseDate, ASSIGNMENT_TIMEOUT_MINUTES);
+
+    if (now >= deadline) {
+      return { label: "Atrasado", className: "bg-rose-100 text-rose-700" };
+    }
+
+    if (!isBusinessTime(now)) {
+      return { label: "Pausado", className: "bg-slate-100 text-slate-600" };
+    }
+
+    const minutesLeft = businessMinutesUntil(now, deadline);
+    return { label: `Direcionar ${minutesLeft} min`, className: "bg-amber-100 text-amber-700" };
+  }
+
+  const baseDate =
+    toDate(lead.assignedAt) ??
+    toDate(lead.assignmentCycleStartedAt) ??
+    toDate(lead.createdAt) ??
+    now;
+  const deadline = addBusinessMinutes(baseDate, ATTENDANCE_TIMEOUT_MINUTES);
+
+  if (now >= deadline) {
+    return { label: "Atrasado", className: "bg-rose-100 text-rose-700" };
+  }
+
+  if (!isBusinessTime(now)) {
+    return { label: "Pausado", className: "bg-slate-100 text-slate-600" };
+  }
+
+  const minutesLeft = businessMinutesUntil(now, deadline);
+  return { label: `Atender ${minutesLeft} min`, className: "bg-sky-100 text-sky-700" };
+}
+
+function normalizeSearchValue(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function buildLeadSearchText(lead: {
+  id: number;
+  nome: string;
+  email: string | null;
+  telefone: string | null;
+  status: string;
+  origem: string | null;
+  idResponsavel: number | null;
+  createdAt: string | Date | null;
+}) {
+  const values = [
+    String(lead.id),
+    lead.nome,
+    lead.email ?? "",
+    lead.telefone ?? "",
+    lead.status,
+    getLeadOriginLabel(lead.origem),
+    lead.idResponsavel ? `id ${lead.idResponsavel}` : "",
+    lead.createdAt ? formatDateTime(lead.createdAt) : "",
+  ];
+
+  return normalizeSearchValue(values.join(" "));
+}
+
 export default function CRM() {
   const { user, loading, isAuthenticated } = useAuth();
-  const [statusSelected, setStatusSelected] = useState<string>("novo");
+  const [clockNow, setClockNow] = useState(() => new Date());
+  const [statusSelected, setStatusSelected] = useState<string>("todos");
+  const [searchTerm, setSearchTerm] = useState("");
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const [newLeadOpen, setNewLeadOpen] = useState(false);
   const [leadDetailsOpen, setLeadDetailsOpen] = useState(false);
   const [newNote, setNewNote] = useState("");
+  const [isInteractionsCollapsed, setIsInteractionsCollapsed] = useState(true);
+  const [isNotesCollapsed, setIsNotesCollapsed] = useState(true);
+  const [isFilesCollapsed, setIsFilesCollapsed] = useState(true);
 
   const [newLeadData, setNewLeadData] = useState({
     nome: "",
@@ -106,13 +334,47 @@ export default function CRM() {
     observacao: "",
   });
 
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setClockNow(new Date());
+    }, 60 * 1000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (leadDetailsOpen) {
+      setIsInteractionsCollapsed(true);
+      setIsNotesCollapsed(true);
+      setIsFilesCollapsed(true);
+    }
+  }, [leadDetailsOpen, selectedLead?.id]);
+
   const { data: leads, isLoading, refetch } = trpc.leads.list.useQuery(
     undefined,
     { enabled: isAuthenticated && (user?.role === "corretor" || user?.role === "administrativo") }
   );
+  const { data: users } = trpc.admin.users.useQuery(undefined, {
+    enabled: isAuthenticated && user?.role === "administrativo",
+  });
 
   // Filtrar leads pelo status selecionado
-  const leadsFiltrados = leads?.filter(lead => lead.status === statusSelected) || [];
+  const leadsFiltrados =
+    leads?.filter(lead => (statusSelected === "todos" ? true : lead.status === statusSelected)) || [];
+  const showLeadTimeColumn = statusSelected === "todos";
+  const normalizedSearchTerm = normalizeSearchValue(searchTerm.trim());
+  const corretoresAtivos = useMemo(
+    () => users?.filter(candidate => candidate.role === "corretor" && candidate.isActive === 1) || [],
+    [users]
+  );
+  const usersById = useMemo(() => new Map((users ?? []).map(current => [current.id, current])), [users]);
+  const leadsFiltradosBuscaPorStatus = useMemo(() => {
+    if (!normalizedSearchTerm) return leadsFiltrados;
+
+    return leadsFiltrados.filter(lead => buildLeadSearchText(lead).includes(normalizedSearchTerm));
+  }, [leadsFiltrados, normalizedSearchTerm]);
 
 
   const { data: notes, refetch: refetchNotes } = trpc.leads.getNotes.useQuery(
@@ -121,6 +383,10 @@ export default function CRM() {
   );
 
   const { data: files } = trpc.leads.getFiles.useQuery(
+    { idLead: selectedLead?.id },
+    { enabled: !!selectedLead }
+  );
+  const { data: interactions, isLoading: loadingInteractions } = trpc.leads.getInteractions.useQuery(
     { idLead: selectedLead?.id },
     { enabled: !!selectedLead }
   );
@@ -151,8 +417,8 @@ export default function CRM() {
       toast.success("Lead atualizado!");
       refetch();
     },
-    onError: () => {
-      toast.error("Erro ao atualizar lead");
+    onError: error => {
+      toast.error(error.message || "Erro ao atualizar lead");
     },
   });
 
@@ -164,6 +430,16 @@ export default function CRM() {
     },
     onError: () => {
       toast.error("Erro ao adicionar anotação");
+    },
+  });
+
+  const assignLead = trpc.leads.assign.useMutation({
+    onSuccess: () => {
+      toast.success("Lead atribuído com sucesso!");
+      refetch();
+    },
+    onError: () => {
+      toast.error("Erro ao atribuir lead");
     },
   });
 
@@ -203,6 +479,11 @@ export default function CRM() {
   };
 
   const handleStatusChange = (leadId: number, newStatus: string) => {
+    if (!selectedLead?.idResponsavel) {
+      toast.warning("Direcione o lead para um responsável antes de alterar o status.");
+      return;
+    }
+
     updateLead.mutate(
       { id: leadId, status: newStatus },
       {
@@ -231,6 +512,16 @@ export default function CRM() {
 
     addNote.mutate({ idLead: selectedLead.id, anotacao: newNote });
   };
+
+  const selectedLeadLinkedUser = useMemo(() => {
+    if (!selectedLead?.userId) return null;
+    return usersById.get(selectedLead.userId) ?? null;
+  }, [selectedLead?.userId, usersById]);
+
+  const selectedLeadAge = useMemo(
+    () => getAgeFromBirthDate(selectedLead?.birthDate ?? selectedLead?.userBirthDate ?? selectedLeadLinkedUser?.birthDate),
+    [selectedLead?.birthDate, selectedLead?.userBirthDate, selectedLeadLinkedUser?.birthDate]
+  );
 
   if (loading) {
     return (
@@ -420,8 +711,11 @@ export default function CRM() {
         </div>
 
         <div className="mb-8 grid grid-cols-2 gap-5 md:grid-cols-3 lg:grid-cols-6">
-          {PIPELINE_STATUS.map((status) => {
-            const qtdLeads = leads?.filter(l => l.status === status.value).length || 0;
+          {LEAD_FILTER_OPTIONS.map((status) => {
+            const qtdLeads =
+              status.value === "todos"
+                ? leads?.length || 0
+                : leads?.filter(l => l.status === status.value).length || 0;
             const isSelected = statusSelected === status.value;
 
             return (
@@ -452,70 +746,216 @@ export default function CRM() {
           })}
         </div>
 
-        {/* Pipeline */}
-        {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="h-64 bg-muted rounded animate-pulse" />
-            ))}
-          </div>
-        ) : (
-            <Card className={SURFACE_CARD_CLASS}>
-                <CardHeader>
-                  <CardTitle className="text-slate-950">
-                    {PIPELINE_STATUS.find(s => s.value === statusSelected)?.label}
-                  </CardTitle>
-                  <CardDescription className="text-slate-600">
-                    {leadsFiltrados.length} lead(s) encontrado(s) 
-                  </CardDescription>
-                </CardHeader>
-              <CardContent>
-                {isLoading ? (
-                  <div className="text-center py-8">
-                    <p className="text-slate-600">Carregando leads...</p>
-                  </div>
-                ) : leadsFiltrados.length === 0 ? (
-                  <div className="text-center py-8">
-                    <p className="text-slate-600">Nenhum lead neste status</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {leadsFiltrados.map((lead) => (
-                      <div
-                        key={lead.id}
-                        className="cursor-pointer rounded-2xl border border-slate-200 bg-white/80 p-4 transition-colors hover:bg-white"
-                        onClick={() => {
-                          setSelectedLead(lead);
-                          setLeadDetailsOpen(true);
-                        }}
-                      >
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-slate-950">{lead.nome}</h3>
-                          <div className="mt-2 flex gap-4 text-sm text-slate-500">
-                            <span className="flex items-center gap-1">
-                              <Phone className="h-3 w-3" />
-                              {lead.telefone}
-                            </span>
+        {user?.role === "administrativo" ? (
+          <Card className={`${SURFACE_CARD_CLASS} mb-8`}>
+            <CardHeader>
+              <CardTitle className="text-slate-950">
+                {LEAD_FILTER_OPTIONS.find(s => s.value === statusSelected)?.label}
+              </CardTitle>
+              <CardDescription className="text-slate-600">
+                {leadsFiltradosBuscaPorStatus.length} lead(s) encontrado(s) para o status selecionado
+              </CardDescription>
+              <div className="relative mt-2 max-w-xl">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  value={searchTerm}
+                  onChange={event => setSearchTerm(event.target.value)}
+                  placeholder="Pesquisar leads"
+                  className={`${FIELD_CLASS} pl-9`}
+                />
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map(item => (
+                    <div key={item} className="h-16 animate-pulse rounded bg-muted" />
+                  ))}
+                </div>
+              ) : leadsFiltradosBuscaPorStatus.length > 0 ? (
+                <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white/80">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>E-mail</TableHead>
+                        <TableHead>Telefone</TableHead>
+                        <TableHead>Status</TableHead>
+                        {showLeadTimeColumn ? <TableHead>Tempo</TableHead> : null}
+                        <TableHead>Origem</TableHead>
+                        <TableHead>Responsável</TableHead>
+                        <TableHead>Cadastro</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {leadsFiltradosBuscaPorStatus.map(lead => {
+                        const responsibleValue = lead.idResponsavel ? String(lead.idResponsavel) : "unassigned";
+                        const missingResponsible =
+                          lead.idResponsavel !== null &&
+                          !corretoresAtivos.some(corretor => corretor.id === lead.idResponsavel);
+                        const missingResponsibleLabel = lead.idResponsavel
+                          ? usersById.get(lead.idResponsavel)?.name ||
+                            usersById.get(lead.idResponsavel)?.email ||
+                            `Corretor #${lead.idResponsavel}`
+                          : null;
+                        const leadTimeStatus = getLeadTimeStatus(lead, clockNow);
+                        const leadCreatedAtTooltip = `Lead criado em ${formatDateTime(lead.createdAt)}`;
 
-                            {lead.email && (
-                              <span className="flex items-center gap-1">
-                                <Mail className="h-3 w-3" />
-                                {lead.email}
+                        return (
+                          <TableRow key={lead.id}>
+                            <TableCell className="font-medium">
+                              <button
+                                type="button"
+                                className="text-left text-slate-950 hover:text-emerald-700 hover:underline"
+                                onClick={() => {
+                                  setSelectedLead(lead);
+                                  setLeadDetailsOpen(true);
+                                }}
+                              >
+                                {lead.nome}
+                              </button>
+                            </TableCell>
+                            <TableCell>{lead.email || "—"}</TableCell>
+                            <TableCell>{lead.telefone || "—"}</TableCell>
+                            <TableCell>
+                              <span className="rounded-full bg-primary/10 px-2 py-1 text-xs font-medium capitalize text-primary">
+                                {lead.status}
                               </span>
-                            )}
-                          </div>
-                        </div>
+                            </TableCell>
+                            {showLeadTimeColumn ? (
+                              <TableCell>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-700/35"
+                                      title={leadCreatedAtTooltip}
+                                    >
+                                      <span className={`rounded-full px-2 py-1 text-xs font-medium ${leadTimeStatus.className}`}>
+                                        {leadTimeStatus.label}
+                                      </span>
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" sideOffset={6}>
+                                    {leadCreatedAtTooltip}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TableCell>
+                            ) : null}
+                            <TableCell className="capitalize">{getLeadOriginLabel(lead.origem)}</TableCell>
+                            <TableCell>
+                              <Select
+                                value={responsibleValue}
+                                onValueChange={value =>
+                                  assignLead.mutate({
+                                    leadId: lead.id,
+                                    userId: value === "unassigned" ? null : Number(value),
+                                  })
+                                }
+                              >
+                                <SelectTrigger className={`${FIELD_CLASS} w-44`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="unassigned">Não atribuído</SelectItem>
+                                  {corretoresAtivos.map(corretor => (
+                                    <SelectItem key={corretor.id} value={String(corretor.id)}>
+                                      {corretor.name || corretor.email || `Corretor #${corretor.id}`}
+                                    </SelectItem>
+                                  ))}
+                                  {missingResponsible && missingResponsibleLabel ? (
+                                    <SelectItem value={String(lead.idResponsavel)}>{missingResponsibleLabel}</SelectItem>
+                                  ) : null}
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell>{formatDateTime(lead.createdAt)}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="py-12 text-center">
+                  <Users className="mx-auto mb-4 h-12 w-12 text-slate-400" />
+                  <p className="text-slate-600">
+                    {searchTerm ? "Nenhum lead encontrado para essa pesquisa neste status" : "Nenhum lead neste status"}
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {user?.role !== "administrativo" ? (
+          <>
+            {/* Pipeline */}
+            {isLoading ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <div key={i} className="h-64 bg-muted rounded animate-pulse" />
+                ))}
+              </div>
+            ) : (
+                <Card className={SURFACE_CARD_CLASS}>
+                    <CardHeader>
+                      <CardTitle className="text-slate-950">
+                        {LEAD_FILTER_OPTIONS.find(s => s.value === statusSelected)?.label}
+                      </CardTitle>
+                      <CardDescription className="text-slate-600">
+                        {leadsFiltrados.length} lead(s) encontrado(s) 
+                      </CardDescription>
+                    </CardHeader>
+                  <CardContent>
+                    {isLoading ? (
+                      <div className="text-center py-8">
+                        <p className="text-slate-600">Carregando leads...</p>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-        )}
+                    ) : leadsFiltrados.length === 0 ? (
+                      <div className="text-center py-8">
+                        <p className="text-slate-600">Nenhum lead neste status</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {leadsFiltrados.map((lead) => (
+                          <div
+                            key={lead.id}
+                            className="cursor-pointer rounded-2xl border border-slate-200 bg-white/80 p-4 transition-colors hover:bg-white"
+                            onClick={() => {
+                              setSelectedLead(lead);
+                              setLeadDetailsOpen(true);
+                            }}
+                          >
+                            <div className="flex-1">
+                              <h3 className="font-semibold text-slate-950">{lead.nome}</h3>
+                              <div className="mt-2 flex gap-4 text-sm text-slate-500">
+                                <span className="flex items-center gap-1">
+                                  <Phone className="h-3 w-3" />
+                                  {lead.telefone}
+                                </span>
+
+                                {lead.email && (
+                                  <span className="flex items-center gap-1">
+                                    <Mail className="h-3 w-3" />
+                                    {lead.email}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+            )}
+          </>
+        ) : null}
 
         {/* DIALOG DETALHES DO LEAD */}
         <Dialog open={leadDetailsOpen} onOpenChange={setLeadDetailsOpen}>
-          <DialogContent className="max-h-[95vh] w-full max-w-[calc(100%-2rem)] overflow-y-auto scrollbar-hidden rounded-[32px] border-white/80 bg-[#f7f6f2] p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)] sm:max-w-lg sm:p-6 lg:max-w-5xl">
+          <DialogContent className="max-h-[95vh] w-full max-w-[calc(100%-2rem)] overflow-y-auto scrollbar-hidden rounded-[32px] border-white/80 bg-[#f7f6f2] p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)] sm:max-w-lg sm:p-6 lg:max-w-[40%]">
             {selectedLead && (
               <>
                 <DialogHeader className="max-w-3xl space-y-3 pb-2">
@@ -533,142 +973,280 @@ export default function CRM() {
                   <Card className="rounded-[28px] border-white/80 bg-white/90 shadow-[0_20px_50px_-34px_rgba(15,23,42,0.32)]">
                     <CardHeader>
                       <CardTitle className="text-lg text-slate-950">Informações</CardTitle>
+                      <p className="text-sm text-slate-600">
+                        CPF: {selectedLead.cpf ? formatCpf(selectedLead.cpf) : "Não informado"} • Idade:{" "}
+                        {selectedLeadAge !== null ? `${selectedLeadAge} anos` : "Não informada"}
+                      </p>
                     </CardHeader>
-                    <CardContent className="space-y-3">
-                      {selectedLead.email && (
-                        <div className="flex items-center gap-2">
-                          <Mail className="h-4 w-4 text-slate-500" />
-                          <span className="text-sm">{selectedLead.email}</span>
-                        </div>
-                      )}
-                      {selectedLead.telefone && (
-                        <div className="flex items-center gap-2">
-                          <Phone className="h-4 w-4 text-slate-500" />
-                          <span className="text-sm">{selectedLead.telefone}</span>
-                        </div>
-                      )}
-                      <div>
-                        <Label>Origem</Label>
-                        <p className="mt-1 text-sm text-slate-600">
-                          {getLeadOriginLabel(selectedLead.origem)}
-                        </p>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Status</Label>
-                        <Select
-                          value={selectedLead.status}
-                          onValueChange={(value) => handleStatusChange(selectedLead.id, value) }
-                        >
-                          <SelectTrigger className={FIELD_CLASS}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {PIPELINE_STATUS.map((status) => (
-                              <SelectItem key={status.value} value={status.value}>
-                                {status.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      {selectedLead.interesse && (
-                        <div>
-                          <Label>Interesse</Label>
+                    <CardContent className="space-y-5">
+                      <div className="grid gap-4 md:grid-cols-2">
+                        {selectedLead.email && (
+                          <div className="rounded-2xl border border-slate-200 bg-white/80 p-3">
+                            <Label>E-mail</Label>
+                            <p className="mt-1 flex items-center gap-2 text-sm text-slate-700">
+                              <Mail className="h-4 w-4 text-slate-500" />
+                              {selectedLead.email}
+                            </p>
+                          </div>
+                        )}
+                        {selectedLead.telefone && (
+                          <div className="rounded-2xl border border-slate-200 bg-white/80 p-3">
+                            <Label>Telefone</Label>
+                            <p className="mt-1 flex items-center gap-2 text-sm text-slate-700">
+                              <Phone className="h-4 w-4 text-slate-500" />
+                              {selectedLead.telefone}
+                            </p>
+                          </div>
+                        )}
+                        <div className="rounded-2xl border border-slate-200 bg-white/80 p-3">
+                          <Label>Origem</Label>
                           <p className="mt-1 text-sm text-slate-600">
-                            {selectedLead.interesse}
+                            {getLeadOriginLabel(selectedLead.origem)}
                           </p>
                         </div>
-                      )}
-                      {selectedLead.observacao && (
+                        <div className="rounded-2xl border border-slate-200 bg-white/80 p-3 space-y-2">
+                          <Label>Status</Label>
+                          <Select
+                            value={selectedLead.status}
+                            disabled={!selectedLead.idResponsavel}
+                            onValueChange={(value) => handleStatusChange(selectedLead.id, value) }
+                          >
+                              <SelectTrigger className={FIELD_CLASS}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                              {LEAD_STATUS_OPTIONS.map((status) => (
+                                <SelectItem key={status.value} value={status.value}>
+                                  {status.label}
+                                </SelectItem>
+                              ))}
+                              </SelectContent>
+                          </Select>
+                          {!selectedLead.idResponsavel ? (
+                            <p className="text-xs text-amber-700">
+                              Direcione para um responsável antes de alterar o status.
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                      {(selectedLead.interesse || selectedLead.idImovel) ? (
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div>
+                            <Label>Interesse</Label>
+                            <p className="mt-1 text-sm text-slate-600 whitespace-pre-line">
+                              {selectedLead.interesse}
+                            </p>
+                          </div>
+                          <div>
+                            <Label>Referência do Último Imóvel</Label>
+                            {selectedLead.idImovel ? (
+                              <p className="mt-1 text-sm text-slate-600">
+                                <a
+                                  href={`/imoveis/${selectedLead.idImovel}`}
+                                  className="font-medium text-emerald-700 hover:text-emerald-800 hover:underline md:hidden"
+                                >
+                                  Código do imóvel #{selectedLead.idImovel}
+                                </a>
+                                <a
+                                  href={`/imoveis/${selectedLead.idImovel}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="hidden font-medium text-emerald-700 hover:text-emerald-800 hover:underline md:inline"
+                                >
+                                  Código do imóvel #{selectedLead.idImovel}
+                                </a>
+                              </p>
+                            ) : (
+                              <p className="mt-1 text-sm text-slate-500">Não informada</p>
+                            )}
+                          </div>
+                        </div>
+                      ) : null}
+                      {selectedLead.observacao ? (
                         <div>
-                          <Label>Observação</Label>
-                          <p>
+                          <Label>Observações do Usuário</Label>
+                          <p className="mt-1 text-sm text-slate-600 whitespace-pre-line">
                             {selectedLead.observacao}
                           </p>
                         </div>
-                      )}
+                      ) : null}
                     </CardContent>
+                  </Card>
+
+                  {/* Histórico de Interações */}
+                  <Card className="rounded-[28px] border-white/80 bg-white/90 shadow-[0_20px_50px_-34px_rgba(15,23,42,0.32)]">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                      <CardTitle className="text-lg flex items-center gap-2 text-slate-950">
+                        <MessageSquare className="h-5 w-5" />
+                        Histórico de Interações
+                      </CardTitle>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full"
+                        onClick={() => setIsInteractionsCollapsed(value => !value)}
+                      >
+                        {isInteractionsCollapsed ? (
+                          <>
+                            <ChevronDown className="h-4 w-4" />
+                            Expandir
+                          </>
+                        ) : (
+                          <>
+                            <ChevronUp className="h-4 w-4" />
+                            Minimizar
+                          </>
+                        )}
+                      </Button>
+                    </CardHeader>
+                    {isInteractionsCollapsed ? null : (
+                      <CardContent>
+                        {loadingInteractions ? (
+                          <p className="py-2 text-sm text-slate-600">Carregando histórico...</p>
+                        ) : interactions && interactions.length > 0 ? (
+                          <div className="space-y-2 max-h-56 overflow-y-auto scrollbar-hidden">
+                            {interactions.map(interaction => (
+                              <div
+                                key={interaction.id}
+                                className="rounded-2xl border border-slate-200 bg-white/85 px-3 py-2"
+                              >
+                                <p className="text-sm text-slate-800">{interaction.message}</p>
+                                <p className="mt-1 text-xs text-slate-500">
+                                  {formatDateTime(interaction.createdAt)}
+                                  {interaction.idUsuario ? ` • Usuário #${interaction.idUsuario}` : " • Sistema"}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="py-2 text-sm text-slate-600">Nenhuma interação registrada.</p>
+                        )}
+                      </CardContent>
+                    )}
                   </Card>
 
                   {/* Anotações */}
                   <Card className="rounded-[28px] border-white/80 bg-white/90 shadow-[0_20px_50px_-34px_rgba(15,23,42,0.32)]">
-                    <CardHeader>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0">
                       <CardTitle className="text-lg flex items-center gap-2 text-slate-950">
                         <MessageSquare className="h-5 w-5" />
                         Anotações
                       </CardTitle>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full"
+                        onClick={() => setIsNotesCollapsed(value => !value)}
+                      >
+                        {isNotesCollapsed ? (
+                          <>
+                            <ChevronDown className="h-4 w-4" />
+                            Expandir
+                          </>
+                        ) : (
+                          <>
+                            <ChevronUp className="h-4 w-4" />
+                            Minimizar
+                          </>
+                        )}
+                      </Button>
                     </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="space-y-2">
-                        <Textarea
-                          className={`${FIELD_CLASS} break-all`}
-                          placeholder="Adicionar nova anotação..."
-                          maxLength={500}
-                          value={newNote}
-                          onChange={(e) => setNewNote(e.target.value)}
-                          rows={3}
-                        />
-                        <Button className="mt-2 rounded-full bg-slate-950 text-white hover:bg-slate-800" onClick={handleAddNote} size="sm" disabled={addNote.isPending}>
-                          Adicionar Anotação
-                        </Button>
-                      </div>
-
-                      {notes && notes.length > 0 ? (
-                        <div className="space-y-3 max-h-64 overflow-y-auto scrollbar-hidden">
-                          {notes.map((note) => (
-                            <Card key={note.id} className="break-all rounded-2xl border border-slate-200 bg-white/90 shadow-sm">
-                              <CardContent className="p-3">
-                                <p className="text-sm whitespace-pre-line">{note.anotacao}</p>
-                                <p className="mt-4 text-xs text-slate-500">
-                                  {formatDateTime(note.createdAt)}
-                                </p>
-                              </CardContent>
-                            </Card>
-                          ))}
+                    {isNotesCollapsed ? null : (
+                      <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                          <Textarea
+                            className={`${FIELD_CLASS} break-all`}
+                            placeholder="Adicionar nova anotação..."
+                            maxLength={500}
+                            value={newNote}
+                            onChange={(e) => setNewNote(e.target.value)}
+                            rows={3}
+                          />
+                          <Button className="mt-2 rounded-full bg-slate-950 text-white hover:bg-slate-800" onClick={handleAddNote} size="sm" disabled={addNote.isPending}>
+                            Adicionar Anotação
+                          </Button>
                         </div>
-                      ) : (
-                        <p className="py-4 text-center text-sm text-slate-600">
-                          Nenhuma anotação ainda
-                        </p>
-                      )}
-                    </CardContent>
+
+                        {notes && notes.length > 0 ? (
+                          <div className="space-y-3 max-h-64 overflow-y-auto scrollbar-hidden">
+                            {notes.map((note) => (
+                              <Card key={note.id} className="break-all rounded-2xl border border-slate-200 bg-white/90 shadow-sm">
+                                <CardContent className="p-3">
+                                  <p className="text-sm whitespace-pre-line">{note.anotacao}</p>
+                                  <p className="mt-4 text-xs text-slate-500">
+                                    {formatDateTime(note.createdAt)}
+                                  </p>
+                                </CardContent>
+                              </Card>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="py-4 text-center text-sm text-slate-600">
+                            Nenhuma anotação ainda
+                          </p>
+                        )}
+                      </CardContent>
+                    )}
                   </Card>
 
                   {/* Arquivos */}
                   <Card className="rounded-[28px] border-white/80 bg-white/90 shadow-[0_20px_50px_-34px_rgba(15,23,42,0.32)]">
-                    <CardHeader>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0">
                       <CardTitle className="text-lg flex items-center gap-2 text-slate-950">
                         <FileText className="h-5 w-5" />
                         Arquivos
                       </CardTitle>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full"
+                        onClick={() => setIsFilesCollapsed(value => !value)}
+                      >
+                        {isFilesCollapsed ? (
+                          <>
+                            <ChevronDown className="h-4 w-4" />
+                            Expandir
+                          </>
+                        ) : (
+                          <>
+                            <ChevronUp className="h-4 w-4" />
+                            Minimizar
+                          </>
+                        )}
+                      </Button>
                     </CardHeader>
-                    <CardContent>
-                      {files && files.length > 0 ? (
-                        <div className="space-y-2">
-                          {files.map((file) => (
-                            <Card key={file.id} className="rounded-2xl border border-slate-200 bg-white/90 shadow-sm">
-                              <CardContent className="p-3 flex items-center justify-between">
-                                <div>
-                                  <p className="text-sm font-medium">{file.nomeArquivo}</p>
-                                  <p className="text-xs text-slate-500">
-                                    {formatDateTime(file.createdAt)}
-                                  </p>
-                                </div>
-                                <Button variant="outline" size="sm" asChild>
-                                  <a href={file.urlArquivo} target="_blank" rel="noopener noreferrer">
-                                    Ver
-                                  </a>
-                                </Button>
-                              </CardContent>
-                            </Card>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="py-4 text-center text-sm text-slate-600">
-                          Nenhum arquivo anexado
-                        </p>
-                      )}
-                    </CardContent>
+                    {isFilesCollapsed ? null : (
+                      <CardContent>
+                        {files && files.length > 0 ? (
+                          <div className="space-y-2">
+                            {files.map((file) => (
+                              <Card key={file.id} className="rounded-2xl border border-slate-200 bg-white/90 shadow-sm">
+                                <CardContent className="p-3 flex items-center justify-between">
+                                  <div>
+                                    <p className="text-sm font-medium">{file.nomeArquivo}</p>
+                                    <p className="text-xs text-slate-500">
+                                      {formatDateTime(file.createdAt)}
+                                    </p>
+                                  </div>
+                                  <Button variant="outline" size="sm" asChild>
+                                    <a href={file.urlArquivo} target="_blank" rel="noopener noreferrer">
+                                      Ver
+                                    </a>
+                                  </Button>
+                                </CardContent>
+                              </Card>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="py-4 text-center text-sm text-slate-600">
+                            Nenhum arquivo anexado
+                          </p>
+                        )}
+                      </CardContent>
+                    )}
                   </Card>
                 </div>
               </>

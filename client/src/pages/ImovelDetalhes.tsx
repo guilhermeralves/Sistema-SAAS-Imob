@@ -49,6 +49,7 @@ import {
 import { toast } from "sonner";
 
 const WHATSAPP_NUMBER = "5511999999999";
+const CONTACT_INTEREST_PROPERTY_STORAGE_KEY = "afg:contact-interest-property";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("pt-BR", {
@@ -457,8 +458,21 @@ export default function ImovelDetalhes() {
                       </a>
                     </Button>
 
-                    <Link href="/contato">
-                      <Button variant="outline" className="h-12 w-full rounded-full border-white/30 bg-white/10 text-white hover:bg-white/15">
+                    <Link href={`/contato?idImovel=${imovel.id}#contato-formulario`}>
+                      <Button
+                        variant="outline"
+                        className="h-12 w-full rounded-full border-white/30 bg-white/10 text-white hover:bg-white/15"
+                        onClick={() => {
+                          if (typeof window === "undefined") return;
+                          window.sessionStorage.setItem(
+                            CONTACT_INTEREST_PROPERTY_STORAGE_KEY,
+                            JSON.stringify({
+                              id: imovel.id,
+                              savedAt: Date.now(),
+                            })
+                          );
+                        }}
+                      >
                         Enviar Mensagem
                       </Button>
                     </Link>

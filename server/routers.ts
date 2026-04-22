@@ -266,9 +266,12 @@ const createTaskItemSchema = taskUpsertBaseSchema.extend({
   status: taskPersistedStatusSchema.default("pendente"),
 });
 
-const updateTaskItemSchema = taskUpsertBaseSchema.extend({
+const updateTaskItemSchema = z.object({
   id: z.number().int().positive(),
   status: taskEditableStatusSchema,
+  dueAt: z.string().trim().optional().nullable(),
+  description: z.string().trim().max(2000).optional().nullable(),
+  assigneeIds: z.array(z.number().int().positive()).max(30).default([]),
 });
 
 const taskNoteSchema = z.object({
@@ -318,6 +321,32 @@ function normalizeOptionalCpf(value: unknown) {
   return normalizeCpf(normalized);
 }
 
+function normalizeOptionalBirthDate(value: unknown) {
+  if (value === null || value === undefined) return undefined;
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? undefined : value;
+  }
+
+  const normalized = normalizeOptionalText(String(value));
+  if (!normalized) return undefined;
+
+  const isoMatch = normalized.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    const parsed = new Date(`${year}-${month}-${day}T00:00:00`);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  }
+
+  const displayMatch = normalized.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (displayMatch) {
+    const [, day, month, year] = displayMatch;
+    const parsed = new Date(`${year}-${month}-${day}T00:00:00`);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  }
+
+  return undefined;
+}
+
 function normalizeOptionalCreci(value: unknown) {
   const normalized = normalizeOptionalText(String(value ?? ""));
   if (!normalized) return undefined;
@@ -328,6 +357,25 @@ function normalizeOptionalCreci(value: unknown) {
   }
 
   return formatted;
+}
+
+function getLeadStatusLabel(status: string | null | undefined) {
+  switch (status) {
+    case "novo":
+      return "Novo";
+    case "atendimento":
+      return "Em atendimento";
+    case "proposta":
+      return "Proposta";
+    case "negociacao":
+      return "Negociação";
+    case "fechado":
+      return "Fechado";
+    case "perdidos":
+      return "Perdido";
+    default:
+      return status || "Não informado";
+  }
 }
 
 function isRootAdmin(user: {
@@ -517,9 +565,13 @@ function normalizePropertyDocumentFileName(fileName: string) {
 }
 
 function getComputedTaskStatus(task: {
-  status: "pendente" | "em_andamento";
+  status: "pendente" | "em_andamento" | "concluida";
   dueAt?: Date | string | null;
 }) {
+  if (task.status === "concluida") {
+    return "concluida" as const;
+  }
+
   const dueAt = task.dueAt ? new Date(task.dueAt) : null;
   if (!dueAt || Number.isNaN(dueAt.getTime())) {
     return task.status;
@@ -576,6 +628,28 @@ async function ensureTaskAccess(
 
   if (!isCreator && !isAssigned) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Voce nao tem acesso a esta tarefa/evento" });
+  }
+
+  return task;
+}
+
+async function ensureTaskEditAccess(
+  user: { id: number; role: "cliente" | "corretor" | "administrativo" },
+  taskId: number
+) {
+  const task = await ensureTaskAccess(user, taskId);
+
+  if (user.role === "administrativo") {
+    return task;
+  }
+
+  const isCreator = task.createdByUserId === user.id;
+  if (!isCreator) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message:
+        "Apenas o criador da tarefa/evento ou um usuario administrativo pode alterar este registro.",
+    });
   }
 
   return task;
@@ -1197,19 +1271,24 @@ export const appRouter = router({
 
   leads: router({
     list: staffProcedure.query(async ({ ctx }) => {
+      const { processLeadSlaTick } = await import("./_core/leadSla");
       const { getAllLeads, getLeadsByResponsavel } = await import("./db");
+      await processLeadSlaTick();
       if (ctx.user.role === "administrativo") {
         return await getAllLeads();
       }
       return await getLeadsByResponsavel(ctx.user.id);
     }),
     getById: staffProcedure.input(idSchema).query(async ({ ctx, input }) => {
+      const { processLeadSlaTick } = await import("./_core/leadSla");
+      await processLeadSlaTick();
       return await ensureLeadAccess(ctx.user, input.id);
     }),
     create: publicProcedure.input(z.any()).mutation(async ({ ctx, input }) => {
-      const { createLead, getUserByCpf, getUserById } = await import("./db");
+      const { createLead, createLeadInteraction, getUserByCpf, getUserById, updateUser } = await import("./db");
       const payload = { ...(input as any) };
       const normalizedCpf = normalizeOptionalCpf(payload.cpf);
+      const normalizedBirthDate = normalizeOptionalBirthDate(payload.birthDate);
 
       payload.nome = normalizeOptionalText(payload.nome);
       payload.email = normalizeOptionalText(payload.email) || null;
@@ -1219,11 +1298,26 @@ export const appRouter = router({
       payload.observacao = normalizeOptionalText(payload.observacao) || null;
       payload.status = normalizeOptionalText(payload.status) || "novo";
       payload.cpf = normalizedCpf || null;
+      payload.birthDate = normalizedBirthDate || null;
+      payload.assignmentCycleStartedAt = new Date();
+      payload.assignmentSlaNotifiedAt = null;
 
       if (ctx.user && (ctx.user.role === "corretor" || ctx.user.role === "administrativo")) {
         payload.idResponsavel = ctx.user.id;
+        payload.assignedAt = new Date();
       } else {
         delete payload.idResponsavel;
+      }
+
+      if (payload.status !== "novo" && !payload.idResponsavel) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Lead precisa de responsável antes de sair de Novo.",
+        });
+      }
+
+      if (payload.status === "atendimento" && payload.idResponsavel) {
+        payload.attendedAt = new Date();
       }
 
       if (ctx.user?.id) {
@@ -1231,6 +1325,7 @@ export const appRouter = router({
         if (currentUser?.cpf) {
           payload.userId = currentUser.id;
           payload.cpf = currentUser.cpf;
+          payload.birthDate = payload.birthDate || currentUser.birthDate || null;
           payload.nome = payload.nome || currentUser.name || currentUser.email || "Cliente";
           payload.email = payload.email || currentUser.email || null;
           payload.telefone = payload.telefone || currentUser.phone || null;
@@ -1239,6 +1334,11 @@ export const appRouter = router({
         const matchedUser = await getUserByCpf(normalizedCpf);
         if (matchedUser) {
           payload.userId = matchedUser.id;
+          payload.birthDate = payload.birthDate || matchedUser.birthDate || null;
+
+          if (payload.birthDate && !matchedUser.birthDate) {
+            await updateUser(matchedUser.id, { birthDate: payload.birthDate });
+          }
         }
       }
 
@@ -1246,12 +1346,33 @@ export const appRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Nome do lead e obrigatorio" });
       }
 
-      return await createLead(payload);
+      const [createdLead] = await createLead(payload);
+      const createdLeadId = createdLead?.id;
+
+      if (createdLeadId) {
+        await createLeadInteraction({
+          idLead: createdLeadId,
+          idUsuario: ctx.user?.id ?? null,
+          eventType: "lead_created",
+          message: "Lead criado no sistema.",
+        });
+
+        if (payload.idResponsavel) {
+          await createLeadInteraction({
+            idLead: createdLeadId,
+            idUsuario: ctx.user?.id ?? null,
+            eventType: "lead_assigned",
+            message: `Lead direcionado ao responsável ID ${payload.idResponsavel}.`,
+          });
+        }
+      }
+
+      return createdLead;
     }),
     update: staffProcedure.input(z.any()).mutation(async ({ ctx, input }) => {
-      const { getUserByCpf, updateLead } = await import("./db");
+      const { createLeadInteraction, getUserByCpf, updateLead } = await import("./db");
       const { id, ...data } = input as any;
-      await ensureLeadAccess(ctx.user, id);
+      const currentLead = await ensureLeadAccess(ctx.user, id);
 
       if (ctx.user.role !== "administrativo") {
         delete data.idResponsavel;
@@ -1270,11 +1391,53 @@ export const appRouter = router({
         }
       }
 
-      return await updateLead(id, data);
+      if ("birthDate" in data) {
+        const normalizedBirthDate = normalizeOptionalBirthDate(data.birthDate);
+        data.birthDate = normalizedBirthDate || null;
+      }
+
+      const nextStatusRaw = "status" in data ? normalizeOptionalText(data.status) : currentLead.status;
+      const nextStatus = nextStatusRaw || currentLead.status;
+      const nextResponsibleId =
+        "idResponsavel" in data
+          ? (data.idResponsavel === null ? null : Number(data.idResponsavel))
+          : currentLead.idResponsavel;
+
+      if (nextStatus !== "novo" && !nextResponsibleId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Lead precisa de responsável antes de sair de Novo.",
+        });
+      }
+
+      if (nextStatus !== currentLead.status) {
+        data.status = nextStatus;
+      }
+
+      if (
+        nextStatus === "atendimento" &&
+        currentLead.status !== "atendimento" &&
+        !currentLead.attendedAt
+      ) {
+        data.attendedAt = new Date();
+      }
+
+      await updateLead(id, data);
+
+      if (nextStatus !== currentLead.status) {
+        await createLeadInteraction({
+          idLead: id,
+          idUsuario: ctx.user.id,
+          eventType: "lead_status_changed",
+          message: `Status alterado de ${getLeadStatusLabel(currentLead.status)} para ${getLeadStatusLabel(nextStatus)}.`,
+        });
+      }
+
+      return await ensureLeadAccess(ctx.user, id);
     }),
-    assign: adminProcedure.input(assignLeadSchema).mutation(async ({ input }) => {
-      const { getUserById, updateLead } = await import("./db");
-      await ensureLeadAccess({ id: 0, role: "administrativo" }, input.leadId);
+    assign: adminProcedure.input(assignLeadSchema).mutation(async ({ ctx, input }) => {
+      const { createLeadInteraction, getUserById, updateLead } = await import("./db");
+      const lead = await ensureLeadAccess({ id: 0, role: "administrativo" }, input.leadId);
 
       if (input.userId !== null) {
         const assignedUser = await getUserById(input.userId);
@@ -1283,13 +1446,62 @@ export const appRouter = router({
         }
       }
 
-      return await updateLead(input.leadId, { idResponsavel: input.userId });
+      if (input.userId === null) {
+        await updateLead(input.leadId, {
+          idResponsavel: null,
+          status: "novo",
+          assignedAt: null,
+          attendedAt: null,
+          assignmentCycleStartedAt: new Date(),
+          assignmentSlaNotifiedAt: null,
+        });
+
+        await createLeadInteraction({
+          idLead: input.leadId,
+          idUsuario: ctx.user.id,
+          eventType: "lead_unassigned",
+          message: "Lead desvinculado do responsável e aguardando novo direcionamento.",
+        });
+
+        return await ensureLeadAccess({ id: 0, role: "administrativo" }, input.leadId);
+      }
+
+      await updateLead(input.leadId, {
+        idResponsavel: input.userId,
+        assignedAt: new Date(),
+        assignmentSlaNotifiedAt: null,
+      });
+
+      await createLeadInteraction({
+        idLead: input.leadId,
+        idUsuario: ctx.user.id,
+        eventType: "lead_assigned",
+        message: `Lead direcionado ao responsável ID ${input.userId}.`,
+      });
+
+      if (lead.status === "atendimento") {
+        await createLeadInteraction({
+          idLead: input.leadId,
+          idUsuario: ctx.user.id,
+          eventType: "lead_attention_required",
+          message: "Lead estava em atendimento e teve responsável alterado.",
+        });
+      }
+
+      return await ensureLeadAccess({ id: 0, role: "administrativo" }, input.leadId);
     }),
     delete: adminProcedure.input(idSchema).mutation(async ({ input }) => {
       const { deleteLead } = await import("./db");
       await ensureLeadAccess({ id: 0, role: "administrativo" }, input.id);
       return await deleteLead(input.id);
     }),
+    getInteractions: staffProcedure
+      .input(z.object({ idLead: z.number().int().positive() }))
+      .query(async ({ ctx, input }) => {
+        const { getLeadInteractions } = await import("./db");
+        await ensureLeadAccess(ctx.user, input.idLead);
+        return await getLeadInteractions(input.idLead);
+      }),
     getNotes: staffProcedure
       .input(z.object({ idLead: z.number().int().positive() }))
       .query(async ({ ctx, input }) => {
@@ -1298,9 +1510,16 @@ export const appRouter = router({
         return await getLeadNotes(input.idLead);
       }),
     addNote: staffProcedure.input(z.any()).mutation(async ({ ctx, input }) => {
-      const { createLeadNote } = await import("./db");
+      const { createLeadInteraction, createLeadNote } = await import("./db");
       await ensureLeadAccess(ctx.user, (input as any).idLead);
-      return await createLeadNote({ ...(input as any), idUsuario: ctx.user.id });
+      const createdNote = await createLeadNote({ ...(input as any), idUsuario: ctx.user.id });
+      await createLeadInteraction({
+        idLead: (input as any).idLead,
+        idUsuario: ctx.user.id,
+        eventType: "lead_note_added",
+        message: "Nova anotação registrada no lead.",
+      });
+      return createdNote;
     }),
     getFiles: staffProcedure
       .input(z.object({ idLead: z.number().int().positive() }))
@@ -1310,15 +1529,27 @@ export const appRouter = router({
         return await getLeadFiles(input.idLead);
       }),
     addFile: staffProcedure.input(z.any()).mutation(async ({ ctx, input }) => {
-      const { createLeadFile } = await import("./db");
+      const { createLeadFile, createLeadInteraction } = await import("./db");
       await ensureLeadAccess(ctx.user, (input as any).idLead);
-      return await createLeadFile({ ...(input as any), idUsuario: ctx.user.id });
+      const createdFile = await createLeadFile({ ...(input as any), idUsuario: ctx.user.id });
+      await createLeadInteraction({
+        idLead: (input as any).idLead,
+        idUsuario: ctx.user.id,
+        eventType: "lead_file_added",
+        message: "Arquivo anexado ao lead.",
+      });
+      return createdFile;
     }),
   }),
 
   tasks: router({
     list: staffProcedure.query(async ({ ctx }) => {
-      const { getAllTaskItemsWithRelations, getTaskItemsForUserWithRelations } = await import("./db");
+      const {
+        getAllTaskItemsWithRelations,
+        getTaskItemsForUserWithRelations,
+        purgeCompletedTaskItemsOlderThan,
+      } = await import("./db");
+      await purgeCompletedTaskItemsOlderThan(30);
       const taskItems =
         ctx.user.role === "administrativo"
           ? await getAllTaskItemsWithRelations()
@@ -1394,7 +1625,12 @@ export const appRouter = router({
       return { success: true } as const;
     }),
     summary: staffProcedure.query(async ({ ctx }) => {
-      const { getAllTaskItemsWithRelations, getTaskItemsForUserWithRelations } = await import("./db");
+      const {
+        getAllTaskItemsWithRelations,
+        getTaskItemsForUserWithRelations,
+        purgeCompletedTaskItemsOlderThan,
+      } = await import("./db");
+      await purgeCompletedTaskItemsOlderThan(30);
       const taskItems =
         ctx.user.role === "administrativo"
           ? await getAllTaskItemsWithRelations()
@@ -1403,12 +1639,15 @@ export const appRouter = router({
       const assignedItems = taskItems.filter(taskItem =>
         taskItem.assignees.some(assignee => assignee.id === ctx.user.id)
       );
-      const assignedOverdueCount = assignedItems.filter(
+      const assignedOpenItems = assignedItems.filter(
+        taskItem => getComputedTaskStatus(taskItem) !== "concluida"
+      );
+      const assignedOverdueCount = assignedOpenItems.filter(
         taskItem => getComputedTaskStatus(taskItem) === "atrasado"
       ).length;
 
       return {
-        assignedOpenCount: assignedItems.length,
+        assignedOpenCount: assignedOpenItems.length,
         assignedOverdueCount,
         totalVisibleCount: taskItems.length,
       };
@@ -1453,19 +1692,14 @@ export const appRouter = router({
       };
     }),
     update: staffProcedure.input(updateTaskItemSchema).mutation(async ({ ctx, input }) => {
-      const { deleteTaskItem, getTaskItemWithRelationsById, replaceTaskItemAssignees, updateTaskItem } = await import("./db");
-      await ensureTaskAccess(ctx.user, input.id);
-
-      if (input.status === "concluida") {
-        await deleteTaskItem(input.id);
-        return { action: "deleted" as const, id: input.id };
-      }
+      const { getTaskItemWithRelationsById, replaceTaskItemAssignees, updateTaskItem } = await import("./db");
+      const currentTask = await ensureTaskEditAccess(ctx.user, input.id);
 
       const normalizedAssigneeIds = normalizeAssigneeIds(input.assigneeIds);
       await assertValidAssignees(normalizedAssigneeIds);
 
       const dueAt = parseOptionalTaskDueAt(input.dueAt);
-      if (input.kind === "evento" && !dueAt) {
+      if (currentTask.kind === "evento" && !dueAt) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "Eventos precisam ter data e horario definidos.",
@@ -1473,9 +1707,6 @@ export const appRouter = router({
       }
 
       await updateTaskItem(input.id, {
-        title: input.title.trim(),
-        kind: input.kind,
-        sector: input.sector,
         dueAt,
         description: input.description?.trim() || null,
         status: input.status === "atrasado" ? "pendente" : input.status,
@@ -1503,7 +1734,7 @@ export const appRouter = router({
     }),
     delete: staffProcedure.input(idSchema).mutation(async ({ ctx, input }) => {
       const { deleteTaskItem } = await import("./db");
-      await ensureTaskAccess(ctx.user, input.id);
+      await ensureTaskEditAccess(ctx.user, input.id);
       await deleteTaskItem(input.id);
       return { success: true } as const;
     }),
@@ -1516,7 +1747,7 @@ export const appRouter = router({
       }),
     addNote: staffProcedure.input(taskNoteSchema).mutation(async ({ ctx, input }) => {
       const { createTaskItemNote, updateTaskItem } = await import("./db");
-      await ensureTaskAccess(ctx.user, input.taskId);
+      const task = await ensureTaskEditAccess(ctx.user, input.taskId);
 
       const createdNote = await createTaskItemNote({
         taskId: input.taskId,
@@ -1524,7 +1755,9 @@ export const appRouter = router({
         note: input.note.trim(),
       });
 
-      await updateTaskItem(input.taskId, {});
+      if (task.status !== "concluida") {
+        await updateTaskItem(input.taskId, {});
+      }
 
       return createdNote;
     }),

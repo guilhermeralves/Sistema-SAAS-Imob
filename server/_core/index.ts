@@ -14,6 +14,7 @@ import {
   getPropertyImageAbsolutePath,
   PROPERTY_IMAGE_REQUEST_HEADER,
 } from "./property-images";
+import { startLeadSlaScheduler } from "./leadSla";
 import { serveStatic, setupVite } from "./vite";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -38,6 +39,7 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   await ensureBootstrapAdmin();
   await ensurePropertyUploadDir();
+  startLeadSlaScheduler();
 
   const app = express();
   const server = createServer(app);

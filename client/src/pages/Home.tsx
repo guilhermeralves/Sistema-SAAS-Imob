@@ -26,7 +26,7 @@ const SLIDES = [
     mobile: "/banner/mobile.webp",
     title: "Encontre o imóvel dos seus Sonhos",
     subtitle:
-      "Compra e venda com uma experiência mais clara, segura e confiavel.",
+      "uma experiência mais clara, segura e confiavel.",
     ctaText: "Ver Imóveis",
     ctaLink: "/imoveis",
   },

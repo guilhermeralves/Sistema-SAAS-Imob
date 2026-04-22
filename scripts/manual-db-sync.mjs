@@ -82,6 +82,52 @@ const patches = [
       `ALTER TABLE "properties" ADD COLUMN IF NOT EXISTS "observacoesJuridicas" text;`,
     ],
   },
+  {
+    id: "2026-04-14_lead_birth_date",
+    description: "Adiciona data de nascimento no lead e sincroniza com usuarios vinculados",
+    statements: [
+      `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "birthDate" date;`,
+      `UPDATE "leads" AS lead
+       SET "birthDate" = usr."birthDate"
+       FROM "users" AS usr
+       WHERE lead."userId" = usr."id"
+         AND lead."birthDate" IS NULL
+         AND usr."birthDate" IS NOT NULL;`,
+    ],
+  },
+  {
+    id: "2026-04-14_lead_sla_and_interactions",
+    description: "Adiciona campos de SLA no lead e cria historico de interacoes",
+    statements: [
+      `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "assignmentCycleStartedAt" timestamp;`,
+      `UPDATE "leads" SET "assignmentCycleStartedAt" = COALESCE("assignmentCycleStartedAt", "createdAt", now());`,
+      `ALTER TABLE "leads" ALTER COLUMN "assignmentCycleStartedAt" SET DEFAULT now();`,
+      `ALTER TABLE "leads" ALTER COLUMN "assignmentCycleStartedAt" SET NOT NULL;`,
+
+      `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "assignedAt" timestamp;`,
+      `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "attendedAt" timestamp;`,
+      `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "assignmentSlaNotifiedAt" timestamp;`,
+
+      `CREATE TABLE IF NOT EXISTS "leadInteractions" (
+        "id" serial PRIMARY KEY NOT NULL,
+        "idLead" integer NOT NULL,
+        "idUsuario" integer,
+        "eventType" varchar(80) NOT NULL,
+        "message" text NOT NULL,
+        "createdAt" timestamp DEFAULT now() NOT NULL
+      );`,
+      `CREATE INDEX IF NOT EXISTS "leadInteractions_idLead_idx" ON "leadInteractions" ("idLead");`,
+      `CREATE INDEX IF NOT EXISTS "leadInteractions_createdAt_idx" ON "leadInteractions" ("createdAt");`,
+
+      `INSERT INTO "leadInteractions" ("idLead", "idUsuario", "eventType", "message", "createdAt")
+       SELECT l."id", NULL, 'lead_created', 'Lead criado no sistema.', COALESCE(l."createdAt", now())
+       FROM "leads" l
+       WHERE NOT EXISTS (
+         SELECT 1 FROM "leadInteractions" i
+         WHERE i."idLead" = l."id" AND i."eventType" = 'lead_created'
+       );`,
+    ],
+  },
 ];
 
 async function ensureManualMigrationsTable(client) {

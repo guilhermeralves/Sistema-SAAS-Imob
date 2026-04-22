@@ -6,7 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import DateInput from "@/components/DateInput";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { displayDateToIso } from "@/lib/date";
 import { formatCpf, isValidCpf } from "@/lib/cpf";
 import { trpc } from "@/lib/trpc";
 import { Building2, CheckCircle2, FileText, MessageCircle, Send, Users } from "lucide-react";
@@ -29,6 +31,14 @@ const CAREERS_CONFIG = {
   email: "contato@afg.com",
   subject: "Trabalhe Conosco - Apresentação Profissional",
 };
+const CONTACT_INTEREST_OPTIONS = [
+  { value: "Locação", label: "Locação" },
+  { value: "Aquisição de Imóvel", label: "Aquisição de Imóvel" },
+  { value: "Aquisição Imóvel na Planta", label: "Aquisição Imóvel na Planta" },
+  { value: "Avaliação de Imóvel", label: "Avaliação de Imóvel" },
+];
+const CONTACT_INTEREST_PROPERTY_STORAGE_KEY = "afg:contact-interest-property";
+const CONTACT_INTEREST_PROPERTY_TTL_MS = 30 * 60 * 1000;
 
 function formatPhoneNumber(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 11);
@@ -43,6 +53,69 @@ function formatPhoneNumber(value: string) {
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 }
 
+function parsePositivePropertyId(rawValue: string | null | undefined) {
+  if (!rawValue) return null;
+  const parsed = Number(rawValue);
+  if (!Number.isInteger(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+function getPropertyIdFromUrlSearch() {
+  if (typeof window === "undefined") return null;
+  const rawValue = new URLSearchParams(window.location.search).get("idImovel");
+  return parsePositivePropertyId(rawValue);
+}
+
+function storeReferencedPropertyId(id: number) {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(
+    CONTACT_INTEREST_PROPERTY_STORAGE_KEY,
+    JSON.stringify({
+      id,
+      savedAt: Date.now(),
+    })
+  );
+}
+
+function getPropertyIdFromSessionStorage() {
+  if (typeof window === "undefined") return null;
+
+  const rawValue = window.sessionStorage.getItem(CONTACT_INTEREST_PROPERTY_STORAGE_KEY);
+  if (!rawValue) return null;
+
+  try {
+    const parsed = JSON.parse(rawValue) as { id?: unknown; savedAt?: unknown };
+    const id = parsePositivePropertyId(
+      parsed && typeof parsed.id === "number" ? String(parsed.id) : null
+    );
+    const savedAt = typeof parsed?.savedAt === "number" ? parsed.savedAt : null;
+
+    if (!id || !savedAt || Date.now() - savedAt > CONTACT_INTEREST_PROPERTY_TTL_MS) {
+      window.sessionStorage.removeItem(CONTACT_INTEREST_PROPERTY_STORAGE_KEY);
+      return null;
+    }
+
+    return id;
+  } catch {
+    window.sessionStorage.removeItem(CONTACT_INTEREST_PROPERTY_STORAGE_KEY);
+    return null;
+  }
+}
+
+function getLeadReferencedPropertyId() {
+  const idFromUrl = getPropertyIdFromUrlSearch();
+  if (idFromUrl) {
+    storeReferencedPropertyId(idFromUrl);
+    return idFromUrl;
+  }
+
+  if (typeof window !== "undefined" && window.location.hash !== "#contato-formulario") {
+    return null;
+  }
+
+  return getPropertyIdFromSessionStorage();
+}
+
 export default function Contato() {
   const { user, isAuthenticated, loading } = useAuth();
   const [, setLocation] = useLocation();
@@ -52,6 +125,7 @@ export default function Contato() {
     birthDate: "",
     cpf: "",
     telefone: "",
+    interesse: "",
     mensagem: "",
   });
   const [submitted, setSubmitted] = useState(false);
@@ -65,18 +139,45 @@ export default function Contato() {
   }, [setLocation, shouldHideContactPage]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || window.location.hash !== "#contato-topo") {
+    if (typeof window === "undefined") {
       return;
     }
+    getLeadReferencedPropertyId();
 
-    document.getElementById("contato-topo")?.scrollIntoView({ block: "start" });
+    const scrollToHashTarget = () => {
+      const targetId =
+        window.location.hash === "#contato-formulario"
+          ? "contato-formulario"
+          : window.location.hash === "#contato-topo"
+            ? "contato-topo"
+            : null;
+
+      if (!targetId) return;
+
+      window.requestAnimationFrame(() => {
+        document.getElementById(targetId)?.scrollIntoView({
+          block: "start",
+          behavior: "smooth",
+        });
+      });
+    };
+
+    scrollToHashTarget();
+    window.addEventListener("hashchange", scrollToHashTarget);
+
+    return () => {
+      window.removeEventListener("hashchange", scrollToHashTarget);
+    };
   }, []);
 
   const createLead = trpc.leads.create.useMutation({
     onSuccess: () => {
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem(CONTACT_INTEREST_PROPERTY_STORAGE_KEY);
+      }
       setSubmitted(true);
       toast.success("Mensagem enviada com sucesso! Entraremos em contato em breve.");
-      setFormData({ nome: "", email: "", birthDate: "", cpf: "", telefone: "", mensagem: "" });
+      setFormData({ nome: "", email: "", birthDate: "", cpf: "", telefone: "", interesse: "", mensagem: "" });
     },
     onError: error => {
       toast.error("Erro ao enviar mensagem. Tente novamente.");
@@ -86,8 +187,9 @@ export default function Contato() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const referencedPropertyId = getLeadReferencedPropertyId();
 
-    if ((!isClientUser && (!formData.nome || !formData.email)) || !formData.mensagem) {
+    if ((!isClientUser && (!formData.nome || !formData.email)) || !formData.interesse || !formData.mensagem) {
       toast.error("Por favor, preencha todos os campos obrigatórios.");
       return;
     }
@@ -97,13 +199,25 @@ export default function Contato() {
       return;
     }
 
+    if (formData.birthDate && !displayDateToIso(formData.birthDate)) {
+      toast.error("Data de nascimento inválida. Use o formato DD/MM/AAAA.");
+      return;
+    }
+
     createLead.mutate({
       nome: isClientUser ? user?.name || user?.email || "Cliente" : formData.nome,
       email: isClientUser ? user?.email || "" : formData.email,
       cpf: isClientUser ? user?.cpf || undefined : formData.cpf || undefined,
+      birthDate: isClientUser
+        ? undefined
+        : formData.birthDate
+          ? displayDateToIso(formData.birthDate) || undefined
+          : undefined,
       telefone: isClientUser ? user?.phone || "" : formData.telefone,
       origem: "site",
-      interesse: formData.mensagem,
+      interesse: formData.interesse,
+      observacao: formData.mensagem,
+      idImovel: referencedPropertyId ?? undefined,
       status: "novo",
     });
   };
@@ -186,7 +300,10 @@ export default function Contato() {
         <section className="pt-14 md:pt-18">
           <div className="container">
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-              <Card className="rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
+              <Card
+                id="contato-formulario"
+                className="scroll-mt-24 rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]"
+              >
                 <CardHeader className="pb-2">
                   <div className="inline-flex w-fit rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-800">
                     Formulário
@@ -289,6 +406,25 @@ export default function Contato() {
                           </div>
                         </>
                       )}
+
+                      <div className="space-y-2">
+                        <Label htmlFor="interesse">Interesse</Label>
+                        <Select
+                          value={formData.interesse}
+                          onValueChange={value => setFormData({ ...formData, interesse: value })}
+                        >
+                          <SelectTrigger id="interesse" className="h-12 rounded-2xl border-slate-200 bg-white shadow-sm">
+                            <SelectValue placeholder="Selecione seu interesse" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {CONTACT_INTEREST_OPTIONS.map(option => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
 
                       <div className="space-y-2">
                         <Label htmlFor="mensagem">Mensagem</Label>

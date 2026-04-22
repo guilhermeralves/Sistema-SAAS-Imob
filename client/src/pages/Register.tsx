@@ -77,6 +77,11 @@ export default function Register() {
       return;
     }
 
+    if (password.trim().length < 8) {
+      toast.error("A senha deve ter no minimo 8 caracteres.");
+      return;
+    }
+
     register.mutate({
       name,
       cpf: normalizeCpf(cpf),

@@ -92,6 +92,50 @@ function getCreciStatusMessage(status: "pending" | "verified" | null | undefined
   return "";
 }
 
+function getFriendlyMutationErrorMessage(error: unknown, fallback: string) {
+  const rawMessage =
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as { message?: unknown }).message === "string"
+      ? ((error as { message: string }).message ?? "").trim()
+      : "";
+
+  if (!rawMessage) return fallback;
+
+  const passwordMinimumMessage = "A senha deve ter no minimo 8 caracteres.";
+
+  if (rawMessage.includes("expected string to have >=8 characters") && rawMessage.includes("password")) {
+    return passwordMinimumMessage;
+  }
+
+  try {
+    const parsed = JSON.parse(rawMessage);
+    if (Array.isArray(parsed)) {
+      const passwordIssue = parsed.find(
+        issue =>
+          issue &&
+          typeof issue === "object" &&
+          issue.code === "too_small" &&
+          Array.isArray(issue.path) &&
+          issue.path.includes("password")
+      ) as { minimum?: unknown } | undefined;
+
+      if (passwordIssue) {
+        const minimum =
+          typeof passwordIssue.minimum === "number" && Number.isFinite(passwordIssue.minimum)
+            ? passwordIssue.minimum
+            : 8;
+        return `A senha deve ter no minimo ${minimum} caracteres.`;
+      }
+    }
+  } catch {
+    // Mantem mensagem original quando nao for JSON.
+  }
+
+  return rawMessage || fallback;
+}
+
 export default function AdminUsers() {
   const { user: authenticatedUser } = useAuth();
   const utils = trpc.useUtils();
@@ -165,7 +209,7 @@ export default function AdminUsers() {
       await utils.admin.hasNewUsers.invalidate();
     },
     onError: error => {
-      toast.error(error.message || "Nao foi possivel criar o usuario");
+      toast.error(getFriendlyMutationErrorMessage(error, "Nao foi possivel criar o usuario"));
     },
   });
 
@@ -191,7 +235,7 @@ export default function AdminUsers() {
       await utils.admin.users.invalidate();
     },
     onError: error => {
-      toast.error(error.message || "Nao foi possivel atualizar o usuario");
+      toast.error(getFriendlyMutationErrorMessage(error, "Nao foi possivel atualizar o usuario"));
     },
   });
 
@@ -306,6 +350,11 @@ export default function AdminUsers() {
 
     if (createForm.role === "corretor" && createForm.creci && !isValidCreci(createForm.creci)) {
       toast.error("CRECI invalido. Use o formato numero/UF, por exemplo 123456/SP.");
+      return;
+    }
+
+    if (createForm.password.trim().length < 8) {
+      toast.error("A senha deve ter no minimo 8 caracteres.");
       return;
     }
 
@@ -861,6 +910,11 @@ export default function AdminUsers() {
                   onClick={() => {
                     if (editState.passwordOnly && !editState.password) {
                       toast.error("Informe a nova senha para continuar.");
+                      return;
+                    }
+
+                    if (editState.password && editState.password.trim().length < 8) {
+                      toast.error("A senha deve ter no minimo 8 caracteres.");
                       return;
                     }
 

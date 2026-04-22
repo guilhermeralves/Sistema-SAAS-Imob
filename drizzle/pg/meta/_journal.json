@@ -85,6 +85,20 @@
       "when": 1775056487995,
       "tag": "0011_tearful_karnak",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1776191177502,
+      "tag": "0012_glorious_sabra",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1776206456370,
+      "tag": "0013_smiling_gladiator",
+      "breakpoints": true
     }
   ]
 }

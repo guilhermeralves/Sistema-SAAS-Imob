@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import {
   adminUserViews,
@@ -7,6 +7,7 @@ import {
   InsertDocument,
   InsertLead,
   InsertLeadFile,
+  InsertLeadInteraction,
   InsertLeadNote,
   InsertPropertyDocument,
   InsertPropertyKeyStatusRequest,
@@ -23,6 +24,7 @@ import {
   contracts,
   documents,
   leadFiles,
+  leadInteractions,
   leadNotes,
   leads,
   taskItemAssignments,
@@ -671,58 +673,162 @@ export async function getAllLeads() {
   const db = await getDb();
   if (!db) return [];
 
-  return await db
+  const rows = await db
     .select({
       id: leads.id,
       nome: leads.nome,
       email: leads.email,
       cpf: leads.cpf,
+      birthDate: leads.birthDate,
       telefone: leads.telefone,
       status: leads.status,
       interesse: leads.interesse,
       observacao: leads.observacao,
       origem: leads.origem,
       userId: leads.userId,
+      userBirthDate: users.birthDate,
       idResponsavel: leads.idResponsavel,
       idImovel: leads.idImovel,
+      assignmentCycleStartedAt: leads.assignmentCycleStartedAt,
+      assignedAt: leads.assignedAt,
+      attendedAt: leads.attendedAt,
+      assignmentSlaNotifiedAt: leads.assignmentSlaNotifiedAt,
       createdAt: leads.createdAt,
       updatedAt: leads.updatedAt,
     })
     .from(leads)
+    .leftJoin(users, eq(leads.userId, users.id))
     .orderBy(desc(leads.createdAt));
+
+  return await enrichLeadBirthDateByCpf(rows);
 }
 
 export async function getLeadsByResponsavel(idResponsavel: number) {
   const db = await getDb();
   if (!db) return [];
 
-  return await db
+  const rows = await db
     .select({
       id: leads.id,
       nome: leads.nome,
       email: leads.email,
       cpf: leads.cpf,
+      birthDate: leads.birthDate,
       telefone: leads.telefone,
       status: leads.status,
       interesse: leads.interesse,
       observacao: leads.observacao,
       origem: leads.origem,
       userId: leads.userId,
+      userBirthDate: users.birthDate,
       idResponsavel: leads.idResponsavel,
       idImovel: leads.idImovel,
+      assignmentCycleStartedAt: leads.assignmentCycleStartedAt,
+      assignedAt: leads.assignedAt,
+      attendedAt: leads.attendedAt,
+      assignmentSlaNotifiedAt: leads.assignmentSlaNotifiedAt,
       createdAt: leads.createdAt,
       updatedAt: leads.updatedAt,
     })
     .from(leads)
+    .leftJoin(users, eq(leads.userId, users.id))
     .where(eq(leads.idResponsavel, idResponsavel))
     .orderBy(desc(leads.createdAt));
+
+  return await enrichLeadBirthDateByCpf(rows);
 }
 
 export async function getLeadById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(leads).where(eq(leads.id, id)).limit(1);
-  return result.length > 0 ? result[0] : undefined;
+  const result = await db
+    .select({
+      id: leads.id,
+      nome: leads.nome,
+      email: leads.email,
+      cpf: leads.cpf,
+      birthDate: leads.birthDate,
+      telefone: leads.telefone,
+      status: leads.status,
+      interesse: leads.interesse,
+      observacao: leads.observacao,
+      origem: leads.origem,
+      userId: leads.userId,
+      userBirthDate: users.birthDate,
+      idResponsavel: leads.idResponsavel,
+      idImovel: leads.idImovel,
+      assignmentCycleStartedAt: leads.assignmentCycleStartedAt,
+      assignedAt: leads.assignedAt,
+      attendedAt: leads.attendedAt,
+      assignmentSlaNotifiedAt: leads.assignmentSlaNotifiedAt,
+      createdAt: leads.createdAt,
+      updatedAt: leads.updatedAt,
+    })
+    .from(leads)
+    .leftJoin(users, eq(leads.userId, users.id))
+    .where(eq(leads.id, id))
+    .limit(1);
+
+  if (result.length === 0) {
+    return undefined;
+  }
+
+  const [lead] = await enrichLeadBirthDateByCpf(result);
+  return lead;
+}
+
+async function enrichLeadBirthDateByCpf<
+  T extends {
+    cpf: string | null;
+    userBirthDate: Date | null;
+  },
+>(rows: T[]) {
+  const db = await getDb();
+  if (!db || rows.length === 0) {
+    return rows;
+  }
+
+  const cpfsWithoutBirthDate = Array.from(
+    new Set(
+      rows
+        .filter(row => !row.userBirthDate && typeof row.cpf === "string" && row.cpf.length > 0)
+        .map(row => row.cpf as string)
+    )
+  );
+
+  if (cpfsWithoutBirthDate.length === 0) {
+    return rows;
+  }
+
+  const relatedUsers = await db
+    .select({
+      cpf: users.cpf,
+      birthDate: users.birthDate,
+    })
+    .from(users)
+    .where(inArray(users.cpf, cpfsWithoutBirthDate));
+
+  const birthDateByCpf = new Map<string, Date | null>();
+  for (const linkedUser of relatedUsers) {
+    if (!linkedUser.cpf) continue;
+    birthDateByCpf.set(linkedUser.cpf, linkedUser.birthDate ?? null);
+  }
+
+  return rows.map(row => {
+    if (row.userBirthDate || !row.cpf) {
+      return row;
+    }
+
+    const fallbackBirthDate = birthDateByCpf.get(row.cpf);
+    if (!fallbackBirthDate) {
+      return row;
+    }
+
+    return {
+      ...row,
+      userBirthDate: fallbackBirthDate,
+    };
+  });
 }
 
 export async function getLeadsByCpf(cpf: string) {
@@ -774,17 +880,26 @@ export async function createLead(data: InsertLead) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  return await db.insert(leads).values({
-    ...data,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  });
+  return await db
+    .insert(leads)
+    .values({
+      ...data,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .returning();
 }
 
 export async function updateLead(id: number, data: Partial<InsertLead>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(leads).set(data).where(eq(leads.id, id));
+  await db
+    .update(leads)
+    .set({
+      ...data,
+      updatedAt: new Date(),
+    })
+    .where(eq(leads.id, id));
 }
 
 export async function deleteLead(id: number) {
@@ -836,6 +951,46 @@ export async function createLeadFile(data: InsertLeadFile) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return await db.insert(leadFiles).values(data);
+}
+
+export async function getLeadsForSlaProcessing() {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select({
+      id: leads.id,
+      status: leads.status,
+      idResponsavel: leads.idResponsavel,
+      assignmentCycleStartedAt: leads.assignmentCycleStartedAt,
+      assignedAt: leads.assignedAt,
+      attendedAt: leads.attendedAt,
+      assignmentSlaNotifiedAt: leads.assignmentSlaNotifiedAt,
+      createdAt: leads.createdAt,
+    })
+    .from(leads)
+    .where(or(eq(leads.status, "novo"), eq(leads.status, "atendimento")));
+}
+
+export async function getLeadInteractions(idLead: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(leadInteractions)
+    .where(eq(leadInteractions.idLead, idLead))
+    .orderBy(desc(leadInteractions.createdAt), desc(leadInteractions.id));
+}
+
+export async function createLeadInteraction(data: InsertLeadInteraction) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return await db.insert(leadInteractions).values({
+    ...data,
+    createdAt: new Date(),
+  });
 }
 
 type TaskActor = Pick<User, "id" | "name" | "email" | "role" | "isActive">;
@@ -1111,6 +1266,35 @@ export async function deleteTaskItem(id: number) {
   await db.delete(taskItemAssignments).where(eq(taskItemAssignments.taskId, id));
   await db.delete(taskItemNotes).where(eq(taskItemNotes.taskId, id));
   await db.delete(taskItems).where(eq(taskItems.id, id));
+}
+
+export async function purgeCompletedTaskItemsOlderThan(days: number) {
+  const db = await getDb();
+  if (!db) return 0;
+  if (!Number.isFinite(days) || days <= 0) return 0;
+
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - Math.floor(days));
+
+  const staleCompletedRows = await db
+    .select({ id: taskItems.id })
+    .from(taskItems)
+    .where(
+      and(
+        eq(taskItems.status, "concluida"),
+        lt(taskItems.updatedAt, cutoffDate)
+      )
+    );
+
+  if (staleCompletedRows.length === 0) return 0;
+
+  const staleTaskIds = staleCompletedRows.map(row => row.id);
+
+  await db.delete(taskItemAssignments).where(inArray(taskItemAssignments.taskId, staleTaskIds));
+  await db.delete(taskItemNotes).where(inArray(taskItemNotes.taskId, staleTaskIds));
+  await db.delete(taskItems).where(inArray(taskItems.id, staleTaskIds));
+
+  return staleTaskIds.length;
 }
 
 export async function getTaskItemNotes(taskId: number) {

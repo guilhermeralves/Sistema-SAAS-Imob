@@ -174,6 +174,7 @@ export const leads = pgTable("leads", {
   nome: varchar("nome", { length: 255 }).notNull(),
   email: varchar("email", { length: 320 }),
   cpf: varchar("cpf", { length: 14 }),
+  birthDate: date("birthDate", { mode: "date" }),
   telefone: varchar("telefone", { length: 20 }),
   origem: varchar("origem", { length: 100 }), // site, whatsapp, indicacao, etc
   interesse: text("interesse"), // descricao do interesse
@@ -182,6 +183,10 @@ export const leads = pgTable("leads", {
   userId: integer("userId"), // conta vinculada por CPF quando existir
   idResponsavel: integer("idResponsavel"), // ID do corretor/admin responsavel
   idImovel: integer("idImovel"), // ID do imovel de interesse (opcional)
+  assignmentCycleStartedAt: timestamp("assignmentCycleStartedAt", { mode: "date" }).defaultNow().notNull(),
+  assignedAt: timestamp("assignedAt", { mode: "date" }),
+  attendedAt: timestamp("attendedAt", { mode: "date" }),
+  assignmentSlaNotifiedAt: timestamp("assignmentSlaNotifiedAt", { mode: "date" }),
   createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
 });
@@ -222,6 +227,22 @@ export type LeadFile = typeof leadFiles.$inferSelect;
 export type InsertLeadFile = typeof leadFiles.$inferInsert;
 
 /**
+ * Tabela de historico de interacoes dos leads
+ * Registra trilha de eventos operacionais e automacoes de SLA
+ */
+export const leadInteractions = pgTable("leadInteractions", {
+  id: serial("id").primaryKey(),
+  idLead: integer("idLead").notNull(),
+  idUsuario: integer("idUsuario"),
+  eventType: varchar("eventType", { length: 80 }).notNull(),
+  message: text("message").notNull(),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export type LeadInteraction = typeof leadInteractions.$inferSelect;
+export type InsertLeadInteraction = typeof leadInteractions.$inferInsert;
+
+/**
  * Tabela de tarefas e eventos internos
  * Auxilia o dia a dia operacional entre os usuarios do sistema
  */
@@ -237,7 +258,7 @@ export const taskItems = pgTable("taskItems", {
     .default("administrativo")
     .notNull(),
   status: varchar("status", { length: 20 })
-    .$type<"pendente" | "em_andamento">()
+    .$type<"pendente" | "em_andamento" | "concluida">()
     .default("pendente")
     .notNull(),
   dueAt: timestamp("dueAt", { mode: "date" }),

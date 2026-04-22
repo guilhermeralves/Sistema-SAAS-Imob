@@ -470,7 +470,27 @@ export default function Imoveis() {
                     />
                   </div>
                 </div>
-
+                <div className="space-y-1 sm:space-y-2">
+                    <Label htmlFor="cep" className="text-sm sm:text-base">CEP</Label>
+                    <div className="relative">
+                      <Input
+                        id="cep"
+                        value={newPropertyData.cep}
+                        onChange={(e) => handleCepChange(e.target.value)}
+                        placeholder="01310-100"
+                        className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
+                        maxLength={9}
+                      />
+                      {cepLoading && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                          <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                        </div>
+                      )}
+                    </div>
+                    {cepError && (
+                      <p className="text-red-500 text-xs sm:text-sm mt-1">{cepError}</p>
+                    )}
+                  </div>
                 {/* Campos de Localizacao */}
                 <div className="space-y-1 sm:space-y-2">
                   <Label htmlFor="endereco" className="text-sm sm:text-base">Endereço *</Label>
@@ -538,27 +558,6 @@ export default function Imoveis() {
                       className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                       disabled={cepLoading}
                     />
-                  </div>
-                  <div className="space-y-1 sm:space-y-2">
-                    <Label htmlFor="cep" className="text-sm sm:text-base">CEP</Label>
-                    <div className="relative">
-                      <Input
-                        id="cep"
-                        value={newPropertyData.cep}
-                        onChange={(e) => handleCepChange(e.target.value)}
-                        placeholder="01310-100"
-                        className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
-                        maxLength={9}
-                      />
-                      {cepLoading && (
-                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                          <div className="animate-spin h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
-                        </div>
-                      )}
-                    </div>
-                    {cepError && (
-                      <p className="text-red-500 text-xs sm:text-sm mt-1">{cepError}</p>
-                    )}
                   </div>
                 </div>
                 </div>
