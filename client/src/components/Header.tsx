@@ -268,10 +268,10 @@ export default function Header() {
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
-                        <Link href="/plataformas-integradas">
+                        <Link href="/integracoes">
                           <a className="flex items-center gap-2">
                             <PlugZap className="h-4 w-4" />
-                            Plataformas Integradas
+                            Integrações
                           </a>
                         </Link>
                       </DropdownMenuItem>

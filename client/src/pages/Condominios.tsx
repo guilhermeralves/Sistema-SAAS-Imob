@@ -177,6 +177,7 @@ export default function Condominios() {
   const [tipoFilter, setTipoFilter] = useState<"todos" | CondominiumType>("todos");
   const [cepLoading, setCepLoading] = useState(false);
   const [cepError, setCepError] = useState("");
+  const [isFormCardOpen, setIsFormCardOpen] = useState(false);
   const [isLocationSectionOpen, setIsLocationSectionOpen] = useState(true);
   const [isCharacteristicsSectionOpen, setIsCharacteristicsSectionOpen] = useState(true);
   const cepTimeoutRef = useRef<number | null>(null);
@@ -217,6 +218,7 @@ export default function Condominios() {
       setForm(INITIAL_FORM);
       setCepError("");
       setCepLoading(false);
+      setIsFormCardOpen(false);
       setIsLocationSectionOpen(true);
       setIsCharacteristicsSectionOpen(true);
     },
@@ -233,6 +235,7 @@ export default function Condominios() {
       setEditingCondominiumId(null);
       setCepError("");
       setCepLoading(false);
+      setIsFormCardOpen(false);
       setIsLocationSectionOpen(true);
       setIsCharacteristicsSectionOpen(true);
     },
@@ -262,6 +265,7 @@ export default function Condominios() {
         setForm(INITIAL_FORM);
         setCepError("");
         setCepLoading(false);
+        setIsFormCardOpen(false);
         setIsLocationSectionOpen(true);
         setIsCharacteristicsSectionOpen(true);
       }
@@ -335,6 +339,7 @@ export default function Condominios() {
     setForm(mapCondominiumToForm(condominium));
     setCepError("");
     setCepLoading(false);
+    setIsFormCardOpen(true);
     setIsLocationSectionOpen(true);
     setIsCharacteristicsSectionOpen(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -404,13 +409,26 @@ export default function Condominios() {
 
           <Card className="mb-8 rounded-[28px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
             <CardHeader>
-              <CardTitle>
-                {editingCondominiumId ? "Editar condominio" : "Cadastrar novo condominio"}
-              </CardTitle>
+              <button
+                type="button"
+                className="flex w-full items-center justify-between gap-4 text-left"
+                onClick={() => setIsFormCardOpen(current => !current)}
+                aria-expanded={isFormCardOpen}
+              >
+                <CardTitle className="text-lg md:text-xl">
+                  {editingCondominiumId ? "Editar Condominio" : "Cadastrar Novo Condominio"}
+                </CardTitle>
+                {isFormCardOpen ? (
+                  <ChevronUp className="h-5 w-5 shrink-0 text-slate-500" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 shrink-0 text-slate-500" />
+                )}
+              </button>
             </CardHeader>
+            {isFormCardOpen ? (
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-2 sm:col-span-2">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
+                <div className="space-y-2 md:col-span-6 xl:col-span-5">
                   <Label htmlFor="cond-nome">Nome do condominio *</Label>
                   <Input
                     id="cond-nome"
@@ -420,7 +438,7 @@ export default function Condominios() {
                   />
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2 md:col-span-3 xl:col-span-2">
                   <Label htmlFor="cond-tipo">Tipo *</Label>
                   <Select
                     value={form.tipo}
@@ -438,7 +456,7 @@ export default function Condominios() {
                   </Select>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2 md:col-span-3">
                   <Label htmlFor="cond-cnpj">CNPJ</Label>
                   <Input
                     id="cond-cnpj"
@@ -448,7 +466,7 @@ export default function Condominios() {
                   />
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2 md:col-span-6 xl:col-span-4">
                   <Label htmlFor="cond-admin-nome">Administradora</Label>
                   <Input
                     id="cond-admin-nome"
@@ -462,7 +480,7 @@ export default function Condominios() {
                   />
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2 md:col-span-6 xl:col-span-3">
                   <Label htmlFor="cond-admin-contato">Contato da administradora</Label>
                   <Input
                     id="cond-admin-contato"
@@ -476,7 +494,7 @@ export default function Condominios() {
                   />
                 </div>
 
-                <div className="space-y-2 sm:col-span-2">
+                <div className="space-y-2 md:col-span-12 xl:col-span-5">
                   <Label htmlFor="cond-referencia">Referencia</Label>
                   <Input
                     id="cond-referencia"
@@ -504,8 +522,8 @@ export default function Condominios() {
                 </button>
 
                 {isLocationSectionOpen ? (
-                  <div className="grid grid-cols-1 gap-4 border-t border-slate-200 px-4 py-4 sm:grid-cols-2">
-                    <div className="space-y-2 sm:col-span-2">
+                  <div className="grid grid-cols-1 gap-4 border-t border-slate-200 px-4 py-4 md:grid-cols-12">
+                    <div className="space-y-2 md:col-span-3">
                       <Label htmlFor="cond-cep">CEP</Label>
                       <div className="relative">
                         <Input
@@ -524,7 +542,7 @@ export default function Condominios() {
                       {cepError ? <p className="text-xs text-red-600">{cepError}</p> : null}
                     </div>
 
-                    <div className="space-y-2 sm:col-span-2">
+                    <div className="space-y-2 md:col-span-6">
                       <Label htmlFor="cond-endereco">Endereco *</Label>
                       <Input
                         id="cond-endereco"
@@ -537,7 +555,7 @@ export default function Condominios() {
                       />
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-2 md:col-span-3">
                       <Label htmlFor="cond-numero">Numero</Label>
                       <Input
                         id="cond-numero"
@@ -547,7 +565,7 @@ export default function Condominios() {
                       />
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-2 md:col-span-4">
                       <Label htmlFor="cond-bairro">Bairro</Label>
                       <Input
                         id="cond-bairro"
@@ -557,7 +575,7 @@ export default function Condominios() {
                       />
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-2 md:col-span-5">
                       <Label htmlFor="cond-cidade">Cidade *</Label>
                       <Input
                         id="cond-cidade"
@@ -567,7 +585,7 @@ export default function Condominios() {
                       />
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-2 md:col-span-3">
                       <Label htmlFor="cond-estado">Estado *</Label>
                       <Input
                         id="cond-estado"
@@ -602,8 +620,8 @@ export default function Condominios() {
                 </button>
 
                 {isCharacteristicsSectionOpen ? (
-                  <div className="grid grid-cols-1 gap-4 border-t border-slate-200 px-4 py-4 sm:grid-cols-2">
-                    <div className="space-y-2">
+                  <div className="grid grid-cols-1 gap-4 border-t border-slate-200 px-4 py-4 md:grid-cols-12">
+                    <div className="space-y-2 md:col-span-4">
                       <Label htmlFor="cond-complemento">Complemento</Label>
                       <Input
                         id="cond-complemento"
@@ -615,7 +633,7 @@ export default function Condominios() {
                       />
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-2 md:col-span-4">
                       <Label htmlFor="cond-valor">Valor de condominio</Label>
                       <MoneyInput
                         id="cond-valor"
@@ -627,7 +645,7 @@ export default function Condominios() {
                       />
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-2 md:col-span-4">
                       <Label htmlFor="cond-iptu">IPTU medio</Label>
                       <MoneyInput
                         id="cond-iptu"
@@ -637,9 +655,9 @@ export default function Condominios() {
                       />
                     </div>
 
-                    <div className="space-y-2 sm:col-span-2">
+                    <div className="space-y-2 md:col-span-12">
                       <Label>Itens do condominio</Label>
-                      <div className="grid grid-cols-1 gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2">
+                      <div className="grid grid-cols-1 gap-2 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                         {CONDOMINIUM_FEATURE_OPTIONS.map(feature => {
                           const checked = form.caracteristicas.includes(feature);
                           return (
@@ -666,7 +684,7 @@ export default function Condominios() {
                       </div>
                     </div>
 
-                    <div className="space-y-2 sm:col-span-2">
+                    <div className="space-y-2 md:col-span-12">
                       <Label htmlFor="cond-observacoes">Observacoes</Label>
                       <textarea
                         id="cond-observacoes"
@@ -699,6 +717,7 @@ export default function Condominios() {
                       setForm(INITIAL_FORM);
                       setCepError("");
                       setCepLoading(false);
+                      setIsFormCardOpen(false);
                       setIsLocationSectionOpen(true);
                       setIsCharacteristicsSectionOpen(true);
                     }}
@@ -709,6 +728,7 @@ export default function Condominios() {
                 ) : null}
               </div>
             </CardContent>
+            ) : null}
           </Card>
 
           <Card className="rounded-[28px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
@@ -726,10 +746,10 @@ export default function Condominios() {
                 <div className="hidden md:block" />
               </div>
 
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-start">
                 {isAdmin ? (
-                  <div className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 md:max-w-[360px]">
-                    <div className="flex items-center justify-between gap-3">
+                  <div className="min-h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 md:h-10 md:max-w-[360px] md:py-0">
+                    <div className="flex min-h-6 items-center justify-between gap-3 md:h-full">
                       <p className="text-sm text-slate-700">Mostrar condominios inativos</p>
                       <Dialog open={inactiveModalOpen} onOpenChange={setInactiveModalOpen}>
                         <DialogTrigger asChild>
@@ -741,7 +761,7 @@ export default function Condominios() {
                             Mostrar inativos
                           </Button>
                         </DialogTrigger>
-                        <DialogContent className="max-h-[85vh] overflow-y-auto rounded-3xl border-white/80 bg-[#f7f6f2]">
+                        <DialogContent className="max-h-[85vh] w-[calc(100%-2rem)] overflow-y-auto rounded-3xl border-white/80 bg-[#f7f6f2] sm:max-w-[520px] lg:max-w-[520px]">
                           <DialogHeader>
                             <DialogTitle>Condominios inativos</DialogTitle>
                             <DialogDescription>
@@ -767,17 +787,34 @@ export default function Condominios() {
                                 {inactiveCondominiums.map(item => (
                                   <div
                                     key={item.id}
-                                    className="rounded-2xl border border-amber-200 bg-amber-50/60 px-3 py-3"
+                                    className="flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50/60 px-3 py-3 sm:flex-row sm:items-start sm:justify-between"
                                   >
-                                    <p className="text-sm font-semibold text-slate-900">{item.nome}</p>
-                                    <p className="text-xs text-slate-600">
-                                      {item.cidade}/{item.estado} • {item.tipo}
-                                    </p>
-                                    <p className="mt-1 text-xs text-slate-600">
-                                      {item.endereco}
-                                      {item.numero ? `, ${item.numero}` : ""}
-                                      {item.bairro ? ` - ${item.bairro}` : ""}
-                                    </p>
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-semibold text-slate-900">{item.nome}</p>
+                                      <p className="text-xs text-slate-600">
+                                        {item.cidade}/{item.estado} • {item.tipo}
+                                      </p>
+                                      <p className="mt-1 text-xs text-slate-600">
+                                        {item.endereco}
+                                        {item.numero ? `, ${item.numero}` : ""}
+                                        {item.bairro ? ` - ${item.bairro}` : ""}
+                                      </p>
+                                    </div>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-8 w-fit shrink-0 rounded-full border-emerald-200 px-3 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+                                      onClick={() =>
+                                        updateCondominiumStatus.mutate({
+                                          id: item.id,
+                                          isAtivo: 1,
+                                        })
+                                      }
+                                      disabled={updateCondominiumStatus.isPending}
+                                    >
+                                      <Power className="mr-1.5 h-3.5 w-3.5" />
+                                      Ativar
+                                    </Button>
                                   </div>
                                 ))}
                               </div>
@@ -798,7 +835,7 @@ export default function Condominios() {
                     value={tipoFilter}
                     onValueChange={value => setTipoFilter(value as "todos" | CondominiumType)}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="h-10">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

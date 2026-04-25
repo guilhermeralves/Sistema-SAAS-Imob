@@ -271,8 +271,8 @@ export default function Financeiro() {
                     <CircleDollarSign className="mx-auto mb-4 h-12 w-12 text-slate-400" />
                     <p className="text-slate-600">
                       {searchTerm
-                        ? "Nenhuma comiss\u00e3o encontrada para essa pesquisa"
-                        : "Nenhuma comiss\u00e3o cadastrada ainda"}
+                        ? "Nenhuma comissão encontrada para essa pesquisa"
+                        : "Nenhuma comissão cadastrada ainda"}
                     </p>
                   </div>
                 )}

@@ -124,6 +124,38 @@ export type Condominium = typeof condominios.$inferSelect;
 export type InsertCondominium = typeof condominios.$inferInsert;
 
 /**
+ * Tabela de integracoes externas
+ * Guarda configuracoes base para conectores atuais e futuros
+ */
+export const integrations = pgTable("integrations", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 140 }).notNull(),
+  category: varchar("category", { length: 40 })
+    .$type<"portal_divulgacao" | "financeiro" | "automacao" | "outro">()
+    .notNull(),
+  provider: varchar("provider", { length: 120 }).notNull(),
+  connectionType: varchar("connectionType", { length: 30 })
+    .$type<"api" | "webhook" | "arquivo" | "manual">()
+    .notNull(),
+  status: varchar("status", { length: 20 })
+    .$type<"rascunho" | "ativo" | "inativo">()
+    .default("rascunho")
+    .notNull(),
+  endpoint: text("endpoint"),
+  apiKey: text("apiKey"),
+  configJson: text("configJson"),
+  notes: text("notes"),
+  lastTestedAt: timestamp("lastTestedAt", { mode: "date" }),
+  lastError: text("lastError"),
+  createdByUserId: integer("createdByUserId").notNull(),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export type Integration = typeof integrations.$inferSelect;
+export type InsertIntegration = typeof integrations.$inferInsert;
+
+/**
  * Tabela de imoveis
  * Armazena informacoes sobre os imoveis cadastrados no sistema
  */

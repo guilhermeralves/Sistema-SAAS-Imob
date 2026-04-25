@@ -6,6 +6,7 @@ import {
   InsertAdminUserView,
   InsertCondominium,
   InsertDocument,
+  InsertIntegration,
   InsertLead,
   InsertLeadFile,
   InsertLeadInteraction,
@@ -25,6 +26,7 @@ import {
   contracts,
   condominios,
   documents,
+  integrations,
   leadFiles,
   leadInteractions,
   leadNotes,
@@ -500,6 +502,53 @@ export async function deleteCondominiumAndDetachProperties(id: number) {
       detachedPropertiesCount: detachedProperties.length,
     };
   });
+}
+
+type ListIntegrationsOptions = {
+  category?: "portal_divulgacao" | "financeiro" | "automacao" | "outro";
+  status?: "rascunho" | "ativo" | "inativo";
+};
+
+export async function listIntegrations(options?: ListIntegrationsOptions) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = await db.select().from(integrations).orderBy(desc(integrations.updatedAt));
+
+  return rows.filter(item => {
+    if (options?.category && item.category !== options.category) return false;
+    if (options?.status && item.status !== options.status) return false;
+    return true;
+  });
+}
+
+export async function getIntegrationById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const rows = await db.select().from(integrations).where(eq(integrations.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function createIntegration(data: InsertIntegration) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [created] = await db.insert(integrations).values(data).returning();
+  return created;
+}
+
+export async function updateIntegration(id: number, data: Partial<InsertIntegration>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [updated] = await db
+    .update(integrations)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(integrations.id, id))
+    .returning();
+
+  return updated;
 }
 
 export async function linkPropertyOwnersToUserByCpf(userId: number, cpf: string) {

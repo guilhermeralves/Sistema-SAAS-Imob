@@ -113,6 +113,20 @@
       "when": 1777248000000,
       "tag": "0015_condominios_caracteristicas",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1777334400000,
+      "tag": "0016_integrations",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1777141315189,
+      "tag": "0017_far_domino",
+      "breakpoints": true
     }
   ]
 }

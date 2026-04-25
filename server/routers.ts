@@ -240,6 +240,55 @@ const deleteCondominiumSchema = z.object({
   id: z.number().int().positive(),
 });
 
+const integrationCategorySchema = z.enum([
+  "portal_divulgacao",
+  "financeiro",
+  "automacao",
+  "outro",
+]);
+const integrationConnectionTypeSchema = z.enum(["api", "webhook", "arquivo", "manual"]);
+const integrationStatusSchema = z.enum(["rascunho", "ativo", "inativo"]);
+
+const integrationMutationSchema = z.object({
+  name: z.string().trim().min(2).max(140),
+  category: integrationCategorySchema,
+  provider: z.string().trim().min(2).max(120),
+  connectionType: integrationConnectionTypeSchema,
+  status: integrationStatusSchema.default("rascunho"),
+  endpoint: z.string().trim().max(1000).nullable().optional(),
+  apiKey: z.string().trim().max(3000).nullable().optional(),
+  configJson: z
+    .string()
+    .trim()
+    .max(10000)
+    .nullable()
+    .optional()
+    .refine(value => {
+      if (!value) return true;
+      try {
+        JSON.parse(value);
+        return true;
+      } catch {
+        return false;
+      }
+    }, "Informe um JSON valido nas configuracoes."),
+  notes: z.string().trim().max(3000).nullable().optional(),
+});
+
+const listIntegrationsSchema = z.object({
+  category: integrationCategorySchema.optional(),
+  status: integrationStatusSchema.optional(),
+});
+
+const updateIntegrationSchema = integrationMutationSchema.extend({
+  id: z.number().int().positive(),
+});
+
+const updateIntegrationStatusSchema = z.object({
+  id: z.number().int().positive(),
+  status: integrationStatusSchema,
+});
+
 const createPropertySchema = propertyMutationSchema;
 
 const updatePropertySchema = propertyMutationSchema.extend({
@@ -780,6 +829,17 @@ async function ensureCondominiumExists(id: number) {
   return condominium;
 }
 
+async function ensureIntegrationExists(id: number) {
+  const { getIntegrationById } = await import("./db");
+  const integration = await getIntegrationById(id);
+
+  if (!integration) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Integracao nao encontrada." });
+  }
+
+  return integration;
+}
+
 function normalizeCondominiumFeatures(rawFeatures?: string[]) {
   if (!rawFeatures || rawFeatures.length === 0) return [] as string[];
 
@@ -1096,6 +1156,72 @@ export const appRouter = router({
         }
 
         return result;
+      }),
+  }),
+
+  integracoes: router({
+    list: adminProcedure
+      .input(listIntegrationsSchema.optional())
+      .query(async ({ input }) => {
+        const { listIntegrations } = await import("./db");
+        return await listIntegrations({
+          category: input?.category,
+          status: input?.status,
+        });
+      }),
+    create: adminProcedure.input(integrationMutationSchema).mutation(async ({ ctx, input }) => {
+      const { createIntegration } = await import("./db");
+
+      return await createIntegration({
+        name: input.name,
+        category: input.category,
+        provider: input.provider,
+        connectionType: input.connectionType,
+        status: input.status,
+        endpoint: input.endpoint ?? null,
+        apiKey: input.apiKey ?? null,
+        configJson: input.configJson ?? null,
+        notes: input.notes ?? null,
+        createdByUserId: ctx.user.id,
+      });
+    }),
+    update: adminProcedure.input(updateIntegrationSchema).mutation(async ({ input }) => {
+      const { updateIntegration } = await import("./db");
+      await ensureIntegrationExists(input.id);
+
+      const updated = await updateIntegration(input.id, {
+        name: input.name,
+        category: input.category,
+        provider: input.provider,
+        connectionType: input.connectionType,
+        status: input.status,
+        endpoint: input.endpoint ?? null,
+        apiKey: input.apiKey ?? null,
+        configJson: input.configJson ?? null,
+        notes: input.notes ?? null,
+      });
+
+      if (!updated) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Integracao nao encontrada." });
+      }
+
+      return updated;
+    }),
+    updateStatus: adminProcedure
+      .input(updateIntegrationStatusSchema)
+      .mutation(async ({ input }) => {
+        const { updateIntegration } = await import("./db");
+        await ensureIntegrationExists(input.id);
+
+        const updated = await updateIntegration(input.id, {
+          status: input.status,
+        });
+
+        if (!updated) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Integracao nao encontrada." });
+        }
+
+        return updated;
       }),
   }),
 
