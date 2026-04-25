@@ -99,6 +99,20 @@
       "when": 1776206456370,
       "tag": "0013_smiling_gladiator",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1776816000000,
+      "tag": "0014_condominios",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1777248000000,
+      "tag": "0015_condominios_caracteristicas",
+      "breakpoints": true
     }
   ]
 }

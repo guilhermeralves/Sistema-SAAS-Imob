@@ -4,6 +4,7 @@ import {
   adminUserViews,
   InsertContract,
   InsertAdminUserView,
+  InsertCondominium,
   InsertDocument,
   InsertLead,
   InsertLeadFile,
@@ -22,6 +23,7 @@ import {
   TaskItemTemplate,
   User,
   contracts,
+  condominios,
   documents,
   leadFiles,
   leadInteractions,
@@ -381,6 +383,125 @@ export async function updatePropertyOwner(id: number, data: Partial<InsertProper
   return updatedOwner;
 }
 
+type ListCondominiumsOptions = {
+  search?: string;
+  tipo?: "casa" | "apartamento";
+  includeInactive?: boolean;
+  limit?: number;
+};
+
+function normalizeSearchTerm(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function buildCondominiumSearchText(item: {
+  nome: string;
+  cidade: string;
+  estado: string;
+  endereco: string;
+  bairro: string | null;
+  cep: string | null;
+  referencia: string | null;
+  administradoraNome: string | null;
+  cnpj: string | null;
+}) {
+  return normalizeSearchTerm(
+    [
+      item.nome,
+      item.cidade,
+      item.estado,
+      item.endereco,
+      item.bairro ?? "",
+      item.cep ?? "",
+      item.referencia ?? "",
+      item.administradoraNome ?? "",
+      item.cnpj ?? "",
+    ].join(" ")
+  );
+}
+
+export async function listCondominiums(options?: ListCondominiumsOptions) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = await db.select().from(condominios).orderBy(desc(condominios.createdAt));
+  const normalizedSearch = options?.search ? normalizeSearchTerm(options.search) : "";
+  const normalizedTerms = normalizedSearch.split(/\s+/).filter(Boolean);
+
+  const filtered = rows.filter(item => {
+    if (!options?.includeInactive && item.isAtivo !== 1) return false;
+    if (options?.tipo && item.tipo !== options.tipo) return false;
+    if (normalizedTerms.length === 0) return true;
+
+    const searchableText = buildCondominiumSearchText(item);
+    return normalizedTerms.every(term => searchableText.includes(term));
+  });
+
+  if (!options?.limit) return filtered;
+  return filtered.slice(0, options.limit);
+}
+
+export async function getCondominiumById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const rows = await db.select().from(condominios).where(eq(condominios.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function createCondominium(data: InsertCondominium) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [created] = await db.insert(condominios).values(data).returning();
+  return created;
+}
+
+export async function updateCondominium(id: number, data: Partial<InsertCondominium>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [updated] = await db
+    .update(condominios)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(condominios.id, id))
+    .returning();
+
+  return updated;
+}
+
+export async function deleteCondominiumAndDetachProperties(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return await db.transaction(async tx => {
+    const detachedProperties = await tx
+      .update(properties)
+      .set({
+        emCondominio: 0,
+        tipoCondominio: null,
+        idCondominio: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(properties.idCondominio, id))
+      .returning({ id: properties.id });
+
+    const [deletedCondominium] = await tx
+      .delete(condominios)
+      .where(eq(condominios.id, id))
+      .returning({ id: condominios.id });
+
+    return {
+      deletedCondominiumId: deletedCondominium?.id ?? null,
+      detachedPropertiesCount: detachedProperties.length,
+    };
+  });
+}
+
 export async function linkPropertyOwnersToUserByCpf(userId: number, cpf: string) {
   const db = await getDb();
   if (!db) return;
@@ -405,6 +526,13 @@ async function enrichPropertiesWithRelations(propertyRows: Array<any>) {
   const userIds = Array.from(
     new Set(propertyRows.flatMap(property => [property.idCorretor, property.createdByUserId]))
   );
+  const condominiumIds = Array.from(
+    new Set(
+      propertyRows
+        .map(property => property.idCondominio)
+        .filter((condominiumId): condominiumId is number => typeof condominiumId === "number")
+    )
+  );
 
   const owners = ownerIds.length > 0
     ? await db.select().from(propertyOwners).where(inArray(propertyOwners.id, ownerIds))
@@ -412,15 +540,20 @@ async function enrichPropertiesWithRelations(propertyRows: Array<any>) {
   const relatedUsers = userIds.length > 0
     ? await db.select().from(users).where(inArray(users.id, userIds))
     : [];
+  const relatedCondominiums = condominiumIds.length > 0
+    ? await db.select().from(condominios).where(inArray(condominios.id, condominiumIds))
+    : [];
 
   const ownersById = new Map(owners.map(owner => [owner.id, owner]));
   const usersById = new Map(relatedUsers.map(user => [user.id, user]));
+  const condominiumsById = new Map(relatedCondominiums.map(item => [item.id, item]));
 
   return propertyRows.map(property => ({
     ...property,
     proprietario: ownersById.get(property.idProprietario) ?? null,
     corretorResponsavel: usersById.get(property.idCorretor) ?? null,
     cadastradoPor: usersById.get(property.createdByUserId) ?? null,
+    condominio: condominiumsById.get(property.idCondominio) ?? null,
   }));
 }
 

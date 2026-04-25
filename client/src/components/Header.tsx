@@ -236,9 +236,21 @@ export default function Header() {
                       </DropdownMenuItem>
                     </>
                   ) : null}
-                  {user.role === "administrativo" ? (
+                  {isStaff ? (
                     <>
                       <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link href="/condominios">
+                          <a className="flex items-center gap-2">
+                            <Building2 className="h-4 w-4" />
+                            Condomínios
+                          </a>
+                        </Link>
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
+                  {user.role === "administrativo" ? (
+                    <>
                       <DropdownMenuItem asChild>
                         <Link href="/controle-de-chaves">
                           <a className="flex items-center gap-2">

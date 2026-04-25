@@ -29,6 +29,7 @@ import PlataformasIntegradas from "./pages/PlataformasIntegradas";
 import ControleDeChaves from "./pages/ControleDeChaves";
 import Automacao from "./pages/Automacao";
 import TarefasEventos from "./pages/TarefasEventos";
+import Condominios from "./pages/Condominios";
 
 function RootEntryRoute() {
   const { user, loading, isAuthenticated } = useAuth();
@@ -112,6 +113,9 @@ function Router() {
       </Route>
       <Route path={"/tarefas-eventos"}>
         <ProtectedRoute component={TarefasEventos} roles={["corretor", "administrativo"]} />
+      </Route>
+      <Route path={"/condominios"}>
+        <ProtectedRoute component={Condominios} roles={["corretor", "administrativo"]} />
       </Route>
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}

@@ -88,6 +88,42 @@ export type PropertyOwner = typeof propertyOwners.$inferSelect;
 export type InsertPropertyOwner = typeof propertyOwners.$inferInsert;
 
 /**
+ * Tabela de condominios
+ * Centraliza dados reaproveitaveis no cadastro de imoveis
+ */
+export const condominios = pgTable(
+  "condominios",
+  {
+    id: serial("id").primaryKey(),
+    nome: varchar("nome", { length: 180 }).notNull(),
+    tipo: varchar("tipo", { length: 20 }).$type<"casa" | "apartamento">().notNull(),
+    endereco: varchar("endereco", { length: 255 }).notNull(),
+    numero: varchar("numero", { length: 20 }),
+    complemento: varchar("complemento", { length: 120 }),
+    bairro: varchar("bairro", { length: 100 }),
+    cidade: varchar("cidade", { length: 100 }).notNull(),
+    estado: varchar("estado", { length: 2 }).notNull(),
+    cep: varchar("cep", { length: 10 }),
+    referencia: text("referencia"),
+    valorCondominio: integer("valorCondominio"),
+    valorIptu: integer("valorIptu"),
+    cnpj: varchar("cnpj", { length: 18 }),
+    administradoraNome: varchar("administradoraNome", { length: 120 }),
+    administradoraContato: varchar("administradoraContato", { length: 120 }),
+    caracteristicas: text("caracteristicas"),
+    observacoes: text("observacoes"),
+    isAtivo: integer("isAtivo").default(1).notNull(),
+    createdByUserId: integer("createdByUserId").notNull(),
+    createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+  },
+  table => [uniqueIndex("condominios_nome_cidade_idx").on(table.nome, table.cidade)]
+);
+
+export type Condominium = typeof condominios.$inferSelect;
+export type InsertCondominium = typeof condominios.$inferInsert;
+
+/**
  * Tabela de imoveis
  * Armazena informacoes sobre os imoveis cadastrados no sistema
  */
@@ -133,6 +169,9 @@ export const properties = pgTable("properties", {
   registroMunicipal: varchar("registroMunicipal", { length: 120 }),
   informacoesLegais: text("informacoesLegais"),
   observacoesJuridicas: text("observacoesJuridicas"),
+  emCondominio: integer("emCondominio").default(0).notNull(),
+  tipoCondominio: varchar("tipoCondominio", { length: 20 }).$type<"casa" | "apartamento">(),
+  idCondominio: integer("idCondominio"),
   idCorretor: integer("idCorretor").notNull(), // ID do corretor responsavel
   idProprietario: integer("idProprietario"),
   createdByUserId: integer("createdByUserId").notNull(),

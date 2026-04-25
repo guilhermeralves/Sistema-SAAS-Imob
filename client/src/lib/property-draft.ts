@@ -4,6 +4,9 @@ export type NewPropertyDraftData = {
   tipo: string;
   finalidade: string;
   idCorretor: string;
+  emCondominio: string;
+  tipoCondominio: string;
+  idCondominio: string;
   valor: string;
   area: string;
   quartos: string;

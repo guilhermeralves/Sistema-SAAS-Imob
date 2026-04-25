@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import Layout from "@/components/Layout";
 import ProtectedPropertyImage from "@/components/ProtectedPropertyImage";
@@ -112,6 +112,9 @@ export default function Imoveis() {
     tipo: "apartamento",
     finalidade: "venda",
     idCorretor: "",
+    emCondominio: "nao",
+    tipoCondominio: "",
+    idCondominio: "",
     valor: "",
     area: "",
     quartos: "",
@@ -144,8 +147,46 @@ export default function Imoveis() {
   const { data: adminUsers } = trpc.admin.users.useQuery(undefined, {
     enabled: user?.role === "administrativo",
   });
+  const shouldLoadCondominiums =
+    canManageProperties &&
+    newPropertyData.emCondominio === "sim" &&
+    (newPropertyData.tipoCondominio === "casa" || newPropertyData.tipoCondominio === "apartamento");
+
+  const { data: condominios } = trpc.condominios.list.useQuery(
+    {
+      tipo:
+        newPropertyData.tipoCondominio === "casa" || newPropertyData.tipoCondominio === "apartamento"
+          ? newPropertyData.tipoCondominio
+          : undefined,
+      limit: 200,
+    },
+    {
+      enabled: shouldLoadCondominiums,
+    }
+  );
+  const [condominioSearch, setCondominioSearch] = useState("");
 
   const activeBrokers = adminUsers?.filter(candidate => candidate.role === "corretor" && candidate.isActive === 1) || [];
+  const filteredCondominios = useMemo(() => {
+    const normalizedTerm = normalizeSearchValue(condominioSearch.trim());
+
+    return (condominios ?? []).filter(condominio => {
+      if (!normalizedTerm) return true;
+      const searchableText = normalizeSearchValue(
+        [
+          condominio.nome,
+          condominio.endereco,
+          condominio.bairro ?? "",
+          condominio.cidade,
+          condominio.estado,
+          condominio.cep ?? "",
+          condominio.cnpj ?? "",
+          condominio.referencia ?? "",
+        ].join(" ")
+      );
+      return searchableText.includes(normalizedTerm);
+    });
+  }, [condominios, condominioSearch]);
 
   const handleProceedToPhotoStep = () => {
     // Valida campos obrigatorios
@@ -157,6 +198,18 @@ export default function Imoveis() {
     if (user?.role === "administrativo" && !newPropertyData.idCorretor) {
       toast.error("Selecione o corretor responsável pelo imóvel.");
       return;
+    }
+
+    if (newPropertyData.emCondominio === "sim") {
+      if (!newPropertyData.tipoCondominio) {
+        toast.error("Selecione o tipo do condominio.");
+        return;
+      }
+
+      if (!newPropertyData.idCondominio) {
+        toast.error("Selecione o condominio para continuar.");
+        return;
+      }
     }
 
     if (
@@ -181,6 +234,40 @@ export default function Imoveis() {
     saveNewPropertyDraftPhotos([]);
     setNewPropertyOpen(false);
     setLocation("/imoveis/novo/preview");
+  };
+
+  const handleSelectCondominio = (condominioIdValue: string) => {
+    if (condominioIdValue === "empty") {
+      setNewPropertyData(current => ({
+        ...current,
+        idCondominio: "",
+      }));
+      return;
+    }
+
+    const selectedCondominio = (condominios ?? []).find(
+      item => item.id === Number(condominioIdValue)
+    );
+
+    if (!selectedCondominio) {
+      toast.error("Condominio selecionado nao encontrado.");
+      return;
+    }
+
+    setNewPropertyData(current => ({
+      ...current,
+      idCondominio: String(selectedCondominio.id),
+      emCondominio: "sim",
+      tipoCondominio: selectedCondominio.tipo,
+      tipo: selectedCondominio.tipo,
+      endereco: selectedCondominio.endereco,
+      numero: selectedCondominio.numero ?? current.numero,
+      bairro: selectedCondominio.bairro ?? current.bairro,
+      cidade: selectedCondominio.cidade,
+      estado: selectedCondominio.estado,
+      cep: selectedCondominio.cep ?? current.cep,
+    }));
+    setCepError("");
   };
 
   // ========== FUNCAO PARA LIDAR COM CEP ==========
@@ -373,6 +460,118 @@ export default function Imoveis() {
                     </select>
                   </div>
                 </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+                  <div className="space-y-1 sm:space-y-2">
+                    <Label htmlFor="emCondominio" className="text-sm sm:text-base">E de condominio? *</Label>
+                    <Select
+                      value={newPropertyData.emCondominio}
+                      onValueChange={value => {
+                        if (value === "sim") {
+                          setNewPropertyData(current => ({
+                            ...current,
+                            emCondominio: "sim",
+                          }));
+                          return;
+                        }
+
+                        setNewPropertyData(current => ({
+                          ...current,
+                          emCondominio: "nao",
+                          tipoCondominio: "",
+                          idCondominio: "",
+                        }));
+                        setCondominioSearch("");
+                      }}
+                    >
+                      <SelectTrigger id="emCondominio" className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="nao">Nao</SelectItem>
+                        <SelectItem value="sim">Sim</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {newPropertyData.emCondominio === "sim" ? (
+                    <div className="space-y-1 sm:space-y-2">
+                      <Label htmlFor="tipoCondominio" className="text-sm sm:text-base">Tipo no condominio *</Label>
+                      <Select
+                        value={newPropertyData.tipoCondominio || "empty"}
+                        onValueChange={value => {
+                          if (value === "empty") {
+                            setNewPropertyData(current => ({
+                              ...current,
+                              tipoCondominio: "",
+                              idCondominio: "",
+                            }));
+                            return;
+                          }
+
+                          setNewPropertyData(current => ({
+                            ...current,
+                            tipoCondominio: value,
+                            tipo: value,
+                            idCondominio: "",
+                          }));
+                          setCondominioSearch("");
+                        }}
+                      >
+                        <SelectTrigger id="tipoCondominio" className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base">
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="empty">Selecione</SelectItem>
+                          <SelectItem value="apartamento">Apartamento</SelectItem>
+                          <SelectItem value="casa">Casa</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null}
+                </div>
+
+                {newPropertyData.emCondominio === "sim" ? (
+                  <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-3 sm:p-4">
+                    <div className="space-y-1 sm:space-y-2">
+                      <Label htmlFor="condominio-search" className="text-sm sm:text-base">Pesquisar condominio</Label>
+                      <Input
+                        id="condominio-search"
+                        value={condominioSearch}
+                        onChange={event => setCondominioSearch(event.target.value)}
+                        placeholder="Nome, cidade, bairro, endereco, CNPJ..."
+                        className="rounded-2xl border-slate-200 bg-white text-sm shadow-sm sm:text-base"
+                        disabled={!newPropertyData.tipoCondominio}
+                      />
+                    </div>
+
+                    <div className="space-y-1 sm:space-y-2">
+                      <Label htmlFor="idCondominio" className="text-sm sm:text-base">Condominio *</Label>
+                      <Select
+                        value={newPropertyData.idCondominio || "empty"}
+                        onValueChange={handleSelectCondominio}
+                        disabled={!newPropertyData.tipoCondominio}
+                      >
+                        <SelectTrigger id="idCondominio" className="rounded-2xl border-slate-200 bg-white text-sm shadow-sm sm:text-base">
+                          <SelectValue placeholder="Selecione um condominio" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="empty">Selecione</SelectItem>
+                          {filteredCondominios.map(condominio => (
+                            <SelectItem key={condominio.id} value={String(condominio.id)}>
+                              {condominio.nome} • {condominio.cidade}/{condominio.estado}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {newPropertyData.tipoCondominio && filteredCondominios.length === 0 ? (
+                        <p className="text-xs text-slate-500">
+                          Nenhum condominio encontrado para o filtro atual.
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="space-y-1 sm:space-y-2">
                   <Label htmlFor="idCorretor" className="text-sm sm:text-base">Corretor responsável *</Label>
@@ -936,4 +1135,5 @@ export default function Imoveis() {
     </Layout>
   );
 }
+
 

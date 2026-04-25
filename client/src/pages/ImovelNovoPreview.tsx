@@ -149,6 +149,12 @@ export default function ImovelNovoPreview() {
       return;
     }
 
+    const isCondominiumProperty = draft.emCondominio === "sim";
+    if (isCondominiumProperty && (!draft.tipoCondominio || !draft.idCondominio)) {
+      toast.error("Selecione o tipo e o condominio antes de salvar.");
+      return;
+    }
+
     try {
       const created = await createPropertyMutation.mutateAsync({
         titulo: draft.titulo,
@@ -168,6 +174,11 @@ export default function ImovelNovoPreview() {
         cep: draft.cep || null,
         fotos: JSON.stringify(photoUrls),
         idCorretor: draft.idCorretor ? Number(draft.idCorretor) : undefined,
+        emCondominio: isCondominiumProperty,
+        tipoCondominio: isCondominiumProperty
+          ? (draft.tipoCondominio as "casa" | "apartamento")
+          : null,
+        idCondominio: isCondominiumProperty ? Number(draft.idCondominio) : null,
         confirmedOwnerEmailConflict,
         owner: {
           name: draft.ownerName,
@@ -333,6 +344,11 @@ export default function ImovelNovoPreview() {
                     <p className="mt-2 text-sm text-slate-600 capitalize">
                       Tipo: {draft.tipo} • Finalidade: {draft.finalidade}
                     </p>
+                    {draft.emCondominio === "sim" ? (
+                      <p className="mt-1 text-sm text-slate-600 capitalize">
+                        Em condominio • Tipo: {draft.tipoCondominio} • Condominio #{draft.idCondominio}
+                      </p>
+                    ) : null}
                   </div>
 
                   <div className="space-y-3 rounded-[28px] border border-slate-200 bg-white/80 p-4">

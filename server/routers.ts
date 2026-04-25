@@ -162,6 +162,8 @@ const propertyOwnerInputSchema = z.object({
   notes: z.string().trim().max(2000).optional(),
 });
 
+const condominiumTypeSchema = z.enum(["casa", "apartamento"]);
+
 const propertyMutationSchema = z.object({
   titulo: z.string().trim().min(2).max(255),
   descricao: z.string().trim().max(5000).nullable().optional(),
@@ -185,12 +187,57 @@ const propertyMutationSchema = z.object({
   destaque: z.number().int().min(0).max(1).optional(),
   status: z.string().trim().max(20).optional(),
   idCorretor: z.number().int().positive().optional(),
+  emCondominio: z.boolean().optional(),
+  tipoCondominio: condominiumTypeSchema.nullable().optional(),
+  idCondominio: z.number().int().positive().nullable().optional(),
   owner: propertyOwnerInputSchema,
   confirmedOwnerEmailConflict: z.boolean().optional(),
 });
 
 const propertyListSchema = z.object({
   showDeletedOnly: z.boolean().optional(),
+});
+
+const condominiumMutationSchema = z.object({
+  nome: z.string().trim().min(2).max(180),
+  tipo: condominiumTypeSchema,
+  endereco: z.string().trim().min(2).max(255),
+  numero: z.string().trim().max(20).nullable().optional(),
+  complemento: z.string().trim().max(120).nullable().optional(),
+  bairro: z.string().trim().max(100).nullable().optional(),
+  cidade: z.string().trim().min(2).max(100),
+  estado: z.string().trim().min(2).max(2),
+  cep: z.string().trim().max(10).nullable().optional(),
+  referencia: z.string().trim().max(2000).nullable().optional(),
+  valorCondominio: z.number().int().min(0).nullable().optional(),
+  valorIptu: z.number().int().min(0).nullable().optional(),
+  cnpj: z.string().trim().max(18).nullable().optional(),
+  administradoraNome: z.string().trim().max(120).nullable().optional(),
+  administradoraContato: z.string().trim().max(120).nullable().optional(),
+  caracteristicas: z.array(z.string().trim().min(1).max(80)).max(50).optional(),
+  observacoes: z.string().trim().max(5000).nullable().optional(),
+});
+
+const listCondominiumsSchema = z.object({
+  search: z.string().trim().max(120).optional(),
+  tipo: condominiumTypeSchema.optional(),
+  includeInactive: z.boolean().optional(),
+  limit: z.number().int().min(1).max(300).optional(),
+});
+
+const createCondominiumSchema = condominiumMutationSchema;
+
+const updateCondominiumSchema = condominiumMutationSchema.extend({
+  id: z.number().int().positive(),
+});
+
+const updateCondominiumStatusSchema = z.object({
+  id: z.number().int().positive(),
+  isAtivo: z.number().int().min(0).max(1),
+});
+
+const deleteCondominiumSchema = z.object({
+  id: z.number().int().positive(),
 });
 
 const createPropertySchema = propertyMutationSchema;
@@ -688,6 +735,61 @@ async function ensureBrokerUser(userId: number) {
   return broker;
 }
 
+function normalizeCondominiumText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+async function ensureCondominiumUnique(
+  nome: string,
+  cidade: string,
+  currentCondominiumId?: number
+) {
+  const { listCondominiums } = await import("./db");
+  const allCondominiums = await listCondominiums({ includeInactive: true, limit: 1000 });
+  const normalizedNome = normalizeCondominiumText(nome);
+  const normalizedCidade = normalizeCondominiumText(cidade);
+
+  const duplicated = allCondominiums.find(item => {
+    if (currentCondominiumId && item.id === currentCondominiumId) return false;
+    return (
+      normalizeCondominiumText(item.nome) === normalizedNome &&
+      normalizeCondominiumText(item.cidade) === normalizedCidade
+    );
+  });
+
+  if (duplicated) {
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: "Ja existe um condominio cadastrado com este nome na cidade informada.",
+    });
+  }
+}
+
+async function ensureCondominiumExists(id: number) {
+  const { getCondominiumById } = await import("./db");
+  const condominium = await getCondominiumById(id);
+
+  if (!condominium) {
+    throw new TRPCError({ code: "NOT_FOUND", message: "Condominio nao encontrado." });
+  }
+
+  return condominium;
+}
+
+function normalizeCondominiumFeatures(rawFeatures?: string[]) {
+  if (!rawFeatures || rawFeatures.length === 0) return [] as string[];
+
+  const normalized = rawFeatures
+    .map(item => item.trim())
+    .filter(Boolean);
+
+  return Array.from(new Set(normalized));
+}
+
 async function upsertPropertyOwnerFromInput(
   ownerInput: z.infer<typeof propertyOwnerInputSchema>,
   options?: {
@@ -887,6 +989,116 @@ export const appRouter = router({
     }),
   }),
 
+  condominios: router({
+    list: staffProcedure
+      .input(listCondominiumsSchema.optional())
+      .query(async ({ ctx, input }) => {
+        const { listCondominiums } = await import("./db");
+        const includeInactive =
+          ctx.user.role === "administrativo" && input?.includeInactive === true;
+
+        return await listCondominiums({
+          search: input?.search,
+          tipo: input?.tipo,
+          includeInactive,
+          limit: input?.limit ?? 200,
+        });
+      }),
+    create: staffProcedure.input(createCondominiumSchema).mutation(async ({ ctx, input }) => {
+      const { createCondominium } = await import("./db");
+      await ensureCondominiumUnique(input.nome, input.cidade);
+      const normalizedFeatures = normalizeCondominiumFeatures(input.caracteristicas);
+
+      return await createCondominium({
+        nome: input.nome,
+        tipo: input.tipo,
+        endereco: input.endereco,
+        numero: input.numero ?? null,
+        complemento: input.complemento ?? null,
+        bairro: input.bairro ?? null,
+        cidade: input.cidade,
+        estado: input.estado.toUpperCase(),
+        cep: input.cep ?? null,
+        referencia: input.referencia ?? null,
+        valorCondominio: input.valorCondominio ?? null,
+        valorIptu: input.valorIptu ?? null,
+        cnpj: input.cnpj ?? null,
+        administradoraNome: input.administradoraNome ?? null,
+        administradoraContato: input.administradoraContato ?? null,
+        caracteristicas:
+          normalizedFeatures.length > 0 ? JSON.stringify(normalizedFeatures) : null,
+        observacoes: input.observacoes ?? null,
+        isAtivo: 1,
+        createdByUserId: ctx.user.id,
+      });
+    }),
+    update: staffProcedure.input(updateCondominiumSchema).mutation(async ({ ctx, input }) => {
+      const { updateCondominium } = await import("./db");
+      await ensureCondominiumExists(input.id);
+      await ensureCondominiumUnique(input.nome, input.cidade, input.id);
+      const normalizedFeatures = normalizeCondominiumFeatures(input.caracteristicas);
+
+      const updated = await updateCondominium(input.id, {
+        nome: input.nome,
+        tipo: input.tipo,
+        endereco: input.endereco,
+        numero: input.numero ?? null,
+        complemento: input.complemento ?? null,
+        bairro: input.bairro ?? null,
+        cidade: input.cidade,
+        estado: input.estado.toUpperCase(),
+        cep: input.cep ?? null,
+        referencia: input.referencia ?? null,
+        valorCondominio: input.valorCondominio ?? null,
+        valorIptu: input.valorIptu ?? null,
+        cnpj: input.cnpj ?? null,
+        administradoraNome: input.administradoraNome ?? null,
+        administradoraContato: input.administradoraContato ?? null,
+        caracteristicas:
+          normalizedFeatures.length > 0 ? JSON.stringify(normalizedFeatures) : null,
+        observacoes: input.observacoes ?? null,
+      });
+
+      if (!updated) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Condominio nao encontrado." });
+      }
+
+      return updated;
+    }),
+    updateStatus: adminProcedure
+      .input(updateCondominiumStatusSchema)
+      .mutation(async ({ input }) => {
+        const { updateCondominium } = await import("./db");
+        await ensureCondominiumExists(input.id);
+
+        const updated = await updateCondominium(input.id, {
+          isAtivo: input.isAtivo,
+        });
+
+        if (!updated) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Condominio nao encontrado." });
+        }
+
+        return updated;
+      }),
+    delete: adminProcedure
+      .input(deleteCondominiumSchema)
+      .mutation(async ({ input }) => {
+        const { deleteCondominiumAndDetachProperties } = await import("./db");
+        await ensureCondominiumExists(input.id);
+
+        const result = await deleteCondominiumAndDetachProperties(input.id);
+        if (!result.deletedCondominiumId) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Condominio nao encontrado.",
+          });
+        }
+
+        return result;
+      }),
+  }),
+
   properties: router({
     list: publicProcedure.input(propertyListSchema.optional()).query(async ({ ctx, input }) => {
       const { getAllProperties } = await import("./db");
@@ -955,6 +1167,45 @@ export const appRouter = router({
       const owner = await upsertPropertyOwnerFromInput(input.owner, {
         confirmedEmailConflict: input.confirmedOwnerEmailConflict,
       });
+      const emCondominio = input.emCondominio === true;
+      let idCondominio: number | null = emCondominio ? input.idCondominio ?? null : null;
+      let tipoCondominio: z.infer<typeof condominiumTypeSchema> | null = emCondominio
+        ? input.tipoCondominio ?? null
+        : null;
+
+      if (emCondominio) {
+        if (!idCondominio) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Selecione o condominio vinculado ao imovel.",
+          });
+        }
+
+        if (!tipoCondominio) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Selecione o tipo do condominio (casa ou apartamento).",
+          });
+        }
+
+        const condominium = await ensureCondominiumExists(idCondominio);
+        if (ctx.user.role !== "administrativo" && condominium.isAtivo !== 1) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "O condominio selecionado esta inativo.",
+          });
+        }
+
+        if (condominium.tipo !== tipoCondominio) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "O tipo selecionado nao corresponde ao tipo cadastrado no condominio.",
+          });
+        }
+      } else {
+        idCondominio = null;
+        tipoCondominio = null;
+      }
 
       return await createProperty({
         titulo: input.titulo,
@@ -978,6 +1229,9 @@ export const appRouter = router({
         fotos: input.fotos ?? null,
         destaque: input.destaque ?? 0,
         status: input.status ?? "ativo",
+        emCondominio: emCondominio ? 1 : 0,
+        tipoCondominio,
+        idCondominio,
         idCorretor,
         idProprietario: owner.id,
         createdByUserId: ctx.user.id,
@@ -1036,6 +1290,53 @@ export const appRouter = router({
         currentOwnerId: property.idProprietario ?? undefined,
         confirmedEmailConflict: confirmedOwnerEmailConflict,
       });
+      const emCondominio =
+        data.emCondominio !== undefined
+          ? data.emCondominio
+          : property.emCondominio === 1;
+      let idCondominio: number | null = emCondominio
+        ? (data.idCondominio !== undefined ? data.idCondominio : property.idCondominio ?? null)
+        : null;
+      let tipoCondominio: z.infer<typeof condominiumTypeSchema> | null = emCondominio
+        ? (data.tipoCondominio !== undefined
+          ? data.tipoCondominio
+          : property.tipoCondominio ?? null)
+        : null;
+
+      if (emCondominio) {
+        if (!idCondominio) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Selecione o condominio vinculado ao imovel.",
+          });
+        }
+
+        const condominium = await ensureCondominiumExists(idCondominio);
+        if (
+          ctx.user.role !== "administrativo" &&
+          condominium.isAtivo !== 1 &&
+          condominium.id !== property.idCondominio
+        ) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "O condominio selecionado esta inativo.",
+          });
+        }
+
+        if (!tipoCondominio) {
+          tipoCondominio = condominium.tipo;
+        }
+
+        if (condominium.tipo !== tipoCondominio) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "O tipo selecionado nao corresponde ao tipo cadastrado no condominio.",
+          });
+        }
+      } else {
+        idCondominio = null;
+        tipoCondominio = null;
+      }
 
       return await updateProperty(id, {
         titulo: data.titulo,
@@ -1059,6 +1360,9 @@ export const appRouter = router({
         fotos: data.fotos ?? null,
         destaque: data.destaque ?? 0,
         status: data.status ?? property.status,
+        emCondominio: emCondominio ? 1 : 0,
+        tipoCondominio,
+        idCondominio,
         idCorretor,
         idProprietario: owner.id,
       });
