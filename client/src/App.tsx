@@ -28,6 +28,8 @@ import Dashboard from "./pages/Dashboard";
 import Integracoes from "./pages/Integracoes";
 import ControleDeChaves from "./pages/ControleDeChaves";
 import Automacao from "./pages/Automacao";
+import Bonificacoes from "./pages/Bonificacoes";
+import EvolucaoProfissional from "./pages/EvolucaoProfissional";
 import TarefasEventos from "./pages/TarefasEventos";
 import Condominios from "./pages/Condominios";
 
@@ -60,6 +62,16 @@ function LegacyIntegracoesRoute() {
 
   useEffect(() => {
     setLocation("/integracoes");
+  }, [setLocation]);
+
+  return null;
+}
+
+function LegacyTrilhasDesenvolvimentoRoute() {
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    setLocation("/evolucao-profissional");
   }, [setLocation]);
 
   return null;
@@ -119,6 +131,13 @@ function Router() {
       <Route path={"/controle-de-chaves"}>
         <ProtectedRoute component={ControleDeChaves} roles={["administrativo"]} />
       </Route>
+      <Route path={"/bonificacoes"}>
+        <ProtectedRoute component={Bonificacoes} roles={["administrativo"]} />
+      </Route>
+      <Route path={"/evolucao-profissional"}>
+        <ProtectedRoute component={EvolucaoProfissional} roles={["corretor", "administrativo"]} />
+      </Route>
+      <Route path={"/trilhas-desenvolvimento"} component={LegacyTrilhasDesenvolvimentoRoute} />
       <Route path={"/automacao"}>
         <ProtectedRoute component={Automacao} roles={["administrativo"]} />
       </Route>

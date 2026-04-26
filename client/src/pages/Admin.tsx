@@ -35,7 +35,10 @@ import { trpc } from "@/lib/trpc";
 import { getLoginUrl } from "@/const";
 import {
   Building2,
-  FileText,
+  ClipboardCheck,
+  FileSearch,
+  FileSpreadsheet,
+  Handshake,
   KeyRound,
   MoreHorizontal,
   Search,
@@ -43,6 +46,7 @@ import {
   Shield,
   Trash2,
   User,
+  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -52,6 +56,14 @@ const FIELD_CLASS =
   "rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base";
 
 type PropertyKeyStatus = "disponivel" | "retirada" | "indisponivel";
+
+type AdminProcessModule = {
+  value: string;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  topics: string[];
+};
 
 const KEY_STATUS_META: Record<
   PropertyKeyStatus,
@@ -73,6 +85,71 @@ const KEY_STATUS_META: Record<
     badgeClass: "bg-rose-100 text-rose-700",
   },
 };
+
+const ADMIN_PROCESS_MODULES: AdminProcessModule[] = [
+  {
+    value: "imoveis",
+    title: "Imóveis",
+    description: "Gestão de todos os imóveis, com acesso a documentos e todos detalhes.",
+    icon: Building2,
+    topics: ["Imóveis"],
+  },
+  {
+    value: "locacoes",
+    title: "Locações",
+    description: "Tudo que envolve iniciar, acompanhar e formalizar uma locação.",
+    icon: ClipboardCheck,
+    topics: [
+      "Locações Ativas",
+      "Propostas de Locação",
+      "Boletos",
+      "Contratos",
+      "Captações",
+      "Vistorias",
+      "Entrega de Chaves",
+    ],
+  },
+  {
+    value: "vendas",
+    title: "Vendas",
+    description: "Tudo relacionado à intermediação de compra e venda.",
+    icon: Handshake,
+    topics: [
+      "Propostas de Venda",
+      "Contratos",
+      "Captações",
+      "Histórico de Vendas",
+    ],
+  },
+  {
+    value: "vistorias-avaliacoes",
+    title: "Avaliações de Imóveis",
+    description: "Fluxo de avaliação de imóveis para venda, locação e documentação técnica.",
+    icon: FileSearch,
+    topics: [
+      "Avaliação de venda",
+      "Avaliação de Locação",
+      "Documentos",
+      "Historico de Laudos",
+    ],
+  },
+  {
+    value: "informes-dimob",
+    title: "Informes e DIMOB",
+    description: "Rotina administrativa e fiscal para informes aos envolvidos.",
+    icon: FileSpreadsheet,
+    topics: [
+      "Informes de Imposto de Renda",
+      "DIMOB",
+      "Proprietários",
+      "Inquilinos",
+      "Compradores / vendedores",
+      "Rendimentos por contrato",
+      "Exportações fiscais",
+      "Pendências de dados",
+    ],
+  },
+];
 
 function normalizeSearchValue(value: string) {
   return value
@@ -139,7 +216,8 @@ function buildSearchText(
 export default function Admin() {
   const { user, loading, isAuthenticated } = useAuth();
   const utils = trpc.useUtils();
-  const [activeTab, setActiveTab] = useState("imoveis");
+  const [selectedModuleValue, setSelectedModuleValue] = useState("imoveis");
+  const [activeTab, setActiveTab] = useState(ADMIN_PROCESS_MODULES[0].topics[0]);
   const [searchTerm, setSearchTerm] = useState("");
   const [showDeletedProperties, setShowDeletedProperties] = useState(false);
   const [keyStatusDialogPropertyId, setKeyStatusDialogPropertyId] = useState<number | null>(null);
@@ -166,9 +244,6 @@ export default function Admin() {
     }
   );
 
-  const { data: contracts, isLoading: loadingContracts } = trpc.contracts.list.useQuery(undefined, {
-    enabled: isAuthenticated && user?.role === "administrativo",
-  });
   const { data: keyStatusRequests, isLoading: loadingKeyStatusRequests } = trpc.properties.keyStatusRequests.useQuery(
     { idImovel: keyStatusDialogPropertyId ?? 0 },
     {
@@ -228,19 +303,6 @@ export default function Admin() {
     );
   }, [properties, normalizedSearchTerm]);
 
-  const filteredContracts = useMemo(() => {
-    if (!contracts) return [];
-    if (!normalizedSearchTerm) return contracts;
-
-    return contracts.filter(contract =>
-      buildSearchText(contract as Record<string, unknown>, [
-        formatStoredDate(contract.createdAt),
-        formatStoredDate(contract.dataInicio),
-        contract.dataFim ? formatStoredDate(contract.dataFim) : null,
-      ]).includes(normalizedSearchTerm)
-    );
-  }, [contracts, normalizedSearchTerm]);
-
   const selectedProperty = useMemo(() => {
     if (!properties || keyStatusDialogPropertyId === null) return null;
     return properties.find(property => property.id === keyStatusDialogPropertyId) ?? null;
@@ -256,19 +318,21 @@ export default function Admin() {
     [keyStatusRequests]
   );
 
-  const totalImoveis = properties?.length || 0;
-  const imoveisAtivos = properties?.filter(property => property.status === "ativo").length || 0;
-  const totalContratos = contracts?.length || 0;
-  const contratosAtivos = contracts?.filter(contract => contract.status === "ativo").length || 0;
+  const selectedModule = useMemo(
+    () => ADMIN_PROCESS_MODULES.find(module => module.value === selectedModuleValue) ?? ADMIN_PROCESS_MODULES[0],
+    [selectedModuleValue]
+  );
 
   useEffect(() => {
-    if (!highlightedPropertyId || !properties?.length || activeTab !== "imoveis") return;
+    if (!highlightedPropertyId || !properties?.length || selectedModuleValue !== "imoveis" || activeTab !== "Imóveis") {
+      return;
+    }
 
     const row = document.querySelector(`[data-property-row="${highlightedPropertyId}"]`);
     if (row instanceof HTMLElement) {
       row.scrollIntoView({ block: "center", behavior: "smooth" });
     }
-  }, [activeTab, highlightedPropertyId, properties]);
+  }, [activeTab, highlightedPropertyId, properties, selectedModuleValue]);
 
   useEffect(() => {
     if (!selectedProperty) return;
@@ -352,6 +416,181 @@ export default function Admin() {
     return foundUser?.name || foundUser?.email || `ID ${userId}`;
   };
 
+  const handleSelectAdminModule = (module: AdminProcessModule) => {
+    setSelectedModuleValue(module.value);
+    setActiveTab(module.topics[0]);
+  };
+
+  const renderPropertiesList = () => {
+    if (loadingProperties) {
+      return (
+        <div className="space-y-3">
+          {[1, 2, 3].map(item => (
+            <div key={item} className="h-16 animate-pulse rounded bg-muted" />
+          ))}
+        </div>
+      );
+    }
+
+    if (filteredProperties.length === 0) {
+      return (
+        <div className="py-10 text-center">
+          <Building2 className="mx-auto mb-4 h-12 w-12 text-slate-400" />
+          <p className="text-slate-600">
+            {searchTerm
+              ? "Nenhum imóvel encontrado para essa pesquisa"
+              : showDeletedProperties
+                ? "Nenhum imóvel apagado"
+                : "Nenhum imóvel cadastrado"}
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white/80">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Título</TableHead>
+              <TableHead>Tipo</TableHead>
+              <TableHead>Cidade</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Corretor</TableHead>
+              <TableHead>Cadastro</TableHead>
+              <TableHead className="w-28 text-right">Ações</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredProperties.map(property => {
+              const currentKeyStatus = (property.keyStatus as PropertyKeyStatus) ?? "disponivel";
+              const hideKeyControl = isTerrenoType(property.tipo);
+              const canOpenDetails = property.lixeira !== 1;
+
+              return (
+                <TableRow
+                  key={property.id}
+                  data-property-row={property.id}
+                  className={property.id === highlightedPropertyId ? "bg-primary/5 ring-1 ring-primary/20" : ""}
+                >
+                  <TableCell className="font-medium">
+                    <div className="flex items-center gap-2">
+                      {canOpenDetails ? (
+                        <Link href={`/imoveis/${property.id}`}>
+                          <a className="text-slate-900 hover:text-emerald-700 hover:underline">
+                            {property.titulo}
+                          </a>
+                        </Link>
+                      ) : (
+                        <span className="text-slate-700">{property.titulo}</span>
+                      )}
+                      {!hideKeyControl ? (
+                        <button
+                          type="button"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white/80 hover:bg-slate-100"
+                          onClick={() => openKeyStatusDialog(property)}
+                          title={`Status da chave: ${KEY_STATUS_META[currentKeyStatus].label}`}
+                          aria-label={`Abrir status da chave do imóvel ${property.titulo}`}
+                        >
+                          <KeyRound className={`h-4 w-4 ${KEY_STATUS_META[currentKeyStatus].iconClass}`} />
+                        </button>
+                      ) : null}
+                    </div>
+                  </TableCell>
+                  <TableCell className="capitalize">{property.tipo}</TableCell>
+                  <TableCell>{property.cidade}/{property.estado}</TableCell>
+                  <TableCell>
+                    <span
+                      className={`rounded-full px-2 py-1 text-xs font-medium ${
+                        property.status === "ativo" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
+                      }`}
+                    >
+                      {property.status}
+                    </span>
+                  </TableCell>
+                  <TableCell>ID {property.idCorretor}</TableCell>
+                  <TableCell>{formatStoredDate(property.createdAt)}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center justify-end gap-2">
+                      <Button variant="outline" size="icon" asChild className="h-8 w-8">
+                        <Link href={`/admin/imoveis/${property.id}`}>
+                          <a aria-label={`Abrir ficha do imóvel ${property.titulo}`}>
+                            <Settings2 className="h-4 w-4" />
+                          </a>
+                        </Link>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 text-red-600 hover:text-red-700"
+                        aria-label={`Excluir imóvel ${property.titulo}`}
+                        onClick={() => openDeletePropertyDialog(property)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+    );
+  };
+
+  const renderAdminTopicPanels = () => {
+    return selectedModule.topics.map(topic => (
+      <TabsContent key={topic} value={topic}>
+        <Card className={SURFACE_CARD_CLASS}>
+          <CardHeader>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="space-y-2">
+                <CardTitle className="text-xl text-slate-950">
+                  {topic}
+                </CardTitle>
+                <CardDescription className="max-w-3xl text-slate-600">
+                  {selectedModule.title}: {selectedModule.description}
+                </CardDescription>
+              </div>
+              {selectedModule.value === "imoveis" && topic === "Imóveis" ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" aria-label="Abrir ações da lista de imóveis">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuCheckboxItem
+                      checked={showDeletedProperties}
+                      onCheckedChange={checked => setShowDeletedProperties(checked === true)}
+                    >
+                      Imóveis apagados
+                    </DropdownMenuCheckboxItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ) : (
+                <span className="w-fit rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
+                  Estrutura inicial
+                </span>
+              )}
+            </div>
+            {selectedModule.value === "imoveis" && topic === "Imóveis" ? renderSearchInput("Pesquisar imóveis") : null}
+          </CardHeader>
+          <CardContent>
+            {selectedModule.value === "imoveis" && topic === "Imóveis" ? (
+              renderPropertiesList()
+            ) : (
+              <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-5 text-sm text-slate-600">
+                Esta área será conectada aos dados e fluxos operacionais na próxima etapa.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+    ));
+  };
+
   if (loading) {
     return (
       <Layout>
@@ -401,258 +640,46 @@ export default function Admin() {
     <Layout>
       <div className="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.88),rgba(244,240,232,0.82)_45%,rgba(248,248,246,1)_100%)]">
       <div className="container py-8 md:py-10">
-        <div className="mb-8">
+        <div className="mb-6">
           <h1 className="mb-2 text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">Administrativo</h1>
-          <p className="text-slate-600">Gerencie imóveis e contratos do sistema</p>
+          <p className="max-w-3xl text-slate-600">
+            Centralize os principais processos operacionais da imobiliária, da captação ao contrato e às obrigações fiscais.
+          </p>
         </div>
 
-        <div className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2">
-          <Card className="min-h-[124px] rounded-[28px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)]">
-            <CardHeader className="flex flex-row items-center justify-between px-6 pb-2 pt-5">
-              <CardTitle className="text-sm font-medium text-slate-600">Imóveis</CardTitle>
-              <Building2 className="h-6 w-6 text-slate-500" />
-            </CardHeader>
-            <CardContent className="px-6 pb-5 pt-0">
-              <div className="text-3xl font-bold tracking-tight text-slate-950">{totalImoveis}</div>
-              <p className="text-xs text-slate-500">{imoveisAtivos} ativos</p>
-            </CardContent>
-          </Card>
+        <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+          {ADMIN_PROCESS_MODULES.map(module => {
+            const Icon = module.icon;
 
-          <Card className="min-h-[124px] rounded-[28px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)]">
-            <CardHeader className="flex flex-row items-center justify-between px-6 pb-2 pt-5">
-              <CardTitle className="text-sm font-medium text-slate-600">Contratos</CardTitle>
-              <FileText className="h-6 w-6 text-slate-500" />
-            </CardHeader>
-            <CardContent className="px-6 pb-5 pt-0">
-              <div className="text-3xl font-bold tracking-tight text-slate-950">{totalContratos}</div>
-              <p className="text-xs text-slate-500">{contratosAtivos} ativos</p>
-            </CardContent>
-          </Card>
+            return (
+              <button
+                key={module.value}
+                type="button"
+                onClick={() => handleSelectAdminModule(module)}
+                className={`rounded-[28px] border bg-white/90 p-5 text-left shadow-[0_24px_70px_-42px_rgba(15,23,42,0.42)] transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-[0_30px_80px_-48px_rgba(15,23,42,0.5)] ${
+                  selectedModuleValue === module.value ? "border-emerald-300 ring-2 ring-emerald-100" : "border-white/70"
+                }`}
+              >
+                <span className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+                  <Icon className="h-5 w-5" />
+                </span>
+                <span className="block text-base font-semibold text-slate-950">{module.title}</span>
+                <span className="mt-2 block text-sm leading-5 text-slate-600">{module.description}</span>
+              </button>
+            );
+          })}
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="rounded-full border border-slate-200 bg-white/90">
-            <TabsTrigger value="imoveis" className="gap-2">
-              <Building2 className="h-4 w-4" />
-              Imóveis
-            </TabsTrigger>
-            <TabsTrigger value="contratos" className="gap-2">
-              <FileText className="h-4 w-4" />
-              Contratos
-            </TabsTrigger>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+          <TabsList className="h-auto flex-wrap justify-start rounded-[24px] border border-slate-200 bg-white/90 p-1">
+            {selectedModule.topics.map(topic => (
+              <TabsTrigger key={topic} value={topic} className="gap-2 rounded-2xl">
+                {topic}
+              </TabsTrigger>
+            ))}
           </TabsList>
 
-          <TabsContent value="imoveis">
-            <Card className={SURFACE_CARD_CLASS}>
-              <CardHeader>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <CardTitle className="text-slate-950">
-                      {showDeletedProperties ? "Imóveis Apagados" : "Todos os Imóveis"}
-                    </CardTitle>
-                    <CardDescription className="text-slate-600">
-                      {showDeletedProperties
-                        ? "Visualize os imóveis que estão na lixeira"
-                        : "Visualize todos os imóveis cadastrados no sistema"}
-                    </CardDescription>
-                  </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" aria-label="Abrir ações da lista de imóveis">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuCheckboxItem
-                        checked={showDeletedProperties}
-                        onCheckedChange={checked => setShowDeletedProperties(checked === true)}
-                      >
-                        Imóveis apagados
-                      </DropdownMenuCheckboxItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-                {renderSearchInput("Pesquisar imóveis")}
-              </CardHeader>
-              <CardContent>
-                {loadingProperties ? (
-                  <div className="space-y-3">
-                    {[1, 2, 3].map(item => (
-                      <div key={item} className="h-16 animate-pulse rounded bg-muted" />
-                    ))}
-                  </div>
-                ) : filteredProperties.length > 0 ? (
-                  <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white/80">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Título</TableHead>
-                          <TableHead>Tipo</TableHead>
-                          <TableHead>Cidade</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Corretor</TableHead>
-                          <TableHead>Cadastro</TableHead>
-                          <TableHead className="w-28 text-right">Ações</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredProperties.map(property => (
-                          <TableRow
-                            key={property.id}
-                            data-property-row={property.id}
-                            className={property.id === highlightedPropertyId ? "bg-primary/5 ring-1 ring-primary/20" : ""}
-                          >
-                            <TableCell className="font-medium">
-                              {(() => {
-                                const currentKeyStatus =
-                                  (property.keyStatus as PropertyKeyStatus) ?? "disponivel";
-                                const hideKeyControl = isTerrenoType(property.tipo);
-                                const canOpenDetails = property.lixeira !== 1;
-
-                                return (
-                              <div className="flex items-center gap-2">
-                                {canOpenDetails ? (
-                                  <Link href={`/imoveis/${property.id}`}>
-                                    <a className="text-slate-900 hover:text-emerald-700 hover:underline">
-                                      {property.titulo}
-                                    </a>
-                                  </Link>
-                                ) : (
-                                  <span className="text-slate-700">{property.titulo}</span>
-                                )}
-                                    {!hideKeyControl ? (
-                                      <button
-                                        type="button"
-                                        className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-slate-200 bg-white/80 hover:bg-slate-100"
-                                        onClick={() => openKeyStatusDialog(property)}
-                                        title={`Status da chave: ${KEY_STATUS_META[currentKeyStatus].label}`}
-                                        aria-label={`Abrir status da chave do imóvel ${property.titulo}`}
-                                      >
-                                        <KeyRound className={`h-4 w-4 ${KEY_STATUS_META[currentKeyStatus].iconClass}`} />
-                                      </button>
-                                    ) : null}
-                              </div>
-                                );
-                              })()}
-                            </TableCell>
-                            <TableCell className="capitalize">{property.tipo}</TableCell>
-                            <TableCell>{property.cidade}/{property.estado}</TableCell>
-                            <TableCell>
-                              <span
-                                className={`rounded-full px-2 py-1 text-xs font-medium ${
-                                  property.status === "ativo"
-                                    ? "bg-green-100 text-green-700"
-                                    : "bg-gray-100 text-gray-700"
-                                }`}
-                              >
-                                {property.status}
-                              </span>
-                            </TableCell>
-                            <TableCell>ID {property.idCorretor}</TableCell>
-                            <TableCell>{formatStoredDate(property.createdAt)}</TableCell>
-                            <TableCell>
-                              <div className="flex items-center justify-end gap-2">
-                                <Button variant="outline" size="icon" asChild className="h-8 w-8">
-                                  <Link href={`/admin/imoveis/${property.id}`}>
-                                    <a aria-label={`Abrir ficha do imóvel ${property.titulo}`}>
-                                      <Settings2 className="h-4 w-4" />
-                                    </a>
-                                  </Link>
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-8 w-8 text-red-600 hover:text-red-700"
-                                  aria-label={`Excluir imóvel ${property.titulo}`}
-                                  onClick={() => openDeletePropertyDialog(property)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ) : (
-                  <div className="py-12 text-center">
-                    <Building2 className="mx-auto mb-4 h-12 w-12 text-slate-400" />
-                    <p className="text-slate-600">
-                      {searchTerm
-                        ? "Nenhum imóvel encontrado para essa pesquisa"
-                        : showDeletedProperties
-                          ? "Nenhum imóvel apagado"
-                          : "Nenhum imóvel cadastrado"}
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="contratos">
-            <Card className={SURFACE_CARD_CLASS}>
-              <CardHeader>
-                <CardTitle className="text-slate-950">Todos os Contratos</CardTitle>
-                <CardDescription className="text-slate-600">Visualize todos os contratos do sistema</CardDescription>
-                {renderSearchInput("Pesquisar contratos")}
-              </CardHeader>
-              <CardContent>
-                {loadingContracts ? (
-                  <div className="space-y-3">
-                    {[1, 2, 3].map(item => (
-                      <div key={item} className="h-16 animate-pulse rounded bg-muted" />
-                    ))}
-                  </div>
-                ) : filteredContracts.length > 0 ? (
-                  <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white/80">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>ID</TableHead>
-                          <TableHead>Cliente</TableHead>
-                          <TableHead>Imóvel</TableHead>
-                          <TableHead>Tipo</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Data Início</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredContracts.map(contract => (
-                          <TableRow key={contract.id}>
-                            <TableCell className="font-medium">#{contract.id}</TableCell>
-                            <TableCell>ID {contract.idCliente}</TableCell>
-                            <TableCell>ID {contract.idImovel}</TableCell>
-                            <TableCell className="capitalize">{contract.tipo}</TableCell>
-                            <TableCell>
-                              <span
-                                className={`rounded-full px-2 py-1 text-xs font-medium ${
-                                  contract.status === "ativo"
-                                    ? "bg-green-100 text-green-700"
-                                    : "bg-gray-100 text-gray-700"
-                                }`}
-                              >
-                                {contract.status}
-                              </span>
-                            </TableCell>
-                            <TableCell>{formatStoredDate(contract.dataInicio)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ) : (
-                  <div className="py-12 text-center">
-                    <FileText className="mx-auto mb-4 h-12 w-12 text-slate-400" />
-                    <p className="text-slate-600">
-                      {searchTerm ? "Nenhum contrato encontrado para essa pesquisa" : "Nenhum contrato encontrado"}
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+          {renderAdminTopicPanels()}
         </Tabs>
 
         <Dialog open={keyStatusDialogPropertyId !== null} onOpenChange={open => !open && closeKeyStatusDialog()}>

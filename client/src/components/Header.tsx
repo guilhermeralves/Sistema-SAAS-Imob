@@ -15,10 +15,12 @@ import {
 import { ROLE_LABELS } from "@shared/auth";
 import {
   Bot,
+  BookOpenCheck,
   CalendarDays,
   CircleDollarSign,
   Briefcase,
   Building2,
+  Gift,
   Home,
   KeyRound,
   LayoutDashboard,
@@ -256,6 +258,22 @@ export default function Header() {
                           <a className="flex items-center gap-2">
                             <KeyRound className="h-4 w-4" />
                             Controle de Chaves
+                          </a>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/bonificacoes">
+                          <a className="flex items-center gap-2">
+                            <Gift className="h-4 w-4" />
+                            Bonificações
+                          </a>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/evolucao-profissional">
+                          <a className="flex items-center gap-2">
+                            <BookOpenCheck className="h-4 w-4" />
+                            Evolução Profissional
                           </a>
                         </Link>
                       </DropdownMenuItem>

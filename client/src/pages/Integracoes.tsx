@@ -25,7 +25,7 @@ import { Link } from "wouter";
 import { ArrowLeft, ChevronDown, ChevronUp, Plus, PlugZap, Settings, Shield } from "lucide-react";
 import { toast } from "sonner";
 
-type IntegrationCategory = "portal_divulgacao" | "financeiro";
+type IntegrationCategory = "portal_divulgacao" | "financeiro" | "assinaturas_eletronicas";
 type IntegrationConnectionType = "api" | "webhook" | "arquivo" | "manual";
 type IntegrationStatus = "rascunho" | "ativo" | "inativo";
 
@@ -56,6 +56,7 @@ const INITIAL_INTEGRATION_FORM: IntegrationFormState = {
 const CATEGORY_LABELS: Record<IntegrationCategory, string> = {
   portal_divulgacao: "Portal de Divulgação",
   financeiro: "Financeiro",
+  assinaturas_eletronicas: "Assinaturas Eletrônicas",
 };
 
 const CONNECTION_TYPE_LABELS: Record<IntegrationConnectionType, string> = {
@@ -84,6 +85,7 @@ export default function Integracoes() {
   const { user, loading } = useAuth();
   const [isPortalsSectionOpen, setIsPortalsSectionOpen] = useState(false);
   const [isFinancialSectionOpen, setIsFinancialSectionOpen] = useState(false);
+  const [isSignatureSectionOpen, setIsSignatureSectionOpen] = useState(false);
   const [integrationModalOpen, setIntegrationModalOpen] = useState(false);
   const [editingIntegrationId, setEditingIntegrationId] = useState<number | null>(null);
   const [integrationForm, setIntegrationForm] = useState<IntegrationFormState>(INITIAL_INTEGRATION_FORM);
@@ -142,6 +144,10 @@ export default function Integracoes() {
   );
   const financialIntegrations = useMemo(
     () => (integrationsQuery.data ?? []).filter(item => item.category === "financeiro"),
+    [integrationsQuery.data]
+  );
+  const signatureIntegrations = useMemo(
+    () => (integrationsQuery.data ?? []).filter(item => item.category === "assinaturas_eletronicas"),
     [integrationsQuery.data]
   );
 
@@ -378,6 +384,7 @@ export default function Integracoes() {
                           <SelectContent>
                             <SelectItem value="portal_divulgacao">Portal de Divulgação</SelectItem>
                             <SelectItem value="financeiro">Financeiro</SelectItem>
+                            <SelectItem value="assinaturas_eletronicas">Assinaturas Eletrônicas</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -585,6 +592,38 @@ export default function Integracoes() {
                       {!integrationsQuery.isLoading && financialIntegrations.length === 0 ? (
                         <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-5 text-sm text-slate-600">
                           Nenhuma integração financeira configurada.
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </section>
+
+                <section className="rounded-3xl border border-white/70 bg-white/80">
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
+                    onClick={() => setIsSignatureSectionOpen(current => !current)}
+                    aria-expanded={isSignatureSectionOpen}
+                  >
+                    <h2 className="text-lg font-semibold text-slate-950">Assinaturas Eletrônicas</h2>
+                    {isSignatureSectionOpen ? (
+                      <ChevronUp className="h-5 w-5 shrink-0 text-slate-500" />
+                    ) : (
+                      <ChevronDown className="h-5 w-5 shrink-0 text-slate-500" />
+                    )}
+                  </button>
+
+                  {isSignatureSectionOpen ? (
+                    <div className="flex flex-col gap-4 border-t border-slate-200 px-4 py-4">
+                      {integrationsQuery.isLoading ? (
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-5 text-sm text-slate-600">
+                          Carregando integrações...
+                        </div>
+                      ) : null}
+                      {signatureIntegrations.map(renderIntegrationCard)}
+                      {!integrationsQuery.isLoading && signatureIntegrations.length === 0 ? (
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-5 text-sm text-slate-600">
+                          Nenhuma integração de assinatura eletrônica configurada.
                         </div>
                       ) : null}
                     </div>

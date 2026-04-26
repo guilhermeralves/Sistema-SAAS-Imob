@@ -131,7 +131,7 @@ export const integrations = pgTable("integrations", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 140 }).notNull(),
   category: varchar("category", { length: 40 })
-    .$type<"portal_divulgacao" | "financeiro" | "automacao" | "outro">()
+    .$type<"portal_divulgacao" | "financeiro" | "assinaturas_eletronicas" | "automacao" | "outro">()
     .notNull(),
   provider: varchar("provider", { length: 120 }).notNull(),
   connectionType: varchar("connectionType", { length: 30 })

@@ -505,7 +505,7 @@ export async function deleteCondominiumAndDetachProperties(id: number) {
 }
 
 type ListIntegrationsOptions = {
-  category?: "portal_divulgacao" | "financeiro" | "automacao" | "outro";
+  category?: "portal_divulgacao" | "financeiro" | "assinaturas_eletronicas" | "automacao" | "outro";
   status?: "rascunho" | "ativo" | "inativo";
 };
 

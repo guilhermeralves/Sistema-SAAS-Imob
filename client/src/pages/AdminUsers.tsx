@@ -543,28 +543,28 @@ export default function AdminUsers() {
           </Dialog>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {cards.map(card => {
             const isSelected = selectedFilter === card.key;
 
             return (
               <Card
                 key={card.key}
-                className={`min-h-[124px] cursor-pointer rounded-[28px] border-white/70 bg-white/90 transition-all hover:shadow-[0_30px_90px_-42px_rgba(15,23,42,0.52)] ${
+                className={`min-h-[64px] cursor-pointer rounded-2xl border bg-white/90 transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-[0_30px_80px_-48px_rgba(15,23,42,0.5)] ${
                   isSelected
-                    ? "ring-2 ring-emerald-700/35 shadow-[0_30px_90px_-42px_rgba(15,23,42,0.52)]"
-                    : "shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)]"
+                    ? "border-emerald-300 ring-2 ring-emerald-100 shadow-[0_30px_80px_-48px_rgba(15,23,42,0.5)]"
+                    : "border-white/70 shadow-[0_24px_70px_-42px_rgba(15,23,42,0.42)]"
                 }`}
                 onClick={() =>
                   setSelectedFilter(current => (current === card.key ? null : card.key))
                 }
               >
-                <CardHeader className="px-6 pt-5 pb-2">
-                  <CardTitle className="text-sm font-medium text-slate-600">{card.label}</CardTitle>
+                <CardHeader className="px-4 py-3">
+                  <CardTitle className="flex items-center justify-between gap-3 text-sm font-semibold text-slate-950">
+                    <span>{card.label}</span>
+                    <span className="text-lg font-bold tracking-tight text-slate-950">{card.value}</span>
+                  </CardTitle>
                 </CardHeader>
-                <CardContent className="px-6 pb-5 pt-0 text-3xl font-bold tracking-tight text-slate-950">
-                  {card.value}
-                </CardContent>
               </Card>
             );
           })}

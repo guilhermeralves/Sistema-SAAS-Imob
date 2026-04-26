@@ -243,6 +243,7 @@ const deleteCondominiumSchema = z.object({
 const integrationCategorySchema = z.enum([
   "portal_divulgacao",
   "financeiro",
+  "assinaturas_eletronicas",
   "automacao",
   "outro",
 ]);
