@@ -130,6 +130,8 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
   const contractsWorkspaceRef = useRef<HTMLDivElement | null>(null);
   const contractTemplateModalScrollRef = useRef<HTMLDivElement | null>(null);
   const contractTemplateTextSectionRef = useRef<HTMLDivElement | null>(null);
+  const contractTemplateEditableRef = useRef<HTMLDivElement | null>(null);
+  const contractTemplateReviewedTextDraftRef = useRef("");
   const [contractTemplateModalOpen, setContractTemplateModalOpen] = useState(false);
   const [editingContractTemplateId, setEditingContractTemplateId] = useState<number | null>(null);
   const [contractTemplateName, setContractTemplateName] = useState("");
@@ -149,6 +151,7 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
       setContractTemplateFileName(data.fileName);
       setContractTemplateExtractedText(data.extractedText);
       setContractTemplateReviewedText(data.extractedText);
+      contractTemplateReviewedTextDraftRef.current = data.extractedText;
       setContractTemplateHighlights(data.detectedVariables);
       setContractTemplateTextExpanded(false);
       toast.success("Texto extraido do DOCX. Revise as variaveis detectadas antes de salvar.");
@@ -222,8 +225,12 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
 
   const updateContractTemplateReviewedText = (nextText: string) => {
     setContractTemplateReviewedText(nextText);
+    contractTemplateReviewedTextDraftRef.current = nextText;
     setContractTemplateHighlights(detectContractTemplateVariables(nextText));
   };
+
+  const getCurrentContractTemplateReviewedText = () =>
+    contractTemplateEditableRef.current?.innerText ?? contractTemplateReviewedTextDraftRef.current ?? contractTemplateReviewedText;
 
   const parseContractTemplateHighlights = (value: string | null | undefined): ContractTemplateHighlight[] => {
     try {
@@ -243,6 +250,7 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
     setContractTemplateFileData(template.originalFileData);
     setContractTemplateExtractedText(template.extractedText || reviewedText);
     setContractTemplateReviewedText(reviewedText);
+    contractTemplateReviewedTextDraftRef.current = reviewedText;
     setContractTemplateHighlights(parseContractTemplateHighlights(template.variableHighlights));
     setContractTemplateTextExpanded(false);
     setContractTemplateModalOpen(true);
@@ -327,6 +335,7 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
     setContractTemplateFileData("");
     setContractTemplateExtractedText("");
     setContractTemplateReviewedText("");
+    contractTemplateReviewedTextDraftRef.current = "";
     setContractTemplateHighlights([]);
     setContractTemplateTextExpanded(false);
   };
@@ -373,12 +382,16 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
       return;
     }
 
-    if (!contractTemplateReviewedText.trim()) {
+    const currentReviewedText = getCurrentContractTemplateReviewedText();
+
+    if (!currentReviewedText.trim()) {
       toast.error("Revise o texto extraido antes de salvar.");
       return;
     }
 
-    const detectedVariables = detectContractTemplateVariables(contractTemplateReviewedText);
+    const detectedVariables = detectContractTemplateVariables(currentReviewedText);
+    setContractTemplateReviewedText(currentReviewedText);
+    contractTemplateReviewedTextDraftRef.current = currentReviewedText;
     setContractTemplateHighlights(detectedVariables);
 
     if (editingContractTemplateId !== null) {
@@ -386,7 +399,7 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
         id: editingContractTemplateId,
         name: contractTemplateName.trim(),
         notes: contractTemplateNotes.trim() || undefined,
-        reviewedText: contractTemplateReviewedText,
+        reviewedText: currentReviewedText,
         variableHighlights: detectedVariables,
       }, {
         onSuccess: async () => {
@@ -405,7 +418,7 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
       originalMimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       originalFileData: contractTemplateFileData,
       extractedText: contractTemplateExtractedText,
-      reviewedText: contractTemplateReviewedText,
+      reviewedText: currentReviewedText,
       variableHighlights: detectedVariables,
     });
   };
@@ -780,12 +793,16 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
 
                 {contractTemplateTextExpanded ? (
                   <div
+                    ref={contractTemplateEditableRef}
                     contentEditable
                     suppressContentEditableWarning
                     role="textbox"
                     aria-label="Texto geral do documento"
                     className="mt-4 max-h-[70vh] min-h-[460px] whitespace-pre-wrap overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 font-mono text-sm leading-6 text-slate-800 shadow-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100"
-                    onInput={event => updateContractTemplateReviewedText(event.currentTarget.innerText)}
+                    onInput={event => {
+                      contractTemplateReviewedTextDraftRef.current = event.currentTarget.innerText;
+                    }}
+                    onBlur={event => updateContractTemplateReviewedText(event.currentTarget.innerText)}
                   >
                     {getHighlightedTextSegments(contractTemplateReviewedText, contractTemplateHighlights).map((segment, index) =>
                       segment.highlight ? (
