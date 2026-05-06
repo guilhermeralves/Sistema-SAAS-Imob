@@ -1,5 +1,5 @@
-﻿import { useEffect, useMemo, useState } from "react";
-import { Link } from "wouter";
+﻿import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { Link, useLocation } from "wouter";
 import Layout from "@/components/Layout";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -39,8 +39,10 @@ import {
   FileSearch,
   FileSpreadsheet,
   Handshake,
+  ArrowLeft,
   KeyRound,
   MoreHorizontal,
+  Plus,
   Search,
   Settings2,
   Shield,
@@ -50,10 +52,14 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+const AdminContractsPanel = lazy(() => import("./admin/AdminContractsPanel"));
+
 const SURFACE_CARD_CLASS =
   "rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)] backdrop-blur";
 const FIELD_CLASS =
   "rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base";
+const ADMIN_BACKGROUND_CLASS =
+  "bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.88),rgba(244,240,232,0.82)_45%,rgba(248,248,246,1)_100%)]";
 
 type PropertyKeyStatus = "disponivel" | "retirada" | "indisponivel";
 
@@ -100,13 +106,13 @@ const ADMIN_PROCESS_MODULES: AdminProcessModule[] = [
     description: "Tudo que envolve iniciar, acompanhar e formalizar uma locação.",
     icon: ClipboardCheck,
     topics: [
-      "Locações Ativas",
       "Propostas de Locação",
+      "Locações Ativas",
       "Boletos",
       "Contratos",
-      "Captações",
       "Vistorias",
       "Entrega de Chaves",
+      "Captações",
     ],
   },
   {
@@ -213,11 +219,126 @@ function buildSearchText(
   return normalizeSearchValue(allValues.join(" "));
 }
 
+function getAdminModuleActionLabel(moduleValue: string, activeTopic: string) {
+  if (moduleValue !== "locacoes") return null;
+
+  const actionLabels: Record<string, string> = {
+    "Propostas de Locação": "Nova Locação",
+    Boletos: "Novo Boleto",
+    Contratos: "Novo Contrato",
+    Vistorias: "Solicitar Vistoria",
+  };
+
+  return actionLabels[activeTopic] ?? null;
+}
+
+function AdminLoadingState() {
+  return (
+    <Layout>
+      <div className="container py-8">
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 w-1/3 rounded bg-muted" />
+          <div className="h-64 rounded bg-muted" />
+        </div>
+      </div>
+    </Layout>
+  );
+}
+
+function AdminUnauthenticatedState() {
+  return (
+    <Layout>
+      <div className="container py-16 text-center">
+        <User className="mx-auto mb-4 h-16 w-16 text-muted-foreground" />
+        <h1 className="mb-2 text-2xl font-bold">Acesso Restrito</h1>
+        <p className="mb-6 text-muted-foreground">
+          Você precisa estar autenticado para acessar o painel administrativo.
+        </p>
+        <Button asChild>
+          <a href={getLoginUrl()}>Fazer Login</a>
+        </Button>
+      </div>
+    </Layout>
+  );
+}
+
+function AdminForbiddenState() {
+  return (
+    <Layout>
+      <div className="container py-16 text-center">
+        <Shield className="mx-auto mb-4 h-16 w-16 text-destructive" />
+        <h1 className="mb-2 text-2xl font-bold">Acesso Negado</h1>
+        <p className="mb-6 text-muted-foreground">Esta área é exclusiva para administradores.</p>
+        <Button asChild>
+          <a href="/">Voltar para Home</a>
+        </Button>
+      </div>
+    </Layout>
+  );
+}
+
 export default function Admin() {
   const { user, loading, isAuthenticated } = useAuth();
+
+  if (loading) {
+    return <AdminLoadingState />;
+  }
+
+  if (!isAuthenticated) {
+    return <AdminUnauthenticatedState />;
+  }
+
+  if (user?.role !== "administrativo") {
+    return <AdminForbiddenState />;
+  }
+
+  return (
+    <Layout>
+      <div className={ADMIN_BACKGROUND_CLASS}>
+        <div className="container py-8 md:py-10">
+          <div className="mb-6">
+            <h1 className="mb-2 text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">Administrativo</h1>
+            <p className="max-w-3xl text-slate-600">
+              Escolha uma área para acessar as operações administrativas da imobiliária.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+            {ADMIN_PROCESS_MODULES.map(module => {
+              const Icon = module.icon;
+
+              return (
+                <Link key={module.value} href={`/admin/modulos/${module.value}`}>
+                  <a className="block h-full rounded-[28px] border border-white/70 bg-white/90 p-5 text-left shadow-[0_24px_70px_-42px_rgba(15,23,42,0.42)] transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-[0_30px_80px_-48px_rgba(15,23,42,0.5)]">
+                    <span className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+                      <Icon className="h-5 w-5" />
+                    </span>
+                    <span className="block text-base font-semibold text-slate-950">{module.title}</span>
+                    <span className="mt-2 block text-sm leading-5 text-slate-600">{module.description}</span>
+                  </a>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </Layout>
+  );
+}
+
+export function AdminModule() {
+  const { user, loading, isAuthenticated } = useAuth();
+  const [location] = useLocation();
   const utils = trpc.useUtils();
-  const [selectedModuleValue, setSelectedModuleValue] = useState("imoveis");
-  const [activeTab, setActiveTab] = useState(ADMIN_PROCESS_MODULES[0].topics[0]);
+  const selectedModuleValue = useMemo(() => {
+    const moduleSlug = location.split("/").filter(Boolean).at(-1);
+    return moduleSlug || ADMIN_PROCESS_MODULES[0].value;
+  }, [location]);
+  const selectedModule = useMemo(
+    () => ADMIN_PROCESS_MODULES.find(module => module.value === selectedModuleValue) ?? ADMIN_PROCESS_MODULES[0],
+    [selectedModuleValue]
+  );
+  const [activeTab, setActiveTab] = useState(selectedModule.topics[0]);
   const [searchTerm, setSearchTerm] = useState("");
   const [showDeletedProperties, setShowDeletedProperties] = useState(false);
   const [keyStatusDialogPropertyId, setKeyStatusDialogPropertyId] = useState<number | null>(null);
@@ -226,6 +347,8 @@ export default function Admin() {
   const [propertyPendingDelete, setPropertyPendingDelete] = useState<{ id: number; titulo: string } | null>(null);
   const [deleteConfirmationText, setDeleteConfirmationText] = useState("");
   const [deleteReason, setDeleteReason] = useState("");
+  const [contractCreateRequestKey, setContractCreateRequestKey] = useState(0);
+  const moduleActionLabel = getAdminModuleActionLabel(selectedModule.value, activeTab);
 
   const highlightedPropertyId = useMemo(() => {
     if (typeof window === "undefined") return null;
@@ -287,7 +410,6 @@ export default function Admin() {
       toast.error(error.message || "Nao foi possivel excluir o imovel.");
     },
   });
-
   const normalizedSearchTerm = normalizeSearchValue(searchTerm.trim());
 
   const filteredProperties = useMemo(() => {
@@ -318,10 +440,9 @@ export default function Admin() {
     [keyStatusRequests]
   );
 
-  const selectedModule = useMemo(
-    () => ADMIN_PROCESS_MODULES.find(module => module.value === selectedModuleValue) ?? ADMIN_PROCESS_MODULES[0],
-    [selectedModuleValue]
-  );
+  useEffect(() => {
+    setActiveTab(selectedModule.topics[0]);
+  }, [selectedModule]);
 
   useEffect(() => {
     if (!highlightedPropertyId || !properties?.length || selectedModuleValue !== "imoveis" || activeTab !== "Imóveis") {
@@ -416,9 +537,15 @@ export default function Admin() {
     return foundUser?.name || foundUser?.email || `ID ${userId}`;
   };
 
-  const handleSelectAdminModule = (module: AdminProcessModule) => {
-    setSelectedModuleValue(module.value);
-    setActiveTab(module.topics[0]);
+  const handleModuleActionClick = () => {
+    if (selectedModule.value === "locacoes" && activeTab === "Contratos") {
+      setContractCreateRequestKey(current => current + 1);
+      return;
+    }
+
+    if (moduleActionLabel) {
+      toast.info(`${moduleActionLabel} será configurado na próxima etapa.`);
+    }
   };
 
   const renderPropertiesList = () => {
@@ -569,17 +696,24 @@ export default function Admin() {
                     </DropdownMenuCheckboxItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-              ) : (
-                <span className="w-fit rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700">
-                  Estrutura inicial
-                </span>
-              )}
+              ) : null}
             </div>
             {selectedModule.value === "imoveis" && topic === "Imóveis" ? renderSearchInput("Pesquisar imóveis") : null}
           </CardHeader>
           <CardContent>
             {selectedModule.value === "imoveis" && topic === "Imóveis" ? (
               renderPropertiesList()
+            ) : selectedModule.value === "locacoes" && topic === "Contratos" ? (
+              <Suspense
+                fallback={
+                  <div className="grid gap-4 xl:grid-cols-[minmax(520px,1.35fr)_minmax(360px,0.85fr)]">
+                    <div className="h-32 animate-pulse rounded-2xl bg-muted" />
+                    <div className="h-32 animate-pulse rounded-2xl bg-muted" />
+                  </div>
+                }
+              >
+                <AdminContractsPanel createRequestKey={contractCreateRequestKey} />
+              </Suspense>
             ) : (
               <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-5 text-sm text-slate-600">
                 Esta área será conectada aos dados e fluxos operacionais na próxima etapa.
@@ -592,82 +726,45 @@ export default function Admin() {
   };
 
   if (loading) {
-    return (
-      <Layout>
-        <div className="container py-8">
-          <div className="animate-pulse space-y-4">
-            <div className="h-8 w-1/3 rounded bg-muted" />
-            <div className="h-64 rounded bg-muted" />
-          </div>
-        </div>
-      </Layout>
-    );
+    return <AdminLoadingState />;
   }
 
   if (!isAuthenticated) {
-    return (
-      <Layout>
-        <div className="container py-16 text-center">
-          <User className="mx-auto mb-4 h-16 w-16 text-muted-foreground" />
-          <h1 className="mb-2 text-2xl font-bold">Acesso Restrito</h1>
-          <p className="mb-6 text-muted-foreground">
-            Você precisa estar autenticado para acessar o painel administrativo.
-          </p>
-          <Button asChild>
-            <a href={getLoginUrl()}>Fazer Login</a>
-          </Button>
-        </div>
-      </Layout>
-    );
+    return <AdminUnauthenticatedState />;
   }
 
   if (user?.role !== "administrativo") {
-    return (
-      <Layout>
-        <div className="container py-16 text-center">
-          <Shield className="mx-auto mb-4 h-16 w-16 text-destructive" />
-          <h1 className="mb-2 text-2xl font-bold">Acesso Negado</h1>
-          <p className="mb-6 text-muted-foreground">Esta área é exclusiva para administradores.</p>
-          <Button asChild>
-            <a href="/">Voltar para Home</a>
-          </Button>
-        </div>
-      </Layout>
-    );
+    return <AdminForbiddenState />;
   }
 
   return (
     <Layout>
-      <div className="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.88),rgba(244,240,232,0.82)_45%,rgba(248,248,246,1)_100%)]">
+      <div className={ADMIN_BACKGROUND_CLASS}>
       <div className="container py-8 md:py-10">
         <div className="mb-6">
-          <h1 className="mb-2 text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">Administrativo</h1>
-          <p className="max-w-3xl text-slate-600">
-            Centralize os principais processos operacionais da imobiliária, da captação ao contrato e às obrigações fiscais.
-          </p>
-        </div>
-
-        <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-          {ADMIN_PROCESS_MODULES.map(module => {
-            const Icon = module.icon;
-
-            return (
-              <button
-                key={module.value}
-                type="button"
-                onClick={() => handleSelectAdminModule(module)}
-                className={`rounded-[28px] border bg-white/90 p-5 text-left shadow-[0_24px_70px_-42px_rgba(15,23,42,0.42)] transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-[0_30px_80px_-48px_rgba(15,23,42,0.5)] ${
-                  selectedModuleValue === module.value ? "border-emerald-300 ring-2 ring-emerald-100" : "border-white/70"
-                }`}
+          <Button asChild variant="outline" className="mb-5 gap-2 rounded-full bg-white/90 shadow-sm hover:bg-white">
+            <Link href="/admin">
+              <a className="inline-flex items-center gap-2">
+                <ArrowLeft className="h-4 w-4" />
+                Voltar
+              </a>
+            </Link>
+          </Button>
+          <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">{selectedModule.title}</h1>
+            {moduleActionLabel ? (
+              <Button
+                className="w-fit gap-2 rounded-full bg-slate-950 text-white shadow-sm hover:bg-slate-800"
+                onClick={handleModuleActionClick}
               >
-                <span className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
-                  <Icon className="h-5 w-5" />
-                </span>
-                <span className="block text-base font-semibold text-slate-950">{module.title}</span>
-                <span className="mt-2 block text-sm leading-5 text-slate-600">{module.description}</span>
-              </button>
-            );
-          })}
+                <Plus className="h-4 w-4" />
+                {moduleActionLabel}
+              </Button>
+            ) : null}
+          </div>
+          <p className="max-w-3xl text-slate-600">
+            {selectedModule.description}
+          </p>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
@@ -878,6 +975,7 @@ export default function Admin() {
             </div>
           </DialogContent>
         </Dialog>
+
       </div>
       </div>
     </Layout>

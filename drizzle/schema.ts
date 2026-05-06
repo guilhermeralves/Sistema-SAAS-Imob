@@ -418,6 +418,28 @@ export type Contract = typeof contracts.$inferSelect;
 export type InsertContract = typeof contracts.$inferInsert;
 
 /**
+ * Modelos de contratos cadastrados pelo administrativo.
+ * Guardam o PDF base, texto extraido e marcacoes variaveis revisadas.
+ */
+export const contractTemplates = pgTable("contractTemplates", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 180 }).notNull(),
+  notes: text("notes"),
+  originalFileName: varchar("originalFileName", { length: 255 }).notNull(),
+  originalMimeType: varchar("originalMimeType", { length: 120 }).notNull(),
+  originalFileData: text("originalFileData").notNull(),
+  extractedText: text("extractedText").notNull(),
+  reviewedText: text("reviewedText").notNull(),
+  variableHighlights: text("variableHighlights").default("[]").notNull(),
+  createdByUserId: integer("createdByUserId").notNull(),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export type ContractTemplate = typeof contractTemplates.$inferSelect;
+export type InsertContractTemplate = typeof contractTemplates.$inferInsert;
+
+/**
  * Tabela de documentos de imoveis
  * Armazena PDFs relacionados a cada imovel
  */

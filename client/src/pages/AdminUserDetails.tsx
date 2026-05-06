@@ -458,12 +458,14 @@ export default function AdminUserDetails() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <div className="mb-3">
-              <Link href={backHref}>
-                <a className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 transition-colors hover:text-slate-900">
-                  <ArrowLeft className="h-4 w-4" />
-                  <span>{backLabel}</span>
-                </a>
-              </Link>
+              <Button variant="outline" asChild className="rounded-full bg-white/90 shadow-sm hover:bg-white">
+                <Link href={backHref}>
+                  <a className="inline-flex items-center gap-2">
+                    <ArrowLeft className="h-4 w-4" />
+                    <span>{backLabel}</span>
+                  </a>
+                </Link>
+              </Button>
             </div>
             <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">
               {isOwnerDetails ? "Ficha do Proprietario" : "Ficha do Usuário"}

@@ -19,7 +19,7 @@ import ImovelDetalhes from "./pages/ImovelDetalhes";
 import AreaCliente from "./pages/AreaCliente";
 import CRM from "./pages/CRM";
 import MeusImoveis from "./pages/MeusImoveis";
-import Admin from "./pages/Admin";
+import Admin, { AdminModule } from "./pages/Admin";
 import AdminUsers from "./pages/AdminUsers";
 import AdminUserDetails from "./pages/AdminUserDetails";
 import AdminPropertyDetails from "./pages/AdminPropertyDetails";
@@ -117,6 +117,9 @@ function Router() {
       </Route>
       <Route path={"/admin/imoveis/:id"}>
         <ProtectedRoute component={AdminPropertyDetails} roles={["administrativo"]} />
+      </Route>
+      <Route path={"/admin/modulos/:module"}>
+        <ProtectedRoute component={AdminModule} roles={["administrativo"]} />
       </Route>
       <Route path={"/admin"}>
         <ProtectedRoute component={Admin} roles={["administrativo"]} />

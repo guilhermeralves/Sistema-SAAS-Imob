@@ -5,6 +5,7 @@ import {
   InsertContract,
   InsertAdminUserView,
   InsertCondominium,
+  InsertContractTemplate,
   InsertDocument,
   InsertIntegration,
   InsertLead,
@@ -23,6 +24,7 @@ import {
   TaskItem,
   TaskItemTemplate,
   User,
+  contractTemplates,
   contracts,
   condominios,
   documents,
@@ -1518,6 +1520,30 @@ export async function createContract(data: InsertContract) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return await db.insert(contracts).values(data);
+}
+
+export async function getContractTemplates() {
+  const db = await getDb();
+  if (!db) return [];
+  return await db.select().from(contractTemplates).orderBy(desc(contractTemplates.createdAt));
+}
+
+export async function createContractTemplate(data: InsertContractTemplate) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [created] = await db.insert(contractTemplates).values(data).returning();
+  return created;
+}
+
+export async function updateContractTemplate(id: number, data: Partial<InsertContractTemplate>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [updated] = await db
+    .update(contractTemplates)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(contractTemplates.id, id))
+    .returning();
+  return updated;
 }
 
 export async function getDocumentsByUsuario(idUsuario: number) {

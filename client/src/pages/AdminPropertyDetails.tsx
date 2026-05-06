@@ -113,7 +113,7 @@ export default function AdminPropertyDetails() {
       <div className="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.88),rgba(244,240,232,0.82)_45%,rgba(248,248,246,1)_100%)]">
         <div className="container space-y-6 py-8 md:py-10">
           <div className="flex items-center gap-3">
-            <Button variant="outline" asChild className="rounded-full">
+            <Button variant="outline" asChild className="rounded-full bg-white/90 shadow-sm hover:bg-white">
               <Link href="/admin">
                 <a className="inline-flex items-center gap-2">
                   <ArrowLeft className="h-4 w-4" />

@@ -5,6 +5,7 @@ import {
   USER_PROFILE_MARITAL_STATUSES,
 } from "@shared/user-profile";
 import { TRPCError } from "@trpc/server";
+import mammoth from "mammoth";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import { normalizeCpf, isValidCpf } from "./_core/cpf";
@@ -143,6 +144,40 @@ const deletePropertyDocumentSchema = z.object({
 const renamePropertyDocumentSchema = z.object({
   id: z.number().int().positive(),
   nomeArquivo: z.string().trim().min(1).max(255),
+});
+
+const contractTemplateTextVariableSchema = z.object({
+  id: z.string().trim().min(1).max(80),
+  start: z.number().int().min(0),
+  end: z.number().int().min(0),
+  placeholder: z.string().trim().min(1).max(160),
+  label: z.string().trim().min(1).max(120),
+  key: z.string().trim().min(1).max(120).nullable().optional(),
+});
+
+const contractTemplateDocxSchema = z.object({
+  fileName: z.string().trim().min(1).max(255),
+  mimeType: z.string().trim().min(1).max(160),
+  dataUrl: z.string().trim().min(1).max(20_000_000),
+});
+
+const createContractTemplateSchema = z.object({
+  name: z.string().trim().min(2).max(180),
+  notes: z.string().trim().max(3000).optional(),
+  originalFileName: z.string().trim().min(1).max(255),
+  originalMimeType: z.string().trim().min(1).max(160),
+  originalFileData: z.string().trim().min(1).max(20_000_000),
+  extractedText: z.string().trim().min(1),
+  reviewedText: z.string().trim().min(1),
+  variableHighlights: z.array(contractTemplateTextVariableSchema).max(200),
+});
+
+const updateContractTemplateSchema = z.object({
+  id: z.number().int().positive(),
+  name: z.string().trim().min(2).max(180),
+  notes: z.string().trim().max(3000).optional(),
+  reviewedText: z.string().trim().min(1),
+  variableHighlights: z.array(contractTemplateTextVariableSchema).max(200),
 });
 
 const propertyPhotoUploadSchema = z.object({
@@ -659,6 +694,110 @@ function normalizePropertyDocumentFileName(fileName: string) {
   }
 
   return withExtension;
+}
+
+function decodeDocxDataUrl(dataUrl: string) {
+  const match = dataUrl.match(/^data:(application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document|application\/octet-stream);base64,([A-Za-z0-9+/=\s]+)$/);
+  if (!match) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Arquivo DOCX invalido.",
+    });
+  }
+
+  const buffer = Buffer.from(match[2].replace(/\s/g, ""), "base64");
+  if (buffer.length === 0) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Arquivo DOCX vazio.",
+    });
+  }
+
+  if (buffer.length > 12 * 1024 * 1024) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "O DOCX deve ter no maximo 12 MB.",
+    });
+  }
+
+  return buffer;
+}
+
+async function extractDocxTextFromDataUrl(dataUrl: string) {
+  const result = await mammoth.extractRawText({ buffer: decodeDocxDataUrl(dataUrl) });
+  const text = result.value
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  if (!text) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Nao foi possivel extrair texto deste DOCX.",
+    });
+  }
+
+  return text;
+}
+
+function normalizeContractVariableLabel(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+const CONTRACT_VARIABLE_FIELD_MAP: Record<string, string> = {
+  "nome do locatario": "locatario.nome",
+  "cpf do locatario": "locatario.cpf",
+  "rg do locatario": "locatario.rg",
+  "email do locatario": "locatario.email",
+  "telefone do locatario": "locatario.telefone",
+  "nome do proprietario": "proprietario.nome",
+  "cpf do proprietario": "proprietario.cpf",
+  "email do proprietario": "proprietario.email",
+  "telefone do proprietario": "proprietario.telefone",
+  "endereco do imovel": "imovel.enderecoCompleto",
+  "bairro do imovel": "imovel.bairro",
+  "cidade do imovel": "imovel.cidade",
+  "estado do imovel": "imovel.estado",
+  "cep do imovel": "imovel.cep",
+  "valor do aluguel": "locacao.valorAluguel",
+  "valor da locacao": "locacao.valorAluguel",
+  "data de inicio": "locacao.dataInicio",
+  "data de termino": "locacao.dataFim",
+  "prazo de locacao": "locacao.prazo",
+  "dia de vencimento": "locacao.diaVencimento",
+};
+
+function detectContractTemplateVariables(text: string) {
+  const variables: Array<{
+    id: string;
+    start: number;
+    end: number;
+    placeholder: string;
+    label: string;
+    key: string | null;
+  }> = [];
+
+  for (const match of Array.from(text.matchAll(/\[([^\[\]\n]{2,120})\]/g))) {
+    if (typeof match.index !== "number" || !match[0]) continue;
+    const label = (match[1] || "").trim();
+    if (!label) continue;
+
+    variables.push({
+      id: nanoid(10),
+      start: match.index,
+      end: match.index + match[0].length,
+      placeholder: match[0],
+      label,
+      key: CONTRACT_VARIABLE_FIELD_MAP[normalizeContractVariableLabel(label)] ?? null,
+    });
+  }
+
+  return variables.slice(0, 200);
 }
 
 function getComputedTaskStatus(task: {
@@ -2207,6 +2346,45 @@ export const appRouter = router({
       await assertContractProfileIsComplete((input as any).idCliente);
       const { createContract } = await import("./db");
       return await createContract(input as any);
+    }),
+  }),
+
+  contractTemplates: router({
+    list: adminProcedure.query(async () => {
+      const { getContractTemplates } = await import("./db");
+      return await getContractTemplates();
+    }),
+    extractDocxText: adminProcedure.input(contractTemplateDocxSchema).mutation(async ({ input }) => {
+      const extractedText = await extractDocxTextFromDataUrl(input.dataUrl);
+      return {
+        fileName: input.fileName,
+        mimeType: input.mimeType,
+        extractedText,
+        detectedVariables: detectContractTemplateVariables(extractedText),
+      };
+    }),
+    create: adminProcedure.input(createContractTemplateSchema).mutation(async ({ ctx, input }) => {
+      const { createContractTemplate } = await import("./db");
+      return await createContractTemplate({
+        name: input.name,
+        notes: input.notes?.trim() || null,
+        originalFileName: input.originalFileName,
+        originalMimeType: input.originalMimeType,
+        originalFileData: input.originalFileData,
+        extractedText: input.extractedText,
+        reviewedText: input.reviewedText,
+        variableHighlights: JSON.stringify(input.variableHighlights),
+        createdByUserId: ctx.user.id,
+      });
+    }),
+    update: adminProcedure.input(updateContractTemplateSchema).mutation(async ({ input }) => {
+      const { updateContractTemplate } = await import("./db");
+      return await updateContractTemplate(input.id, {
+        name: input.name,
+        notes: input.notes?.trim() || null,
+        reviewedText: input.reviewedText,
+        variableHighlights: JSON.stringify(input.variableHighlights),
+      });
     }),
   }),
 

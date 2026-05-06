@@ -127,6 +127,13 @@
       "when": 1777141315189,
       "tag": "0017_far_domino",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1777590000000,
+      "tag": "0018_contract_templates",
+      "breakpoints": true
     }
   ]
 }

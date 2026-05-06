@@ -44,7 +44,7 @@ export default function Footer() {
           {/* Sobre a Empresa */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <img src={APP_LOGO2} className="h-28 w-28 text-primary" />
+              <img src={APP_LOGO2} className="h-32 w-32 text-primary" />
               {/*<h3 className="text-lg font-bold">{APP_TITLE}</h3>*/}
             </div>
             <p className="text-sm text-muted-foreground">
