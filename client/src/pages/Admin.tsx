@@ -1,4 +1,4 @@
-﻿import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+﻿import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import Layout from "@/components/Layout";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -53,6 +53,7 @@ import {
 import { toast } from "sonner";
 
 const AdminContractsPanel = lazy(() => import("./admin/AdminContractsPanel"));
+const AdminRentalProposalsPanel = lazy(() => import("./admin/AdminRentalProposalsPanel"));
 
 const SURFACE_CARD_CLASS =
   "rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)] backdrop-blur";
@@ -328,7 +329,7 @@ export default function Admin() {
 
 export function AdminModule() {
   const { user, loading, isAuthenticated } = useAuth();
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const utils = trpc.useUtils();
   const selectedModuleValue = useMemo(() => {
     const moduleSlug = location.split("/").filter(Boolean).at(-1);
@@ -338,6 +339,7 @@ export function AdminModule() {
     () => ADMIN_PROCESS_MODULES.find(module => module.value === selectedModuleValue) ?? ADMIN_PROCESS_MODULES[0],
     [selectedModuleValue]
   );
+  const adminTabsViewportRef = useRef<HTMLDivElement | null>(null);
   const [activeTab, setActiveTab] = useState(selectedModule.topics[0]);
   const [searchTerm, setSearchTerm] = useState("");
   const [showDeletedProperties, setShowDeletedProperties] = useState(false);
@@ -538,6 +540,11 @@ export function AdminModule() {
   };
 
   const handleModuleActionClick = () => {
+    if (selectedModule.value === "locacoes" && activeTab === "Propostas de Locação") {
+      setLocation("/imoveis?selecionarLocacao=1");
+      return;
+    }
+
     if (selectedModule.value === "locacoes" && activeTab === "Contratos") {
       setContractCreateRequestKey(current => current + 1);
       return;
@@ -546,6 +553,34 @@ export function AdminModule() {
     if (moduleActionLabel) {
       toast.info(`${moduleActionLabel} será configurado na próxima etapa.`);
     }
+  };
+
+  const scrollAdminTabsIntoView = () => {
+    requestAnimationFrame(() => {
+      const startTop = window.scrollY;
+      const targetTop = 0;
+      const distance = targetTop - startTop;
+      const duration = 720;
+      const startTime = performance.now();
+      const easeOutCubic = (progress: number) => 1 - Math.pow(1 - progress, 3);
+
+      const animateScroll = (currentTime: number) => {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        window.scrollTo(0, startTop + distance * easeOutCubic(progress));
+
+        if (progress < 1) {
+          requestAnimationFrame(animateScroll);
+        }
+      };
+
+      requestAnimationFrame(animateScroll);
+    });
+  };
+
+  const handleAdminTopicChange = (topic: string) => {
+    setActiveTab(topic);
+    scrollAdminTabsIntoView();
   };
 
   const renderPropertiesList = () => {
@@ -703,6 +738,17 @@ export function AdminModule() {
           <CardContent>
             {selectedModule.value === "imoveis" && topic === "Imóveis" ? (
               renderPropertiesList()
+            ) : selectedModule.value === "locacoes" && topic === "Propostas de Locação" ? (
+              <Suspense
+                fallback={
+                  <div className="space-y-3">
+                    <div className="h-24 animate-pulse rounded-2xl bg-muted" />
+                    <div className="h-24 animate-pulse rounded-2xl bg-muted" />
+                  </div>
+                }
+              >
+                <AdminRentalProposalsPanel />
+              </Suspense>
             ) : selectedModule.value === "locacoes" && topic === "Contratos" ? (
               <Suspense
                 fallback={
@@ -740,9 +786,9 @@ export function AdminModule() {
   return (
     <Layout>
       <div className={ADMIN_BACKGROUND_CLASS}>
-      <div className="container py-8 md:py-10">
-        <div className="mb-6">
-          <Button asChild variant="outline" className="mb-5 gap-2 rounded-full bg-white/90 shadow-sm hover:bg-white">
+      <div className="container py-4 md:py-5">
+        <div className="mb-4">
+          <Button asChild variant="outline" className="mb-3 gap-2 rounded-full bg-white/90 shadow-sm hover:bg-white">
             <Link href="/admin">
               <a className="inline-flex items-center gap-2">
                 <ArrowLeft className="h-4 w-4" />
@@ -750,7 +796,7 @@ export function AdminModule() {
               </a>
             </Link>
           </Button>
-          <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mb-1 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">{selectedModule.title}</h1>
             {moduleActionLabel ? (
               <Button
@@ -767,7 +813,8 @@ export function AdminModule() {
           </p>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <div ref={adminTabsViewportRef} className="scroll-mt-32">
+        <Tabs value={activeTab} onValueChange={handleAdminTopicChange} className="space-y-4">
           <TabsList className="h-auto flex-wrap justify-start rounded-[24px] border border-slate-200 bg-white/90 p-1">
             {selectedModule.topics.map(topic => (
               <TabsTrigger key={topic} value={topic} className="gap-2 rounded-2xl">
@@ -778,6 +825,7 @@ export function AdminModule() {
 
           {renderAdminTopicPanels()}
         </Tabs>
+        </div>
 
         <Dialog open={keyStatusDialogPropertyId !== null} onOpenChange={open => !open && closeKeyStatusDialog()}>
           <DialogContent className="max-h-[92vh] w-full max-w-[calc(100%-2rem)] overflow-y-auto scrollbar-hidden rounded-[32px] border-white/80 bg-[#f7f6f2] p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)] sm:max-w-lg lg:max-w-[640px] sm:p-6">

@@ -440,6 +440,49 @@ export type ContractTemplate = typeof contractTemplates.$inferSelect;
 export type InsertContractTemplate = typeof contractTemplates.$inferInsert;
 
 /**
+ * Processos de locacao iniciados pelo administrativo.
+ * Centralizam o contexto antes de virar contrato ativo.
+ */
+export const rentalProposals = pgTable("rentalProposals", {
+  id: serial("id").primaryKey(),
+  status: varchar("status", { length: 40 })
+    .$type<
+      | "rascunho"
+      | "contratos_em_revisao"
+      | "boletos_pendentes"
+      | "seguros_pendentes"
+      | "assinaturas_pendentes"
+      | "transferencias_pendentes"
+      | "vistoria_pendente"
+      | "entrega_chaves_pendente"
+      | "ativo"
+      | "cancelado"
+    >()
+    .default("rascunho")
+    .notNull(),
+  currentStep: varchar("currentStep", { length: 60 }).default("dados_iniciais").notNull(),
+  propertyId: integer("propertyId").notNull(),
+  ownerId: integer("ownerId"),
+  brokerUserId: integer("brokerUserId").notNull(),
+  tenantUserId: integer("tenantUserId").notNull(),
+  ownerConfirmedAt: timestamp("ownerConfirmedAt", { mode: "date" }),
+  tenantConfirmedAt: timestamp("tenantConfirmedAt", { mode: "date" }),
+  leaseTermMonths: integer("leaseTermMonths").notNull(),
+  adjustmentIndex: varchar("adjustmentIndex", { length: 40 }).notNull(),
+  rentAmount: integer("rentAmount").notNull(),
+  startDate: date("startDate", { mode: "date" }).notNull(),
+  dueDay: integer("dueDay").notNull(),
+  contextSnapshot: text("contextSnapshot").default("{}").notNull(),
+  notes: text("notes"),
+  createdByUserId: integer("createdByUserId").notNull(),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export type RentalProposal = typeof rentalProposals.$inferSelect;
+export type InsertRentalProposal = typeof rentalProposals.$inferInsert;
+
+/**
  * Tabela de documentos de imoveis
  * Armazena PDFs relacionados a cada imovel
  */

@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, ne, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import {
   adminUserViews,
@@ -21,6 +21,7 @@ import {
   InsertTaskItemNote,
   InsertTaskItemTemplate,
   InsertUser,
+  InsertRentalProposal,
   TaskItem,
   TaskItemTemplate,
   User,
@@ -33,6 +34,7 @@ import {
   leadInteractions,
   leadNotes,
   leads,
+  rentalProposals,
   taskItemAssignments,
   taskItemNotes,
   taskItemTemplates,
@@ -1544,6 +1546,98 @@ export async function updateContractTemplate(id: number, data: Partial<InsertCon
     .where(eq(contractTemplates.id, id))
     .returning();
   return updated;
+}
+
+export async function deleteContractTemplate(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(contractTemplates).where(eq(contractTemplates.id, id));
+}
+
+export async function getRentalProposals() {
+  const db = await getDb();
+  if (!db) return [];
+
+  const rows = await db
+    .select()
+    .from(rentalProposals)
+    .where(ne(rentalProposals.status, "ativo"))
+    .orderBy(desc(rentalProposals.createdAt));
+
+  const propertyIds = Array.from(new Set(rows.map(row => row.propertyId).filter(Boolean)));
+  const userIds = Array.from(new Set(rows.flatMap(row => [row.brokerUserId, row.tenantUserId]).filter(Boolean)));
+  const ownerIds = Array.from(new Set(rows.map(row => row.ownerId).filter((id): id is number => typeof id === "number")));
+
+  const [propertyRows, userRows, ownerRows] = await Promise.all([
+    propertyIds.length ? db.select().from(properties).where(inArray(properties.id, propertyIds)) : Promise.resolve([]),
+    userIds.length ? db.select().from(users).where(inArray(users.id, userIds)) : Promise.resolve([]),
+    ownerIds.length ? db.select().from(propertyOwners).where(inArray(propertyOwners.id, ownerIds)) : Promise.resolve([]),
+  ]);
+
+  const propertiesById = new Map(propertyRows.map(property => [property.id, property]));
+  const usersById = new Map(userRows.map(user => [user.id, user]));
+  const ownersById = new Map(ownerRows.map(owner => [owner.id, owner]));
+
+  return rows.map(row => ({
+    ...row,
+    property: propertiesById.get(row.propertyId) ?? null,
+    broker: usersById.get(row.brokerUserId) ?? null,
+    tenant: usersById.get(row.tenantUserId) ?? null,
+    owner: row.ownerId ? ownersById.get(row.ownerId) ?? null : null,
+  }));
+}
+
+export async function getRentalProposalById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const rows = await db
+    .select()
+    .from(rentalProposals)
+    .where(eq(rentalProposals.id, id))
+    .limit(1);
+
+  if (rows.length === 0) return undefined;
+
+  const [proposal] = rows;
+  const [property, broker, tenant, owner] = await Promise.all([
+    getPropertyByIdWithRelations(proposal.propertyId),
+    getUserById(proposal.brokerUserId),
+    getUserById(proposal.tenantUserId),
+    proposal.ownerId ? getPropertyOwnerById(proposal.ownerId) : Promise.resolve(undefined),
+  ]);
+
+  return {
+    ...proposal,
+    property: property ?? null,
+    broker: broker ?? null,
+    tenant: tenant ?? null,
+    owner: owner ?? null,
+  };
+}
+
+export async function createRentalProposal(data: InsertRentalProposal) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [created] = await db.insert(rentalProposals).values(data).returning();
+  return created;
+}
+
+export async function updateRentalProposal(id: number, data: Partial<InsertRentalProposal>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [updated] = await db
+    .update(rentalProposals)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(rentalProposals.id, id))
+    .returning();
+  return updated;
+}
+
+export async function deleteRentalProposal(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(rentalProposals).where(eq(rentalProposals.id, id));
 }
 
 export async function getDocumentsByUsuario(idUsuario: number) {

@@ -20,6 +20,8 @@ import AreaCliente from "./pages/AreaCliente";
 import CRM from "./pages/CRM";
 import MeusImoveis from "./pages/MeusImoveis";
 import Admin, { AdminModule } from "./pages/Admin";
+import AdminRentalProposalDetails from "./pages/AdminRentalProposalDetails";
+import AdminRentalProposalNew from "./pages/AdminRentalProposalNew";
 import AdminUsers from "./pages/AdminUsers";
 import AdminUserDetails from "./pages/AdminUserDetails";
 import AdminPropertyDetails from "./pages/AdminPropertyDetails";
@@ -117,6 +119,12 @@ function Router() {
       </Route>
       <Route path={"/admin/imoveis/:id"}>
         <ProtectedRoute component={AdminPropertyDetails} roles={["administrativo"]} />
+      </Route>
+      <Route path={"/admin/modulos/locacoes/nova"}>
+        <ProtectedRoute component={AdminRentalProposalNew} roles={["administrativo"]} />
+      </Route>
+      <Route path={"/admin/modulos/locacoes/propostas/:id"}>
+        <ProtectedRoute component={AdminRentalProposalDetails} roles={["administrativo"]} />
       </Route>
       <Route path={"/admin/modulos/:module"}>
         <ProtectedRoute component={AdminModule} roles={["administrativo"]} />

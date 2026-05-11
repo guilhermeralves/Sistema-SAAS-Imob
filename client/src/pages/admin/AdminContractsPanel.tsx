@@ -1,4 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -12,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { ChevronDown, FileUp } from "lucide-react";
+import { ChevronDown, FileUp, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 const FIELD_CLASS =
@@ -143,6 +153,7 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
   const [contractTemplateHighlights, setContractTemplateHighlights] = useState<ContractTemplateHighlight[]>([]);
   const [contractTemplateTextExpanded, setContractTemplateTextExpanded] = useState(false);
   const [selectedContractTemplateId, setSelectedContractTemplateId] = useState<number | null>(null);
+  const [contractTemplatePendingDelete, setContractTemplatePendingDelete] = useState<ContractTemplateListItem | null>(null);
 
   const { data: contractTemplates, isLoading: loadingContractTemplates } = trpc.contractTemplates.list.useQuery();
 
@@ -173,6 +184,19 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
   const updateContractTemplate = trpc.contractTemplates.update.useMutation({
     onError: error => {
       toast.error(error.message || "Nao foi possivel atualizar o modelo de contrato.");
+    },
+  });
+  const deleteContractTemplate = trpc.contractTemplates.delete.useMutation({
+    onSuccess: async () => {
+      toast.success("Modelo de contrato excluido com sucesso.");
+      if (contractTemplatePendingDelete?.id === selectedContractTemplateId) {
+        setSelectedContractTemplateId(null);
+      }
+      setContractTemplatePendingDelete(null);
+      await utils.contractTemplates.list.invalidate();
+    },
+    onError: error => {
+      toast.error(error.message || "Nao foi possivel excluir o modelo de contrato.");
     },
   });
 
@@ -435,7 +459,6 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
         placeholder: string;
         label: string;
         key: string | null;
-        templateCount: number;
       }
     >();
 
@@ -453,7 +476,6 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
           placeholder: variable.placeholder,
           label: variable.label,
           key: currentKey,
-          templateCount: 1,
         });
         continue;
       }
@@ -461,7 +483,6 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
       if (!existing.key && currentKey) {
         existing.key = currentKey;
       }
-      existing.templateCount += 1;
     }
 
     return Array.from(variablesByPlaceholder.values()).sort((left, right) =>
@@ -572,6 +593,19 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
                   >
                     Editar
                   </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-full border-rose-200 bg-white px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                    onClick={event => {
+                      event.stopPropagation();
+                      setContractTemplatePendingDelete(template);
+                    }}
+                  >
+                    <Trash2 className="mr-1 h-3.5 w-3.5" />
+                    Excluir
+                  </Button>
                 </div>
               </div>
             </div>
@@ -597,9 +631,13 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
           <div>
             <p className="font-semibold text-slate-950">Dicionario de variaveis</p>
             <p className="mt-1 text-sm text-slate-600">
-              {selectedContractTemplate
-                ? `Variáveis do modelo selecionado: ${selectedContractTemplate.name}.`
-                : "Selecione um modelo de contrato para visualizar o dicionário de variáveis."}
+              {selectedContractTemplate ? (
+                <>
+                  Variáveis do modelo selecionado: <strong>{selectedContractTemplate.name}</strong>.
+                </>
+              ) : (
+                "Selecione um modelo de contrato para visualizar o dicionário de variáveis."
+              )}
             </p>
           </div>
           {selectedContractTemplate ? (
@@ -623,16 +661,15 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
           </div>
         ) : contractVariableDictionary.length > 0 ? (
           <div className="max-h-[520px] overflow-y-auto rounded-2xl border border-slate-200 bg-white">
-            <div className="grid grid-cols-[1.1fr_1.35fr_92px] gap-3 border-b border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
+            <div className="grid grid-cols-[1fr_1.15fr] gap-3 border-b border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500">
               <span>Variavel</span>
-              <span>Campo vinculado</span>
-              <span>Uso</span>
+              <span>Status de reconhecimento</span>
             </div>
             <div className="divide-y divide-slate-100">
               {contractVariableDictionary.map(variable => (
                 <div
                   key={variable.placeholder}
-                  className="grid grid-cols-[1.1fr_1.35fr_92px] items-center gap-3 px-3 py-3"
+                  className="grid grid-cols-[1fr_1.15fr] items-center gap-3 px-3 py-3"
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-slate-950">{variable.placeholder}</p>
@@ -655,9 +692,6 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
                       ))}
                     </SelectContent>
                   </Select>
-                  <span className="w-fit rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
-                    {variable.templateCount}x
-                  </span>
                 </div>
               ))}
             </div>
@@ -845,6 +879,38 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={contractTemplatePendingDelete !== null}
+        onOpenChange={open => {
+          if (!open) setContractTemplatePendingDelete(null);
+        }}
+      >
+        <AlertDialogContent className="rounded-[28px] border-white/80 bg-[#f7f6f2]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir modelo de contrato?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {contractTemplatePendingDelete
+                ? `O modelo "${contractTemplatePendingDelete.name}" será removido da lista de modelos cadastrados.`
+                : "Confirme a exclusão do modelo de contrato."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-full bg-white">Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="rounded-full bg-rose-700 text-white hover:bg-rose-800"
+              disabled={deleteContractTemplate.isPending}
+              onClick={event => {
+                event.preventDefault();
+                if (!contractTemplatePendingDelete) return;
+                deleteContractTemplate.mutate({ id: contractTemplatePendingDelete.id });
+              }}
+            >
+              {deleteContractTemplate.isPending ? "Excluindo..." : "Excluir modelo"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

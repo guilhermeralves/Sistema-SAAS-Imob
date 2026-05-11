@@ -180,6 +180,24 @@ const updateContractTemplateSchema = z.object({
   variableHighlights: z.array(contractTemplateTextVariableSchema).max(200),
 });
 
+const createRentalProposalSchema = z.object({
+  propertyId: z.number().int().positive(),
+  brokerUserId: z.number().int().positive(),
+  tenantUserId: z.number().int().positive(),
+  ownerConfirmed: z.boolean(),
+  tenantConfirmed: z.boolean(),
+  leaseTermMonths: z.number().int().min(1).max(120),
+  adjustmentIndex: z.string().trim().min(2).max(40),
+  rentAmount: z.number().int().min(1),
+  startDate: z.string().trim().min(10).max(10),
+  dueDay: z.number().int().min(1).max(31),
+  notes: z.string().trim().max(3000).optional(),
+});
+
+const updateRentalProposalSchema = createRentalProposalSchema.extend({
+  id: z.number().int().positive(),
+});
+
 const propertyPhotoUploadSchema = z.object({
   fileName: z.string().trim().max(255).optional(),
   dataUrl: z.string().trim().min(1).max(30_000_000),
@@ -2385,6 +2403,159 @@ export const appRouter = router({
         reviewedText: input.reviewedText,
         variableHighlights: JSON.stringify(input.variableHighlights),
       });
+    }),
+    delete: adminProcedure.input(idSchema).mutation(async ({ input }) => {
+      const { deleteContractTemplate } = await import("./db");
+      await deleteContractTemplate(input.id);
+      return { success: true } as const;
+    }),
+  }),
+
+  rentalProposals: router({
+    list: adminProcedure.query(async () => {
+      const { getRentalProposals } = await import("./db");
+      return await getRentalProposals();
+    }),
+    getById: adminProcedure.input(idSchema).query(async ({ input }) => {
+      const { getRentalProposalById } = await import("./db");
+      const proposal = await getRentalProposalById(input.id);
+      if (!proposal) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Proposta de locacao nao encontrada." });
+      }
+      return proposal;
+    }),
+    create: adminProcedure.input(createRentalProposalSchema).mutation(async ({ ctx, input }) => {
+      const { createRentalProposal, getPropertyByIdWithRelations, getUserById } = await import("./db");
+      const property = await getPropertyByIdWithRelations(input.propertyId);
+      if (!property) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Imovel nao encontrado." });
+      }
+
+      const broker = await getUserById(input.brokerUserId);
+      if (!broker || (broker.role !== "corretor" && broker.role !== "administrativo")) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Selecione um corretor responsavel valido." });
+      }
+
+      const tenant = await getUserById(input.tenantUserId);
+      if (!tenant || tenant.role !== "cliente") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Selecione um locatario valido." });
+      }
+
+      if (!input.ownerConfirmed) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Confirme os dados basicos do proprietario." });
+      }
+
+      if (!input.tenantConfirmed) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Confirme os dados basicos do locatario." });
+      }
+
+      const contextSnapshot = {
+        property,
+        owner: property.proprietario ?? null,
+        broker: toSafeUser(broker),
+        tenant: toSafeUser(tenant),
+        lease: {
+          leaseTermMonths: input.leaseTermMonths,
+          adjustmentIndex: input.adjustmentIndex,
+          rentAmount: input.rentAmount,
+          startDate: input.startDate,
+          dueDay: input.dueDay,
+        },
+      };
+
+      return await createRentalProposal({
+        status: "rascunho",
+        currentStep: "modelos_contrato",
+        propertyId: input.propertyId,
+        ownerId: property.idProprietario ?? null,
+        brokerUserId: input.brokerUserId,
+        tenantUserId: input.tenantUserId,
+        ownerConfirmedAt: new Date(),
+        tenantConfirmedAt: new Date(),
+        leaseTermMonths: input.leaseTermMonths,
+        adjustmentIndex: input.adjustmentIndex,
+        rentAmount: input.rentAmount,
+        startDate: new Date(`${input.startDate}T00:00:00`),
+        dueDay: input.dueDay,
+        contextSnapshot: JSON.stringify(contextSnapshot),
+        notes: input.notes?.trim() || null,
+        createdByUserId: ctx.user.id,
+      });
+    }),
+    update: adminProcedure.input(updateRentalProposalSchema).mutation(async ({ input }) => {
+      const {
+        getRentalProposalById,
+        getPropertyByIdWithRelations,
+        getUserById,
+        updateRentalProposal,
+      } = await import("./db");
+
+      const currentProposal = await getRentalProposalById(input.id);
+      if (!currentProposal) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Proposta de locacao nao encontrada." });
+      }
+
+      const property = await getPropertyByIdWithRelations(input.propertyId);
+      if (!property) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Imovel nao encontrado." });
+      }
+
+      const broker = await getUserById(input.brokerUserId);
+      if (!broker || (broker.role !== "corretor" && broker.role !== "administrativo")) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Selecione um corretor responsavel valido." });
+      }
+
+      const tenant = await getUserById(input.tenantUserId);
+      if (!tenant || tenant.role !== "cliente") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Selecione um locatario valido." });
+      }
+
+      if (!input.ownerConfirmed) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Confirme os dados basicos do proprietario." });
+      }
+
+      if (!input.tenantConfirmed) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Confirme os dados basicos do locatario." });
+      }
+
+      const contextSnapshot = {
+        property,
+        owner: property.proprietario ?? null,
+        broker: toSafeUser(broker),
+        tenant: toSafeUser(tenant),
+        lease: {
+          leaseTermMonths: input.leaseTermMonths,
+          adjustmentIndex: input.adjustmentIndex,
+          rentAmount: input.rentAmount,
+          startDate: input.startDate,
+          dueDay: input.dueDay,
+        },
+      };
+
+      return await updateRentalProposal(input.id, {
+        propertyId: input.propertyId,
+        ownerId: property.idProprietario ?? null,
+        brokerUserId: input.brokerUserId,
+        tenantUserId: input.tenantUserId,
+        ownerConfirmedAt: new Date(),
+        tenantConfirmedAt: new Date(),
+        leaseTermMonths: input.leaseTermMonths,
+        adjustmentIndex: input.adjustmentIndex,
+        rentAmount: input.rentAmount,
+        startDate: new Date(`${input.startDate}T00:00:00`),
+        dueDay: input.dueDay,
+        contextSnapshot: JSON.stringify(contextSnapshot),
+        notes: input.notes?.trim() || null,
+      });
+    }),
+    delete: adminProcedure.input(idSchema).mutation(async ({ input }) => {
+      const { deleteRentalProposal, getRentalProposalById } = await import("./db");
+      const proposal = await getRentalProposalById(input.id);
+      if (!proposal) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Proposta de locacao nao encontrada." });
+      }
+      await deleteRentalProposal(input.id);
+      return { success: true } as const;
     }),
   }),
 

@@ -1,0 +1,21 @@
+CREATE TABLE "rentalProposals" (
+  "id" serial PRIMARY KEY NOT NULL,
+  "status" varchar(40) DEFAULT 'rascunho' NOT NULL,
+  "currentStep" varchar(60) DEFAULT 'dados_iniciais' NOT NULL,
+  "propertyId" integer NOT NULL,
+  "ownerId" integer,
+  "brokerUserId" integer NOT NULL,
+  "tenantUserId" integer NOT NULL,
+  "ownerConfirmedAt" timestamp,
+  "tenantConfirmedAt" timestamp,
+  "leaseTermMonths" integer NOT NULL,
+  "adjustmentIndex" varchar(40) NOT NULL,
+  "rentAmount" integer NOT NULL,
+  "startDate" date NOT NULL,
+  "dueDay" integer NOT NULL,
+  "contextSnapshot" text DEFAULT '{}' NOT NULL,
+  "notes" text,
+  "createdByUserId" integer NOT NULL,
+  "createdAt" timestamp DEFAULT now() NOT NULL,
+  "updatedAt" timestamp DEFAULT now() NOT NULL
+);

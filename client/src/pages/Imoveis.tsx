@@ -99,8 +99,9 @@ function buildPropertySearchText(property: Record<string, unknown>) {
 
 export default function Imoveis() {
   const { user, isAuthenticated } = useAuth();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const { data: imoveis, isLoading } = trpc.properties.list.useQuery();
+  const isRentalProposalSelectionMode = new URLSearchParams(location.split("?")[1] ?? "").get("selecionarLocacao") === "1";
   const canManageProperties =
     isAuthenticated && (user?.role === "corretor" || user?.role === "administrativo");
   // Estado para controlar o dialog (Aberto ou fechado)
@@ -319,9 +320,10 @@ export default function Imoveis() {
   // ========== FIM DA FUNCAO ==========
 
   const [showFilters, setShowFilters] = useState(false);
+  const [selectedRentalProperty, setSelectedRentalProperty] = useState<NonNullable<typeof imoveis>[number] | null>(null);
   const [filters, setFilters] = useState({
     tipo: "todos",
-    finalidade: "todos",
+    finalidade: isRentalProposalSelectionMode ? "locacao" : "todos",
     cidade: "",
     bairro: "",
     quartos: "todos",
@@ -332,6 +334,14 @@ export default function Imoveis() {
     search: "",
   });
 
+  useEffect(() => {
+    if (!isRentalProposalSelectionMode) return;
+    setFilters(current => ({
+      ...current,
+      finalidade: "locacao",
+    }));
+  }, [isRentalProposalSelectionMode]);
+
   // Aplicar filtros
   const imoveisFiltrados = imoveis?.filter((imovel) => {
     const normalizedCidade = normalizeSearchValue(filters.cidade);
@@ -341,7 +351,8 @@ export default function Imoveis() {
       .filter(Boolean);
 
     if (filters.tipo !== "todos" && imovel.tipo !== filters.tipo) return false;
-    if (filters.finalidade !== "todos" && imovel.finalidade !== filters.finalidade) return false;
+    if (filters.finalidade === "locacao" && imovel.finalidade !== "locacao" && imovel.finalidade !== "ambos") return false;
+    if (filters.finalidade !== "todos" && filters.finalidade !== "locacao" && imovel.finalidade !== filters.finalidade) return false;
     if (filters.cidade && !normalizeSearchValue(imovel.cidade).includes(normalizedCidade)) return false;
     if (filters.bairro && !normalizeSearchValue(imovel.bairro || "").includes(normalizedBairro)) return false;
     if (filters.quartos !== "todos" && (imovel.quartos ?? 0) !== Number(filters.quartos)) return false;
@@ -365,14 +376,18 @@ export default function Imoveis() {
         <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           {/* Header */}
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">Imóveis Disponíveis</h1>
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">
+              {isRentalProposalSelectionMode ? "Imóveis para Locação" : "Imóveis Disponíveis"}
+            </h1>
             <p className="mt-2 text-slate-600">
-              Encontre o imóvel perfeito para você
+              {isRentalProposalSelectionMode
+                ? "Escolha um imóvel para iniciar a proposta de Locação"
+                : "Encontre o imóvel perfeito para você"}
             </p>
           </div>
 
           {/* Botao que abre o dialog */}
-          {canManageProperties ? (
+          {canManageProperties && !isRentalProposalSelectionMode ? (
           <Dialog open={newPropertyOpen} onOpenChange={setNewPropertyOpen}>
             <DialogTrigger asChild>
               <Button className="gap-2 rounded-full bg-slate-950 text-white hover:bg-slate-800">
@@ -1047,59 +1062,73 @@ export default function Imoveis() {
             {imoveisFiltrados.map((imovel) => {
               const fotos = imovel.fotos ? JSON.parse(imovel.fotos) : [];
               const primeiraFoto = fotos[0] || "/placeholder-property.jpg";
-
-              return (
-                <Link key={imovel.id} href={`/imoveis/${imovel.id}`}>
-                  <Card className="h-full cursor-pointer overflow-hidden rounded-[28px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_30px_90px_-42px_rgba(15,23,42,0.52)]">
-                    <div className="relative h-56 overflow-hidden">
-                      <ProtectedPropertyImage
-                        src={primeiraFoto}
-                        alt={imovel.titulo}
-                        className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-                      />
-                      <div className="absolute right-4 top-4 rounded-full border border-white/20 bg-slate-950/80 px-3 py-1 text-sm font-semibold text-white backdrop-blur">
-                        {imovel.finalidade === "venda" ? "Venda" : imovel.finalidade === "locacao" ? "Locação" : "Venda/Locação"}
+              const propertyCard = (
+                <Card className="h-full cursor-pointer overflow-hidden rounded-[28px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_30px_90px_-42px_rgba(15,23,42,0.52)]">
+                  <div className="relative h-56 overflow-hidden">
+                    <ProtectedPropertyImage
+                      src={primeiraFoto}
+                      alt={imovel.titulo}
+                      className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                    />
+                    <div className="absolute right-4 top-4 rounded-full border border-white/20 bg-slate-950/80 px-3 py-1 text-sm font-semibold text-white backdrop-blur">
+                      {imovel.finalidade === "venda" ? "Venda" : imovel.finalidade === "locacao" ? "Locação" : "Venda/Locação"}
+                    </div>
+                    {imovel.destaque === 1 && (
+                      <div className="absolute left-4 top-4 rounded-full border border-white/30 bg-amber-500/90 px-3 py-1 text-sm font-semibold text-white backdrop-blur">
+                        Destaque
                       </div>
-                      {imovel.destaque === 1 && (
-                        <div className="absolute left-4 top-4 rounded-full border border-white/30 bg-amber-500/90 px-3 py-1 text-sm font-semibold text-white backdrop-blur">
-                          Destaque
+                    )}
+                  </div>
+                  <CardContent className="p-5">
+                    <h3 className="mb-2 line-clamp-1 text-lg font-semibold text-slate-950">{imovel.titulo}</h3>
+                    <div className="mb-4 flex items-center gap-1 text-sm text-slate-500">
+                      <MapPin className="h-4 w-4 flex-shrink-0" />
+                      <span className="line-clamp-1">
+                        {imovel.bairro ? `${imovel.bairro}, ` : ""}{imovel.cidade}, {imovel.estado}
+                      </span>
+                    </div>
+                    <div className="mb-5 flex items-center gap-4 text-sm text-slate-600">
+                      {imovel.quartos && (
+                        <div className="flex items-center gap-1">
+                          <Bed className="h-4 w-4" />
+                          {imovel.quartos}
+                        </div>
+                      )}
+                      {imovel.banheiros && (
+                        <div className="flex items-center gap-1">
+                          <Bath className="h-4 w-4" />
+                          {imovel.banheiros}
+                        </div>
+                      )}
+                      {imovel.vagas && (
+                        <div className="flex items-center gap-1">
+                          <Car className="h-4 w-4" />
+                          {imovel.vagas}
                         </div>
                       )}
                     </div>
-                    <CardContent className="p-5">
-                      <h3 className="mb-2 line-clamp-1 text-lg font-semibold text-slate-950">{imovel.titulo}</h3>
-                      <div className="mb-4 flex items-center gap-1 text-sm text-slate-500">
-                        <MapPin className="h-4 w-4 flex-shrink-0" />
-                        <span className="line-clamp-1">
-                          {imovel.bairro ? `${imovel.bairro}, ` : ""}{imovel.cidade}, {imovel.estado}
-                        </span>
-                      </div>
-                      <div className="mb-5 flex items-center gap-4 text-sm text-slate-600">
-                        {imovel.quartos && (
-                          <div className="flex items-center gap-1">
-                            <Bed className="h-4 w-4" />
-                            {imovel.quartos}
-                          </div>
-                        )}
-                        {imovel.banheiros && (
-                          <div className="flex items-center gap-1">
-                            <Bath className="h-4 w-4" />
-                            {imovel.banheiros}
-                          </div>
-                        )}
-                        {imovel.vagas && (
-                          <div className="flex items-center gap-1">
-                            <Car className="h-4 w-4" />
-                            {imovel.vagas}
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-2xl font-semibold tracking-tight text-emerald-800">
-                        {formatMoneyFromCentsValue(imovel.valor)}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
+                    <div className="text-2xl font-semibold tracking-tight text-emerald-800">
+                      {formatMoneyFromCentsValue(imovel.valorLocacao || imovel.valor)}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+
+              return (
+                isRentalProposalSelectionMode ? (
+                  <button
+                    key={imovel.id}
+                    type="button"
+                    className="block h-full text-left"
+                    onClick={() => setSelectedRentalProperty(imovel)}
+                  >
+                    {propertyCard}
+                  </button>
+                ) : (
+                  <Link key={imovel.id} href={`/imoveis/${imovel.id}`}>
+                    {propertyCard}
+                  </Link>
+                )
               );
             })}
           </div>
@@ -1130,6 +1159,39 @@ export default function Imoveis() {
             </Button>
           </Card>
         )}
+
+        <Dialog open={selectedRentalProperty !== null} onOpenChange={open => !open && setSelectedRentalProperty(null)}>
+          <DialogContent className="max-w-md rounded-[28px] border-white/80 bg-[#f7f6f2]">
+            <DialogHeader>
+              <DialogTitle>Selecionar imóvel para locação?</DialogTitle>
+              <DialogDescription>
+                {selectedRentalProperty
+                  ? `Deseja selecionar o imóvel "${selectedRentalProperty.titulo}" para iniciar a proposta de locação?`
+                  : "Confirme o imóvel selecionado para iniciar a proposta de locação."}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full bg-white"
+                onClick={() => setSelectedRentalProperty(null)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="rounded-full bg-emerald-700 text-white hover:bg-emerald-800"
+                onClick={() => {
+                  if (!selectedRentalProperty) return;
+                  setLocation(`/admin/modulos/locacoes/nova?propertyId=${selectedRentalProperty.id}`);
+                }}
+              >
+                Confirmar seleção
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
       </div>
     </Layout>
