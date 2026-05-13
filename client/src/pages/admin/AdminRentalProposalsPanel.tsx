@@ -13,19 +13,14 @@ import { Button } from "@/components/ui/button";
 import { formatStoredDate } from "@/lib/date";
 import { trpc } from "@/lib/trpc";
 import {
-  BadgeCheck,
   Check,
   Banknote,
-  ClipboardCheck,
   FileCheck2,
   FileSignature,
-  Handshake,
   Home,
   KeyRound,
   MailCheck,
   ShieldCheck,
-  UserCheck,
-  UsersRound,
   type LucideIcon,
 } from "lucide-react";
 import { Link } from "wouter";
@@ -58,36 +53,6 @@ const RENTAL_PROCESS_STEPS: RentalProcessStep[] = [
     title: "Escolha do imóvel",
     description: "Imóvel de locação selecionado para iniciar a proposta.",
     icon: Home,
-  },
-  {
-    key: "contexto",
-    title: "Contexto do imóvel",
-    description: "Dados do imóvel, proprietário e valores carregados no processo.",
-    icon: ClipboardCheck,
-  },
-  {
-    key: "corretor",
-    title: "Corretor responsável",
-    description: "Responsável confirmado, usando como padrão o corretor do cadastro.",
-    icon: UserCheck,
-  },
-  {
-    key: "proprietario",
-    title: "Proprietário",
-    description: "Dados básicos do proprietário conferidos pelo administrativo.",
-    icon: BadgeCheck,
-  },
-  {
-    key: "locatario",
-    title: "Locatário",
-    description: "Locatário escolhido e informações cadastrais validadas.",
-    icon: UsersRound,
-  },
-  {
-    key: "dados_locacao",
-    title: "Dados da locação",
-    description: "Prazo, índice de reajuste, aluguel, vencimento e observações.",
-    icon: Banknote,
   },
   {
     key: "modelos_contrato",
@@ -131,19 +96,14 @@ function getProposalStepIndex(proposal: RentalProposalListItem | null) {
   if (!proposal) return -1;
 
   if (proposal.status === "ativo") return RENTAL_PROCESS_STEPS.length - 1;
-  if (proposal.status === "entrega_chaves_pendente" || proposal.currentStep === "entrega_chaves_pendente") return 10;
-  if (proposal.status === "vistoria_pendente" || proposal.currentStep === "vistoria_pendente") return 10;
-  if (proposal.status === "transferencias_pendentes" || proposal.currentStep === "transferencias_pendentes") return 9;
-  if (proposal.status === "assinaturas_pendentes" || proposal.currentStep === "assinaturas_pendentes") return 9;
-  if (proposal.status === "seguros_pendentes" || proposal.currentStep === "seguros_pendentes") return 9;
-  if (proposal.status === "boletos_pendentes" || proposal.currentStep === "boletos_pendentes") return 8;
-  if (proposal.status === "contratos_em_revisao" || proposal.currentStep === "contratos_em_revisao") return 7;
-  if (proposal.currentStep === "modelos_contrato") return 6;
-  if (proposal.currentStep === "dados_locacao") return 5;
-  if (proposal.currentStep === "locatario") return 4;
-  if (proposal.currentStep === "proprietario") return 3;
-  if (proposal.currentStep === "corretor") return 2;
-  if (proposal.currentStep === "contexto") return 1;
+  if (proposal.status === "entrega_chaves_pendente" || proposal.currentStep === "entrega_chaves_pendente") return 5;
+  if (proposal.status === "vistoria_pendente" || proposal.currentStep === "vistoria_pendente") return 5;
+  if (proposal.status === "transferencias_pendentes" || proposal.currentStep === "transferencias_pendentes") return 4;
+  if (proposal.status === "assinaturas_pendentes" || proposal.currentStep === "assinaturas_pendentes") return 4;
+  if (proposal.status === "seguros_pendentes" || proposal.currentStep === "seguros_pendentes") return 4;
+  if (proposal.status === "boletos_pendentes" || proposal.currentStep === "boletos_pendentes") return 3;
+  if (proposal.status === "contratos_em_revisao" || proposal.currentStep === "contratos_em_revisao") return 2;
+  if (proposal.currentStep === "modelos_contrato") return 1;
 
   return 0;
 }
@@ -250,7 +210,7 @@ export default function AdminRentalProposalsPanel() {
 
   if (!proposals?.length) {
     return (
-      <div className="grid gap-4 xl:grid-cols-[minmax(520px,1.35fr)_minmax(360px,0.85fr)]">
+      <div ref={proposalsWorkspaceRef} className="grid scroll-mt-32 gap-4 xl:grid-cols-[minmax(520px,1.35fr)_minmax(360px,0.85fr)]">
         <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-5 text-sm text-slate-600">
           Nenhuma proposta de locação criada ainda. Use o botão Nova Locação para iniciar o primeiro rascunho.
         </div>
@@ -261,7 +221,7 @@ export default function AdminRentalProposalsPanel() {
 
   return (
     <>
-      <div className="grid gap-4 xl:grid-cols-[minmax(520px,1.35fr)_minmax(360px,0.85fr)]">
+      <div ref={proposalsWorkspaceRef} className="grid scroll-mt-32 gap-4 xl:grid-cols-[minmax(520px,1.35fr)_minmax(360px,0.85fr)]">
         <div className="space-y-3">
           {proposals.map(proposal => {
             const isSelected = proposal.id === selectedProposalId;

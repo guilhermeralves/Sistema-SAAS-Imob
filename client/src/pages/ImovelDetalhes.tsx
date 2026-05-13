@@ -93,6 +93,14 @@ export default function ImovelDetalhes() {
   const [, setLocation] = useLocation();
   const [, params] = useRoute("/imoveis/:id");
   const id = params?.id ? parseInt(params.id, 10) : 0;
+  const fromRentalProposalId =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("fromRentalProposal")
+      : null;
+  const backHref = fromRentalProposalId
+    ? `/admin/modulos/locacoes/propostas/${fromRentalProposalId}`
+    : "/imoveis";
+  const backLabel = fromRentalProposalId ? "Voltar para proposta" : "Voltar para Imóveis";
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [documentsOpen, setDocumentsOpen] = useState(false);
   const [locationChoiceOpen, setLocationChoiceOpen] = useState(false);
@@ -157,12 +165,17 @@ export default function ImovelDetalhes() {
   );
   const shouldShowContactActions = !user || user.role === "cliente";
   const isBrokerViewer = user?.role === "corretor";
+  const propertyOwners = imovel?.proprietarios?.length
+    ? imovel.proprietarios
+    : imovel?.proprietario
+      ? [imovel.proprietario]
+      : [];
   const shouldShowOwnerInVinculos = Boolean(
-    isAdminViewer || (isBrokerViewer && imovel?.proprietario)
+    isAdminViewer || (isBrokerViewer && propertyOwners.length > 0)
   );
   const shouldShowVinculosCard = Boolean(
     (isAdminViewer || isBrokerViewer) &&
-      (imovel?.corretorResponsavel || (shouldShowOwnerInVinculos && imovel?.proprietario))
+      (imovel?.corretorResponsavel || (shouldShowOwnerInVinculos && propertyOwners.length > 0))
   );
 
   if (isLoading) {
@@ -374,14 +387,14 @@ export default function ImovelDetalhes() {
       <div className="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.88),rgba(244,240,232,0.82)_45%,rgba(248,248,246,1)_100%)] pb-12">
         <div className="container py-6 md:py-7">
           <div className="mb-4 lg:mb-3">
-            <Link href="/imoveis">
+            <Link href={backHref}>
               <Button
                 variant="ghost"
                 size="sm"
                 className="mb-2 gap-2 rounded-full border border-white/70 bg-white/80 text-slate-700 shadow-sm hover:bg-white lg:mb-2"
               >
                 <ArrowLeft className="h-4 w-4" />
-                Voltar para Imóveis
+                {backLabel}
               </Button>
             </Link>
           </div>
@@ -615,23 +628,30 @@ export default function ImovelDetalhes() {
                   <div className="grid gap-4 md:grid-cols-2">
                     {shouldShowOwnerInVinculos ? (
                       <div className="space-y-2 rounded-[28px] border border-slate-100 bg-slate-50/70 p-5">
-                        <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Proprietario</p>
-                        {imovel.proprietario ? (
-                          <>
-                            {isAdminViewer ? (
-                              <Link href={`/admin/proprietarios/${imovel.proprietario.id}?fromProperty=${imovel.id}`}>
-                                <a className="text-base font-semibold text-emerald-800 underline">
-                                  {imovel.proprietario.name}
-                                </a>
-                              </Link>
-                            ) : (
-                              <p className="text-base font-semibold text-slate-950">
-                                {imovel.proprietario.name}
-                              </p>
-                            )}
-                            <p className="text-sm text-slate-600">{imovel.proprietario.email}</p>
-                            <p className="text-sm text-slate-600">{imovel.proprietario.phone}</p>
-                          </>
+                        <p className="text-xs uppercase tracking-[0.18em] text-slate-500">Proprietarios</p>
+                        {propertyOwners.length > 0 ? (
+                          <div className="space-y-3">
+                            {propertyOwners.map((owner: { id: number; name: string; email: string; phone: string }, index: number) => (
+                              <div key={owner.id} className="border-b border-slate-200/70 pb-3 last:border-b-0 last:pb-0">
+                                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                                  Proprietario {index + 1}
+                                </p>
+                                {isAdminViewer ? (
+                                  <Link href={`/admin/proprietarios/${owner.id}?fromProperty=${imovel.id}`}>
+                                    <a className="text-base font-semibold text-emerald-800 underline">
+                                      {owner.name}
+                                    </a>
+                                  </Link>
+                                ) : (
+                                  <p className="text-base font-semibold text-slate-950">
+                                    {owner.name}
+                                  </p>
+                                )}
+                                <p className="text-sm text-slate-600">{owner.email}</p>
+                                <p className="text-sm text-slate-600">{owner.phone}</p>
+                              </div>
+                            ))}
+                          </div>
                         ) : (
                           <p className="text-sm text-slate-600">Nao informado</p>
                         )}

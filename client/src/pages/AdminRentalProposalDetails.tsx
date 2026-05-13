@@ -1,4 +1,4 @@
-import { Link, useRoute } from "wouter";
+import { useLocation, useRoute } from "wouter";
 import Layout from "@/components/Layout";
 import {
   AlertDialog,
@@ -15,14 +15,32 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { formatStoredDate } from "@/lib/date";
 import { trpc } from "@/lib/trpc";
+import { useUnsavedChangesNavigationGuard } from "@/hooks/useUnsavedChangesNavigationGuard";
 import RentalProposalForm from "./admin/RentalProposalForm";
-import { ArrowLeft, Shield, Trash2, User } from "lucide-react";
+import { ArrowLeft, Shield, User } from "lucide-react";
 import { useState } from "react";
-import { useLocation } from "wouter";
 import { toast } from "sonner";
 
 const ADMIN_BACKGROUND_CLASS =
   "bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.88),rgba(244,240,232,0.82)_45%,rgba(248,248,246,1)_100%)]";
+
+function getProposalStatusLabel(status: string, currentStep: string) {
+  const labels: Record<string, string> = {
+    rascunho: "Rascunho",
+    contratos_em_revisao: "Contratos em revisão",
+    boletos_pendentes: "Boletos pendentes",
+    seguros_pendentes: "Seguros pendentes",
+    assinaturas_pendentes: "Assinaturas pendentes",
+    transferencias_pendentes: "Transferências pendentes",
+    vistoria_pendente: "Vistoria pendente",
+    entrega_chaves_pendente: "Entrega de chaves",
+    ativo: "Ativo",
+    cancelado: "Cancelado",
+    modelos_contrato: "Modelos de contrato",
+  };
+
+  return status === "rascunho" ? labels.rascunho : labels[currentStep] ?? labels[status] ?? status;
+}
 
 function AdminRentalProposalDetailsLoading() {
   return (
@@ -76,6 +94,14 @@ export default function AdminRentalProposalDetails() {
   const proposalId = Number(params?.id);
   const hasValidProposalId = Number.isInteger(proposalId) && proposalId > 0;
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [formDirty, setFormDirty] = useState(false);
+  const { requestNavigation, UnsavedChangesDialog } = useUnsavedChangesNavigationGuard({
+    isDirty: formDirty,
+    shouldAllowPath: path =>
+      path.includes(`fromRentalProposal=${proposalId}`) ||
+      path.startsWith("/imoveis?selecionarLocacao=1") ||
+      path.startsWith(`/admin/modulos/locacoes/propostas/${proposalId}`),
+  });
 
   const {
     data: proposal,
@@ -107,43 +133,34 @@ export default function AdminRentalProposalDetails() {
         <div className="container py-4 md:py-5">
           <div className="mb-4">
             <Button asChild variant="outline" className="mb-3 gap-2 rounded-full bg-white/90 shadow-sm hover:bg-white">
-              <Link href="/admin/modulos/locacoes?tab=propostas">
-                <a className="inline-flex items-center gap-2">
-                  <ArrowLeft className="h-4 w-4" />
-                  Voltar
-                </a>
-              </Link>
+              <button
+                type="button"
+                className="inline-flex items-center gap-2"
+                onClick={() => {
+                  requestNavigation("/admin/modulos/locacoes?tab=propostas");
+                }}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Voltar
+              </button>
             </Button>
             <div className="mb-1 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">
                 Detalhes da Proposta
               </h1>
-              {proposal ? (
-                <div className="flex flex-wrap gap-2">
-                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                    {proposal.status}
-                  </span>
-                  <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-                    {proposal.currentStep}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-8 rounded-full border-rose-200 bg-white px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50 hover:text-rose-800"
-                    onClick={() => setDeleteDialogOpen(true)}
-                  >
-                    <Trash2 className="mr-1 h-3.5 w-3.5" />
-                    Excluir
-                  </Button>
-                </div>
-              ) : null}
             </div>
-            <p className="max-w-3xl text-slate-600">
-              {proposal
-                ? `Rascunho criado em ${formatStoredDate(proposal.createdAt)}. O código de referência será gerado após a confirmação dos contratos.`
-                : "Carregando as informações salvas deste processo de locação."}
-            </p>
+            {proposal ? (
+              <div className="flex max-w-3xl flex-wrap items-center gap-2 text-slate-600">
+                <span>Rascunho criado em {formatStoredDate(proposal.createdAt)}</span>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                  {getProposalStatusLabel(proposal.status, proposal.currentStep)}
+                </span>
+              </div>
+            ) : (
+              <p className="max-w-3xl text-slate-600">
+                Carregando as informações salvas deste processo de locação.
+              </p>
+            )}
           </div>
 
           {!hasValidProposalId ? (
@@ -157,7 +174,11 @@ export default function AdminRentalProposalDetails() {
               Nao foi possivel carregar esta proposta de locacao.
             </div>
           ) : (
-            <RentalProposalForm initialProposal={proposal} />
+            <RentalProposalForm
+              initialProposal={proposal}
+              onDeleteProposal={() => setDeleteDialogOpen(true)}
+              onDirtyChange={setFormDirty}
+            />
           )}
         </div>
       </div>
@@ -186,6 +207,7 @@ export default function AdminRentalProposalDetails() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {UnsavedChangesDialog}
     </Layout>
   );
 }

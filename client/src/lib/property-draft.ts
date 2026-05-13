@@ -22,14 +22,33 @@ export type NewPropertyDraftData = {
   ownerEmail: string;
   ownerCpf: string;
   ownerPhone: string;
+  owners?: Array<{
+    name: string;
+    email: string;
+    cpf: string;
+    phone: string;
+  }>;
 };
 
 const NEW_PROPERTY_DRAFT_STORAGE_KEY = "afg_new_property_draft_v1";
 const NEW_PROPERTY_DRAFT_PHOTOS_STORAGE_KEY = "afg_new_property_draft_photos_v1";
 
-function isStringRecord(value: unknown): value is Record<string, string> {
+function isPropertyDraft(value: unknown): value is NewPropertyDraftData {
   if (!value || typeof value !== "object") return false;
-  return Object.values(value).every(item => typeof item === "string");
+  const record = value as Record<string, unknown>;
+  return Object.entries(record).every(([key, item]) => {
+    if (key === "owners") {
+      return Array.isArray(item) && item.every(owner =>
+        owner &&
+        typeof owner === "object" &&
+        typeof (owner as Record<string, unknown>).name === "string" &&
+        typeof (owner as Record<string, unknown>).email === "string" &&
+        typeof (owner as Record<string, unknown>).cpf === "string" &&
+        typeof (owner as Record<string, unknown>).phone === "string"
+      );
+    }
+    return typeof item === "string";
+  });
 }
 
 export function saveNewPropertyDraft(data: NewPropertyDraftData) {
@@ -45,7 +64,7 @@ export function loadNewPropertyDraft() {
 
   try {
     const parsed = JSON.parse(rawValue) as unknown;
-    if (!isStringRecord(parsed)) return null;
+    if (!isPropertyDraft(parsed)) return null;
 
     return parsed as NewPropertyDraftData;
   } catch {

@@ -21,7 +21,7 @@ import {
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { saveNewPropertyDraft, saveNewPropertyDraftPhotos } from "@/lib/property-draft";
-import { Building2, MapPin, Bed, Bath, Car, Search, SlidersHorizontal, Plus } from "lucide-react";
+import { Building2, MapPin, Bed, Bath, Car, Search, SlidersHorizontal, Plus, Trash2 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { toast } from "sonner";
 
@@ -101,7 +101,10 @@ export default function Imoveis() {
   const { user, isAuthenticated } = useAuth();
   const [location, setLocation] = useLocation();
   const { data: imoveis, isLoading } = trpc.properties.list.useQuery();
-  const isRentalProposalSelectionMode = new URLSearchParams(location.split("?")[1] ?? "").get("selecionarLocacao") === "1";
+  const searchParams = new URLSearchParams(
+    typeof window !== "undefined" ? window.location.search : location.split("?")[1] ?? ""
+  );
+  const isRentalProposalSelectionMode = searchParams.get("selecionarLocacao") === "1";
   const canManageProperties =
     isAuthenticated && (user?.role === "corretor" || user?.role === "administrativo");
   // Estado para controlar o dialog (Aberto ou fechado)
@@ -131,6 +134,14 @@ export default function Imoveis() {
     ownerEmail: "",
     ownerCpf: "",
     ownerPhone: "",
+    owners: [
+      {
+        name: "",
+        email: "",
+        cpf: "",
+        phone: "",
+      },
+    ],
   });
 
   const [cepLoading, setCepLoading] = useState(false);
@@ -190,6 +201,20 @@ export default function Imoveis() {
   }, [condominios, condominioSearch]);
 
   const handleProceedToPhotoStep = () => {
+    const owners = newPropertyData.owners?.length
+      ? newPropertyData.owners
+      : [{
+        name: newPropertyData.ownerName,
+        email: newPropertyData.ownerEmail,
+        cpf: newPropertyData.ownerCpf,
+        phone: newPropertyData.ownerPhone,
+      }];
+    const normalizedOwners = owners.map(owner => ({
+      ...owner,
+      cpf: formatCpf(normalizeCpf(owner.cpf)),
+    }));
+    const primaryOwner = normalizedOwners[0];
+
     // Valida campos obrigatorios
     if (!newPropertyData.titulo || !newPropertyData.valor || !newPropertyData.endereco) {
       toast.error("Preencha t�tulo, valor e endere�o");
@@ -214,23 +239,30 @@ export default function Imoveis() {
     }
 
     if (
-      !newPropertyData.ownerName ||
-      !newPropertyData.ownerEmail ||
-      !newPropertyData.ownerPhone ||
-      !newPropertyData.ownerCpf
+      !primaryOwner?.name ||
+      !primaryOwner.email ||
+      !primaryOwner.phone ||
+      !primaryOwner.cpf
     ) {
-      toast.error("Preencha os dados obrigat�rios do propriet�rio.");
+      toast.error("Preencha os dados obrigatorios do proprietario principal.");
       return;
     }
 
-    if (!isValidCpf(newPropertyData.ownerCpf)) {
-      toast.error("CPF do propriet�rio inv�lido. Confira os d�gitos informados.");
+    const invalidOwnerIndex = normalizedOwners.findIndex(owner =>
+      owner.cpf && !isValidCpf(owner.cpf)
+    );
+    if (invalidOwnerIndex >= 0) {
+      toast.error(`CPF do proprietario ${invalidOwnerIndex + 1} invalido. Confira os digitos informados.`);
       return;
     }
 
     saveNewPropertyDraft({
       ...newPropertyData,
-      ownerCpf: formatCpf(normalizeCpf(newPropertyData.ownerCpf)),
+      ownerName: primaryOwner.name,
+      ownerEmail: primaryOwner.email,
+      ownerCpf: primaryOwner.cpf,
+      ownerPhone: primaryOwner.phone,
+      owners: normalizedOwners,
     });
     saveNewPropertyDraftPhotos([]);
     setNewPropertyOpen(false);
@@ -269,6 +301,72 @@ export default function Imoveis() {
       cep: selectedCondominio.cep ?? current.cep,
     }));
     setCepError("");
+  };
+
+  const updateOwnerDraft = (
+    index: number,
+    field: "name" | "email" | "cpf" | "phone",
+    value: string
+  ) => {
+    setNewPropertyData(current => {
+      const owners = current.owners?.length
+        ? [...current.owners]
+        : [{ name: current.ownerName, email: current.ownerEmail, cpf: current.ownerCpf, phone: current.ownerPhone }];
+      owners[index] = {
+        ...owners[index],
+        [field]: field === "cpf" ? formatCpf(value) : field === "phone" ? formatPhoneNumber(value) : value,
+      };
+      const primaryOwner = owners[0];
+
+      return {
+        ...current,
+        owners,
+        ownerName: primaryOwner.name,
+        ownerEmail: primaryOwner.email,
+        ownerCpf: primaryOwner.cpf,
+        ownerPhone: primaryOwner.phone,
+      };
+    });
+  };
+
+  const addOwnerDraft = () => {
+    setNewPropertyData(current => {
+      const owners = current.owners?.length
+        ? current.owners
+        : [{ name: current.ownerName, email: current.ownerEmail, cpf: current.ownerCpf, phone: current.ownerPhone }];
+
+      if (owners.length >= 3) {
+        toast.error("E possivel vincular ate 3 proprietarios por imovel.");
+        return current;
+      }
+
+      return {
+        ...current,
+        owners: [...owners, { name: "", email: "", cpf: "", phone: "" }],
+      };
+    });
+  };
+
+  const removeOwnerDraft = (index: number) => {
+    setNewPropertyData(current => {
+      const owners = current.owners?.length
+        ? [...current.owners]
+        : [{ name: current.ownerName, email: current.ownerEmail, cpf: current.ownerCpf, phone: current.ownerPhone }];
+
+      if (owners.length === 1) return current;
+
+      owners.splice(index, 1);
+      const primaryOwner = owners[0];
+
+      return {
+        ...current,
+        owners,
+        ownerName: primaryOwner.name,
+        ownerEmail: primaryOwner.email,
+        ownerCpf: primaryOwner.cpf,
+        ownerPhone: primaryOwner.phone,
+      };
+    });
   };
 
   // ========== FUNCAO PARA LIDAR COM CEP ==========
@@ -784,60 +882,84 @@ export default function Imoveis() {
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-                    <div className="space-y-1 sm:space-y-2 sm:col-span-2">
-                      <Label htmlFor="ownerName" className="text-sm sm:text-base">Nome e sobrenome *</Label>
-                      <Input
-                        id="ownerName"
-                        value={newPropertyData.ownerName}
-                        onChange={e =>
-                          setNewPropertyData({ ...newPropertyData, ownerName: e.target.value })
-                        }
-                        className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
-                      />
-                    </div>
-                    <div className="space-y-1 sm:space-y-2">
-                      <Label htmlFor="ownerEmail" className="text-sm sm:text-base">E-mail *</Label>
-                      <Input
-                        id="ownerEmail"
-                        type="email"
-                        value={newPropertyData.ownerEmail}
-                        onChange={e =>
-                          setNewPropertyData({ ...newPropertyData, ownerEmail: e.target.value })
-                        }
-                        className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
-                      />
-                    </div>
-                    <div className="space-y-1 sm:space-y-2">
-                      <Label htmlFor="ownerPhone" className="text-sm sm:text-base">Telefone *</Label>
-                      <Input
-                        id="ownerPhone"
-                        value={newPropertyData.ownerPhone}
-                        onChange={e =>
-                          setNewPropertyData({
-                            ...newPropertyData,
-                            ownerPhone: formatPhoneNumber(e.target.value),
-                          })
-                        }
-                        className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
-                      />
-                    </div>
-                    <div className="space-y-1 sm:space-y-2">
-                      <Label htmlFor="ownerCpf" className="text-sm sm:text-base">CPF *</Label>
-                      <Input
-                        id="ownerCpf"
-                        inputMode="numeric"
-                        maxLength={14}
-                        value={newPropertyData.ownerCpf}
-                        onChange={e =>
-                          setNewPropertyData({
-                            ...newPropertyData,
-                            ownerCpf: formatCpf(e.target.value),
-                          })
-                        }
-                        className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
-                      />
-                    </div>
+                  <div className="space-y-4">
+                    {(newPropertyData.owners?.length
+                      ? newPropertyData.owners
+                      : [{ name: newPropertyData.ownerName, email: newPropertyData.ownerEmail, cpf: newPropertyData.ownerCpf, phone: newPropertyData.ownerPhone }]
+                    ).map((owner, index) => (
+                      <div key={index} className="rounded-2xl border border-white/80 bg-white/80 p-4 shadow-sm">
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                          <p className="text-sm font-semibold text-slate-950">
+                            Proprietário {index + 1}{index === 0 ? " *" : ""}
+                          </p>
+                          {index > 0 ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8 rounded-full bg-white text-rose-700 hover:bg-rose-50"
+                              onClick={() => removeOwnerDraft(index)}
+                              aria-label={`Remover proprietário ${index + 1}`}
+                              title={`Remover proprietário ${index + 1}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          ) : null}
+                        </div>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+                          <div className="space-y-1 sm:space-y-2 sm:col-span-2">
+                            <Label htmlFor={`ownerName-${index}`} className="text-sm sm:text-base">Nome e sobrenome {index === 0 ? "*" : ""}</Label>
+                            <Input
+                              id={`ownerName-${index}`}
+                              value={owner.name}
+                              onChange={e => updateOwnerDraft(index, "name", e.target.value)}
+                              className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
+                            />
+                          </div>
+                          <div className="space-y-1 sm:space-y-2">
+                            <Label htmlFor={`ownerEmail-${index}`} className="text-sm sm:text-base">E-mail {index === 0 ? "*" : ""}</Label>
+                            <Input
+                              id={`ownerEmail-${index}`}
+                              type="email"
+                              value={owner.email}
+                              onChange={e => updateOwnerDraft(index, "email", e.target.value)}
+                              className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
+                            />
+                          </div>
+                          <div className="space-y-1 sm:space-y-2">
+                            <Label htmlFor={`ownerPhone-${index}`} className="text-sm sm:text-base">Telefone {index === 0 ? "*" : ""}</Label>
+                            <Input
+                              id={`ownerPhone-${index}`}
+                              value={owner.phone}
+                              onChange={e => updateOwnerDraft(index, "phone", e.target.value)}
+                              className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
+                            />
+                          </div>
+                          <div className="space-y-1 sm:space-y-2">
+                            <Label htmlFor={`ownerCpf-${index}`} className="text-sm sm:text-base">CPF {index === 0 ? "*" : ""}</Label>
+                            <Input
+                              id={`ownerCpf-${index}`}
+                              inputMode="numeric"
+                              maxLength={14}
+                              value={owner.cpf}
+                              onChange={e => updateOwnerDraft(index, "cpf", e.target.value)}
+                              className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {(newPropertyData.owners?.length ?? 1) < 3 ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="rounded-full bg-white"
+                        onClick={addOwnerDraft}
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Adicionar proprietário
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
 
@@ -1161,7 +1283,7 @@ export default function Imoveis() {
         )}
 
         <Dialog open={selectedRentalProperty !== null} onOpenChange={open => !open && setSelectedRentalProperty(null)}>
-          <DialogContent className="max-w-md rounded-[28px] border-white/80 bg-[#f7f6f2]">
+          <DialogContent className="!w-[420px] !max-w-[calc(100%-2rem)] rounded-[24px] border-white/80 bg-[#f7f6f2] p-4 sm:!max-w-[420px] sm:p-5">
             <DialogHeader>
               <DialogTitle>Selecionar imóvel para locação?</DialogTitle>
               <DialogDescription>

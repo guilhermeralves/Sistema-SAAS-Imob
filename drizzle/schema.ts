@@ -214,6 +214,21 @@ export const properties = pgTable("properties", {
 export type Property = typeof properties.$inferSelect;
 export type InsertProperty = typeof properties.$inferInsert;
 
+export const propertyOwnerLinks = pgTable(
+  "propertyOwnerLinks",
+  {
+    id: serial("id").primaryKey(),
+    propertyId: integer("propertyId").notNull(),
+    ownerId: integer("ownerId").notNull(),
+    position: integer("position").default(1).notNull(),
+    createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  },
+  table => [uniqueIndex("propertyOwnerLinks_unique_idx").on(table.propertyId, table.ownerId)]
+);
+
+export type PropertyOwnerLink = typeof propertyOwnerLinks.$inferSelect;
+export type InsertPropertyOwnerLink = typeof propertyOwnerLinks.$inferInsert;
+
 export const propertyKeyStatusRequests = pgTable("propertyKeyStatusRequests", {
   id: serial("id").primaryKey(),
   idImovel: integer("idImovel").notNull(),
@@ -470,6 +485,7 @@ export const rentalProposals = pgTable("rentalProposals", {
   leaseTermMonths: integer("leaseTermMonths").notNull(),
   adjustmentIndex: varchar("adjustmentIndex", { length: 40 }).notNull(),
   rentAmount: integer("rentAmount").notNull(),
+  condominiumAmount: integer("condominiumAmount"),
   startDate: date("startDate", { mode: "date" }).notNull(),
   dueDay: integer("dueDay").notNull(),
   contextSnapshot: text("contextSnapshot").default("{}").notNull(),
@@ -481,6 +497,36 @@ export const rentalProposals = pgTable("rentalProposals", {
 
 export type RentalProposal = typeof rentalProposals.$inferSelect;
 export type InsertRentalProposal = typeof rentalProposals.$inferInsert;
+
+export const rentalProposalTenants = pgTable(
+  "rentalProposalTenants",
+  {
+    id: serial("id").primaryKey(),
+    rentalProposalId: integer("rentalProposalId").notNull(),
+    tenantUserId: integer("tenantUserId").notNull(),
+    position: integer("position").default(1).notNull(),
+    createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  },
+  table => [uniqueIndex("rentalProposalTenants_unique_idx").on(table.rentalProposalId, table.tenantUserId)]
+);
+
+export type RentalProposalTenant = typeof rentalProposalTenants.$inferSelect;
+export type InsertRentalProposalTenant = typeof rentalProposalTenants.$inferInsert;
+
+export const rentalProposalOwners = pgTable(
+  "rentalProposalOwners",
+  {
+    id: serial("id").primaryKey(),
+    rentalProposalId: integer("rentalProposalId").notNull(),
+    ownerId: integer("ownerId").notNull(),
+    position: integer("position").default(1).notNull(),
+    createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  },
+  table => [uniqueIndex("rentalProposalOwners_unique_idx").on(table.rentalProposalId, table.ownerId)]
+);
+
+export type RentalProposalOwner = typeof rentalProposalOwners.$inferSelect;
+export type InsertRentalProposalOwner = typeof rentalProposalOwners.$inferInsert;
 
 /**
  * Tabela de documentos de imoveis

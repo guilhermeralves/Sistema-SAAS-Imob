@@ -156,6 +156,15 @@ export default function ImovelNovoPreview() {
     }
 
     try {
+      const owners = draft.owners?.length
+        ? draft.owners
+        : [{
+          name: draft.ownerName,
+          email: draft.ownerEmail,
+          cpf: draft.ownerCpf,
+          phone: draft.ownerPhone,
+        }];
+      const [primaryOwner] = owners;
       const created = await createPropertyMutation.mutateAsync({
         titulo: draft.titulo,
         descricao: draft.descricao || null,
@@ -181,11 +190,17 @@ export default function ImovelNovoPreview() {
         idCondominio: isCondominiumProperty ? Number(draft.idCondominio) : null,
         confirmedOwnerEmailConflict,
         owner: {
-          name: draft.ownerName,
-          email: draft.ownerEmail.trim().toLowerCase(),
-          cpf: draft.ownerCpf,
-          phone: draft.ownerPhone,
+          name: primaryOwner.name,
+          email: primaryOwner.email.trim().toLowerCase(),
+          cpf: primaryOwner.cpf,
+          phone: primaryOwner.phone,
         },
+        owners: owners.map(owner => ({
+          name: owner.name,
+          email: owner.email.trim().toLowerCase(),
+          cpf: owner.cpf,
+          phone: owner.phone,
+        })),
       });
 
       clearNewPropertyDraft();

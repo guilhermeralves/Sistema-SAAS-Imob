@@ -1,8 +1,9 @@
-import { Link } from "wouter";
+import { useState } from "react";
 import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
+import { useUnsavedChangesNavigationGuard } from "@/hooks/useUnsavedChangesNavigationGuard";
 import RentalProposalForm from "./admin/RentalProposalForm";
 import { ArrowLeft, Shield, User } from "lucide-react";
 
@@ -56,6 +57,13 @@ function AdminRentalProposalNewForbidden() {
 
 export default function AdminRentalProposalNew() {
   const { user, loading, isAuthenticated } = useAuth();
+  const [formDirty, setFormDirty] = useState(false);
+  const { requestNavigation, UnsavedChangesDialog } = useUnsavedChangesNavigationGuard({
+    isDirty: formDirty,
+    shouldAllowPath: path =>
+      path.startsWith("/imoveis?selecionarLocacao=1") ||
+      path.startsWith("/admin/modulos/locacoes/nova"),
+  });
 
   if (loading) return <AdminRentalProposalNewLoading />;
   if (!isAuthenticated) return <AdminRentalProposalNewUnauthenticated />;
@@ -67,12 +75,16 @@ export default function AdminRentalProposalNew() {
         <div className="container py-4 md:py-5">
           <div className="mb-4">
             <Button asChild variant="outline" className="mb-3 gap-2 rounded-full bg-white/90 shadow-sm hover:bg-white">
-              <Link href="/admin/modulos/locacoes">
-                <a className="inline-flex items-center gap-2">
-                  <ArrowLeft className="h-4 w-4" />
-                  Voltar
-                </a>
-              </Link>
+              <button
+                type="button"
+                className="inline-flex items-center gap-2"
+                onClick={() => {
+                  requestNavigation("/admin/modulos/locacoes?tab=propostas");
+                }}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Voltar
+              </button>
             </Button>
             <div className="mb-1 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">Nova Locação</h1>
@@ -82,9 +94,10 @@ export default function AdminRentalProposalNew() {
             </p>
           </div>
 
-          <RentalProposalForm />
+          <RentalProposalForm onDirtyChange={setFormDirty} />
         </div>
       </div>
+      {UnsavedChangesDialog}
     </Layout>
   );
 }

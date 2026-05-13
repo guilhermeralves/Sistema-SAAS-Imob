@@ -541,7 +541,7 @@ export function AdminModule() {
 
   const handleModuleActionClick = () => {
     if (selectedModule.value === "locacoes" && activeTab === "Propostas de Locação") {
-      setLocation("/imoveis?selecionarLocacao=1");
+      setLocation("/admin/modulos/locacoes/nova");
       return;
     }
 
@@ -704,7 +704,10 @@ export function AdminModule() {
   const renderAdminTopicPanels = () => {
     return selectedModule.topics.map(topic => (
       <TabsContent key={topic} value={topic}>
-        <Card className={SURFACE_CARD_CLASS}>
+        <Card
+          className={SURFACE_CARD_CLASS}
+          data-rental-proposals-section={selectedModule.value === "locacoes" && topic === "Propostas de Locação" ? "true" : undefined}
+        >
           <CardHeader>
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="space-y-2">

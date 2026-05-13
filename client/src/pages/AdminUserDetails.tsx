@@ -164,7 +164,13 @@ export default function AdminUserDetails() {
     typeof window !== "undefined"
       ? new URLSearchParams(window.location.search).get("fromProperty")
       : null;
-  const backHref = fromPropertyId
+  const fromRentalProposalId =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("fromRentalProposal")
+      : null;
+  const backHref = fromRentalProposalId
+    ? `/admin/modulos/locacoes/propostas/${fromRentalProposalId}`
+    : fromPropertyId
     ? `/imoveis/${fromPropertyId}`
     : isSelfRootAdmin
       ? "/admin"
@@ -173,7 +179,9 @@ export default function AdminUserDetails() {
       : isOwnerDetails
         ? "/admin"
         : "/admin/users";
-  const backLabel = fromPropertyId
+  const backLabel = fromRentalProposalId
+    ? "Voltar para proposta"
+    : fromPropertyId
     ? "Voltar para imovel"
     : isSelfRootAdmin
       ? "Voltar para painel admin"

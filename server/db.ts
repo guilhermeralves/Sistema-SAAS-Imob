@@ -34,6 +34,8 @@ import {
   leadInteractions,
   leadNotes,
   leads,
+  rentalProposalOwners,
+  rentalProposalTenants,
   rentalProposals,
   taskItemAssignments,
   taskItemNotes,
@@ -41,6 +43,7 @@ import {
   taskItems,
   propertyDocuments,
   propertyKeyStatusRequests,
+  propertyOwnerLinks,
   propertyOwners,
   properties,
   users,
@@ -344,6 +347,13 @@ export async function getPropertyOwnerById(id: number) {
   return result[0];
 }
 
+export async function getAllPropertyOwners() {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db.select().from(propertyOwners).orderBy(desc(propertyOwners.createdAt));
+}
+
 export async function getPropertyOwnerByCpf(cpf: string) {
   const db = await getDb();
   if (!db) return undefined;
@@ -569,10 +579,16 @@ async function enrichPropertiesWithRelations(propertyRows: Array<any>) {
   const db = await getDb();
   if (!db || propertyRows.length === 0) return propertyRows;
 
+  const propertyIds = propertyRows.map(property => property.id);
+  const ownerLinks = propertyIds.length
+    ? await db.select().from(propertyOwnerLinks).where(inArray(propertyOwnerLinks.propertyId, propertyIds))
+    : [];
+
   const ownerIds = Array.from(
     new Set(
       propertyRows
         .map(property => property.idProprietario)
+        .concat(ownerLinks.map(link => link.ownerId))
         .filter((ownerId): ownerId is number => typeof ownerId === "number")
     )
   );
@@ -600,14 +616,44 @@ async function enrichPropertiesWithRelations(propertyRows: Array<any>) {
   const ownersById = new Map(owners.map(owner => [owner.id, owner]));
   const usersById = new Map(relatedUsers.map(user => [user.id, user]));
   const condominiumsById = new Map(relatedCondominiums.map(item => [item.id, item]));
+  const ownerLinksByPropertyId = new Map<number, typeof ownerLinks>();
+
+  for (const link of ownerLinks) {
+    const current = ownerLinksByPropertyId.get(link.propertyId) ?? [];
+    current.push(link);
+    ownerLinksByPropertyId.set(link.propertyId, current);
+  }
 
   return propertyRows.map(property => ({
     ...property,
     proprietario: ownersById.get(property.idProprietario) ?? null,
+    proprietarios: (ownerLinksByPropertyId.get(property.id) ?? [])
+      .sort((a, b) => a.position - b.position)
+      .flatMap(link => {
+        const owner = ownersById.get(link.ownerId);
+        return owner ? [owner] : [];
+      }),
     corretorResponsavel: usersById.get(property.idCorretor) ?? null,
     cadastradoPor: usersById.get(property.createdByUserId) ?? null,
     condominio: condominiumsById.get(property.idCondominio) ?? null,
   }));
+}
+
+async function replacePropertyOwnerLinks(propertyId: number, ownerIds: number[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db.delete(propertyOwnerLinks).where(eq(propertyOwnerLinks.propertyId, propertyId));
+
+  if (ownerIds.length === 0) return;
+
+  await db.insert(propertyOwnerLinks).values(
+    ownerIds.map((ownerId, index) => ({
+      propertyId,
+      ownerId,
+      position: index + 1,
+    }))
+  );
 }
 
 export async function getAllProperties(options?: {
@@ -707,17 +753,24 @@ export async function getDestacados() {
     .limit(6);
 }
 
-export async function createProperty(data: InsertProperty) {
+export async function createProperty(data: InsertProperty, relations?: { ownerIds?: number[] }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [created] = await db.insert(properties).values(data).returning();
+  await replacePropertyOwnerLinks(
+    created.id,
+    relations?.ownerIds ?? (created.idProprietario ? [created.idProprietario] : [])
+  );
   return created;
 }
 
-export async function updateProperty(id: number, data: Partial<InsertProperty>) {
+export async function updateProperty(id: number, data: Partial<InsertProperty>, relations?: { ownerIds?: number[] }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(properties).set(data).where(eq(properties.id, id));
+  if (relations?.ownerIds) {
+    await replacePropertyOwnerLinks(id, relations.ownerIds);
+  }
 }
 
 export async function updatePropertyKeyStatus(
@@ -1564,9 +1617,34 @@ export async function getRentalProposals() {
     .where(ne(rentalProposals.status, "ativo"))
     .orderBy(desc(rentalProposals.createdAt));
 
+  const proposalIds = rows.map(row => row.id);
   const propertyIds = Array.from(new Set(rows.map(row => row.propertyId).filter(Boolean)));
-  const userIds = Array.from(new Set(rows.flatMap(row => [row.brokerUserId, row.tenantUserId]).filter(Boolean)));
-  const ownerIds = Array.from(new Set(rows.map(row => row.ownerId).filter((id): id is number => typeof id === "number")));
+
+  const [tenantLinks, ownerLinks] = await Promise.all([
+    proposalIds.length
+      ? db.select().from(rentalProposalTenants).where(inArray(rentalProposalTenants.rentalProposalId, proposalIds))
+      : Promise.resolve([]),
+    proposalIds.length
+      ? db.select().from(rentalProposalOwners).where(inArray(rentalProposalOwners.rentalProposalId, proposalIds))
+      : Promise.resolve([]),
+  ]);
+
+  const userIds = Array.from(
+    new Set(
+      rows
+        .flatMap(row => [row.brokerUserId, row.tenantUserId])
+        .concat(tenantLinks.map(link => link.tenantUserId))
+        .filter(Boolean)
+    )
+  );
+  const ownerIds = Array.from(
+    new Set(
+      rows
+        .map(row => row.ownerId)
+        .concat(ownerLinks.map(link => link.ownerId))
+        .filter((id): id is number => typeof id === "number")
+    )
+  );
 
   const [propertyRows, userRows, ownerRows] = await Promise.all([
     propertyIds.length ? db.select().from(properties).where(inArray(properties.id, propertyIds)) : Promise.resolve([]),
@@ -1577,14 +1655,47 @@ export async function getRentalProposals() {
   const propertiesById = new Map(propertyRows.map(property => [property.id, property]));
   const usersById = new Map(userRows.map(user => [user.id, user]));
   const ownersById = new Map(ownerRows.map(owner => [owner.id, owner]));
+  const tenantLinksByProposalId = new Map<number, typeof tenantLinks>();
+  const ownerLinksByProposalId = new Map<number, typeof ownerLinks>();
 
-  return rows.map(row => ({
-    ...row,
-    property: propertiesById.get(row.propertyId) ?? null,
-    broker: usersById.get(row.brokerUserId) ?? null,
-    tenant: usersById.get(row.tenantUserId) ?? null,
-    owner: row.ownerId ? ownersById.get(row.ownerId) ?? null : null,
-  }));
+  for (const link of tenantLinks) {
+    const current = tenantLinksByProposalId.get(link.rentalProposalId) ?? [];
+    current.push(link);
+    tenantLinksByProposalId.set(link.rentalProposalId, current);
+  }
+
+  for (const link of ownerLinks) {
+    const current = ownerLinksByProposalId.get(link.rentalProposalId) ?? [];
+    current.push(link);
+    ownerLinksByProposalId.set(link.rentalProposalId, current);
+  }
+
+  return rows.map(row => {
+    const linkedTenants = (tenantLinksByProposalId.get(row.id) ?? [])
+      .sort((a, b) => a.position - b.position)
+      .map(link => usersById.get(link.tenantUserId))
+      .filter((tenant): tenant is User => Boolean(tenant));
+    const linkedOwners = (ownerLinksByProposalId.get(row.id) ?? [])
+      .sort((a, b) => a.position - b.position)
+      .map(link => ownersById.get(link.ownerId))
+      .filter((owner): owner is NonNullable<typeof owner> => Boolean(owner));
+    const fallbackTenant = usersById.get(row.tenantUserId);
+    const fallbackOwner = row.ownerId ? ownersById.get(row.ownerId) : null;
+
+    return {
+      ...row,
+      property: propertiesById.get(row.propertyId) ?? null,
+      broker: usersById.get(row.brokerUserId) ?? null,
+      tenant: usersById.get(row.tenantUserId) ?? null,
+      tenants: linkedTenants.length ? linkedTenants : fallbackTenant ? [fallbackTenant] : [],
+      owner: row.ownerId ? ownersById.get(row.ownerId) ?? null : null,
+      owners: linkedOwners.length
+        ? linkedOwners
+        : fallbackOwner
+          ? [fallbackOwner]
+          : [],
+    };
+  });
 }
 
 export async function getRentalProposalById(id: number) {
@@ -1600,30 +1711,114 @@ export async function getRentalProposalById(id: number) {
   if (rows.length === 0) return undefined;
 
   const [proposal] = rows;
-  const [property, broker, tenant, owner] = await Promise.all([
+  const [tenantLinks, ownerLinks] = await Promise.all([
+    db
+      .select()
+      .from(rentalProposalTenants)
+      .where(eq(rentalProposalTenants.rentalProposalId, proposal.id)),
+    db
+      .select()
+      .from(rentalProposalOwners)
+      .where(eq(rentalProposalOwners.rentalProposalId, proposal.id)),
+  ]);
+
+  const linkedTenantIds = tenantLinks
+    .sort((a, b) => a.position - b.position)
+    .map(link => link.tenantUserId);
+  const linkedOwnerIds = ownerLinks
+    .sort((a, b) => a.position - b.position)
+    .map(link => link.ownerId);
+
+  const tenantIds = linkedTenantIds.length ? linkedTenantIds : [proposal.tenantUserId];
+  const ownerIds = linkedOwnerIds.length ? linkedOwnerIds : proposal.ownerId ? [proposal.ownerId] : [];
+
+  const [property, broker, tenant, owner, tenantRows, ownerRows] = await Promise.all([
     getPropertyByIdWithRelations(proposal.propertyId),
     getUserById(proposal.brokerUserId),
     getUserById(proposal.tenantUserId),
     proposal.ownerId ? getPropertyOwnerById(proposal.ownerId) : Promise.resolve(undefined),
+    tenantIds.length ? db.select().from(users).where(inArray(users.id, tenantIds)) : Promise.resolve([]),
+    ownerIds.length ? db.select().from(propertyOwners).where(inArray(propertyOwners.id, ownerIds)) : Promise.resolve([]),
   ]);
+
+  const tenantsById = new Map(tenantRows.map(item => [item.id, item]));
+  const ownersById = new Map(ownerRows.map(item => [item.id, item]));
 
   return {
     ...proposal,
     property: property ?? null,
     broker: broker ?? null,
     tenant: tenant ?? null,
+    tenants: tenantIds.flatMap(id => {
+      const linkedTenant = tenantsById.get(id);
+      return linkedTenant ? [linkedTenant] : [];
+    }),
     owner: owner ?? null,
+    owners: ownerIds.flatMap(id => {
+      const linkedOwner = ownersById.get(id);
+      return linkedOwner ? [linkedOwner] : [];
+    }),
   };
 }
 
-export async function createRentalProposal(data: InsertRentalProposal) {
+async function replaceRentalProposalTenants(rentalProposalId: number, tenantUserIds: number[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .delete(rentalProposalTenants)
+    .where(eq(rentalProposalTenants.rentalProposalId, rentalProposalId));
+
+  if (tenantUserIds.length === 0) return;
+
+  await db.insert(rentalProposalTenants).values(
+    tenantUserIds.map((tenantUserId, index) => ({
+      rentalProposalId,
+      tenantUserId,
+      position: index + 1,
+    }))
+  );
+}
+
+async function replaceRentalProposalOwners(rentalProposalId: number, ownerIds: number[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .delete(rentalProposalOwners)
+    .where(eq(rentalProposalOwners.rentalProposalId, rentalProposalId));
+
+  if (ownerIds.length === 0) return;
+
+  await db.insert(rentalProposalOwners).values(
+    ownerIds.map((ownerId, index) => ({
+      rentalProposalId,
+      ownerId,
+      position: index + 1,
+    }))
+  );
+}
+
+export async function createRentalProposal(
+  data: InsertRentalProposal,
+  relations?: { tenantUserIds?: number[]; ownerIds?: number[] }
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [created] = await db.insert(rentalProposals).values(data).returning();
+  await replaceRentalProposalTenants(created.id, relations?.tenantUserIds ?? [created.tenantUserId]);
+  await replaceRentalProposalOwners(
+    created.id,
+    relations?.ownerIds ?? (created.ownerId ? [created.ownerId] : [])
+  );
   return created;
 }
 
-export async function updateRentalProposal(id: number, data: Partial<InsertRentalProposal>) {
+export async function updateRentalProposal(
+  id: number,
+  data: Partial<InsertRentalProposal>,
+  relations?: { tenantUserIds?: number[]; ownerIds?: number[] }
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [updated] = await db
@@ -1631,12 +1826,20 @@ export async function updateRentalProposal(id: number, data: Partial<InsertRenta
     .set({ ...data, updatedAt: new Date() })
     .where(eq(rentalProposals.id, id))
     .returning();
+  if (relations?.tenantUserIds) {
+    await replaceRentalProposalTenants(id, relations.tenantUserIds);
+  }
+  if (relations?.ownerIds) {
+    await replaceRentalProposalOwners(id, relations.ownerIds);
+  }
   return updated;
 }
 
 export async function deleteRentalProposal(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  await db.delete(rentalProposalTenants).where(eq(rentalProposalTenants.rentalProposalId, id));
+  await db.delete(rentalProposalOwners).where(eq(rentalProposalOwners.rentalProposalId, id));
   await db.delete(rentalProposals).where(eq(rentalProposals.id, id));
 }
 
