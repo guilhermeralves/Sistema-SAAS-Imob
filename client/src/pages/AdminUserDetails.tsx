@@ -33,7 +33,7 @@ import { formatPhoneNumber } from "@/lib/phone";
 import { trpc } from "@/lib/trpc";
 import { type AppRole } from "@shared/auth";
 import { USER_PROFILE_MARITAL_STATUSES, type UserProfileMaritalStatus } from "@shared/user-profile";
-import { ArrowLeft, BadgeCheck, Clock3, Save, UserRoundSearch } from "lucide-react";
+import { ArrowLeft, BadgeCheck, Clock3, KeyRound, Save, UserRoundSearch } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Link, useRoute } from "wouter";
@@ -244,6 +244,21 @@ export default function AdminUserDetails() {
     },
   });
 
+  const createPropertyOwnerLogin = trpc.admin.createPropertyOwnerLogin.useMutation({
+    onSuccess: async result => {
+      await utils.admin.propertyOwnerById.invalidate({ id: ownerId });
+      await utils.admin.users.invalidate();
+      if (result.temporaryPassword) {
+        toast.success(`Login cadastrado. Senha temporaria: ${result.temporaryPassword}`);
+        return;
+      }
+      toast.success("Login vinculado ao proprietario.");
+    },
+    onError: error => {
+      toast.error(error.message || "Nao foi possivel cadastrar o login do proprietario.");
+    },
+  });
+
   useEffect(() => {
     if (isOwnerDetails) {
       if (!propertyOwner) return;
@@ -256,19 +271,25 @@ export default function AdminUserDetails() {
         isActive: "1",
         phone: propertyOwner.phone || "",
         creci: "",
-        birthDate: "",
-        profession: "",
-        grossMonthlyIncome: "",
-        maritalStatus: "",
-        householdIncome: "",
-        rg: "",
-        nationality: "",
-        address: "",
-        neighborhood: "",
-        addressNumber: "",
-        city: "",
-        state: "",
-        zipCode: "",
+        birthDate: isoDateToDisplay(propertyOwner.birthDate),
+        profession: propertyOwner.profession || "",
+        grossMonthlyIncome:
+          propertyOwner.grossMonthlyIncome !== null && propertyOwner.grossMonthlyIncome !== undefined
+            ? String(propertyOwner.grossMonthlyIncome)
+            : "",
+        maritalStatus: (propertyOwner.maritalStatus as UserProfileMaritalStatus | null) || "",
+        householdIncome:
+          propertyOwner.householdIncome !== null && propertyOwner.householdIncome !== undefined
+            ? String(propertyOwner.householdIncome)
+            : "",
+        rg: propertyOwner.rg || "",
+        nationality: propertyOwner.nationality || "",
+        address: propertyOwner.address || "",
+        neighborhood: propertyOwner.neighborhood || "",
+        addressNumber: propertyOwner.addressNumber || "",
+        city: propertyOwner.city || "",
+        state: propertyOwner.state || "",
+        zipCode: propertyOwner.zipCode || "",
         notes: propertyOwner.notes || "",
       });
       return;
@@ -381,6 +402,19 @@ export default function AdminUserDetails() {
         email: form.email,
         cpf: normalizeCpf(form.cpf),
         phone: form.phone,
+        birthDate: displayDateToIso(form.birthDate) || null,
+        profession: form.profession || undefined,
+        grossMonthlyIncome: parseMoneyCentsInput(form.grossMonthlyIncome),
+        maritalStatus: form.maritalStatus || null,
+        householdIncome: parseMoneyCentsInput(form.householdIncome),
+        rg: form.rg || undefined,
+        nationality: form.nationality || undefined,
+        address: form.address || undefined,
+        neighborhood: form.neighborhood || undefined,
+        addressNumber: form.addressNumber || undefined,
+        city: form.city || undefined,
+        state: form.state || undefined,
+        zipCode: form.zipCode || undefined,
         notes: form.notes || undefined,
       });
       return;
@@ -484,6 +518,17 @@ export default function AdminUserDetails() {
                 : "Complete os dados pessoais e financeiros exigidos para contratos."}
             </p>
           </div>
+          {isOwnerDetails && propertyOwner && !propertyOwner.linkedUser ? (
+            <Button
+              type="button"
+              className="gap-2 rounded-full bg-emerald-700 text-white hover:bg-emerald-800"
+              disabled={createPropertyOwnerLogin.isPending}
+              onClick={() => createPropertyOwnerLogin.mutate({ id: ownerId })}
+            >
+              <KeyRound className="h-4 w-4" />
+              {createPropertyOwnerLogin.isPending ? "Cadastrando..." : "Cadastrar login"}
+            </Button>
+          ) : null}
         </div>
 
         {accessBlockedMessage ? (
@@ -562,30 +607,7 @@ export default function AdminUserDetails() {
                     onChange={e => setForm({ ...form, phone: formatPhoneNumber(e.target.value) })}
                   />
                 </div>
-                {isOwnerDetails ? (
-                  propertyOwner?.linkedUser ? (
-                    <div className="space-y-2 md:col-span-2">
-                      <Label>Conta vinculada</Label>
-                      <div className="rounded-2xl border border-white/80 bg-white/90 px-4 py-3 text-sm shadow-sm">
-                        <Link href={`/admin/users/${propertyOwner.linkedUser.id}`}>
-                          <a className="font-medium text-primary underline">
-                            {propertyOwner.linkedUser.name || propertyOwner.linkedUser.email}
-                          </a>
-                        </Link>
-                        <p className="mt-1 text-slate-600">
-                          Este proprietario ja possui um usuario vinculado pelo CPF.
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-2 md:col-span-2">
-                      <Label>Conta vinculada</Label>
-                      <div className="rounded-2xl border border-white/80 bg-white/90 px-4 py-3 text-sm text-slate-600 shadow-sm">
-                        Este proprietario ainda nao possui login vinculado. Essa ficha permanece acessivel a partir do imovel.
-                      </div>
-                    </div>
-                  )
-                ) : isEditingSelf ? (
+                {isOwnerDetails ? null : isEditingSelf ? (
                   form.role === "corretor" ? (
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
@@ -725,7 +747,6 @@ export default function AdminUserDetails() {
               </CardContent>
             </Card>
 
-            {!isOwnerDetails ? (
             <Card className={SURFACE_CARD_CLASS}>
               <CardHeader>
                 <CardTitle className="text-slate-950">Informações para Contratos</CardTitle>
@@ -837,15 +858,12 @@ export default function AdminUserDetails() {
                 </div>
               </CardContent>
             </Card>
-            ) : null}
 
             <Card className={SURFACE_CARD_CLASS}>
               <CardHeader>
-                <CardTitle className="text-slate-950">{isOwnerDetails ? "Observações do proprietário" : "Endereço Atual e Observações"}</CardTitle>
+                <CardTitle className="text-slate-950">Endereço Atual e Observações</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2">
-                {!isOwnerDetails ? (
-                  <>
                     <div className="space-y-2 md:col-span-2">
                       <Label>Endereço</Label>
                       <Input
@@ -906,8 +924,6 @@ export default function AdminUserDetails() {
                       ) : null}
                       {cepError ? <p className="text-xs text-red-500">{cepError}</p> : null}
                     </div>
-                  </>
-                ) : null}
                 <div className="space-y-2 md:col-span-2">
                   <Label>Observações</Label>
                   <Textarea

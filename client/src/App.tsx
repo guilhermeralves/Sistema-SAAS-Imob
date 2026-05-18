@@ -12,6 +12,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Home from "./pages/Home";
 import Imoveis from "./pages/Imoveis";
+import Lancamentos from "./pages/Lancamentos";
 import ImovelNovoPreview from "./pages/ImovelNovoPreview";
 import Servicos from "./pages/Servicos";
 import Contato from "./pages/Contato";
@@ -24,7 +25,6 @@ import AdminRentalProposalDetails from "./pages/AdminRentalProposalDetails";
 import AdminRentalProposalNew from "./pages/AdminRentalProposalNew";
 import AdminUsers from "./pages/AdminUsers";
 import AdminUserDetails from "./pages/AdminUserDetails";
-import AdminPropertyDetails from "./pages/AdminPropertyDetails";
 import Financeiro from "./pages/Financeiro";
 import Dashboard from "./pages/Dashboard";
 import Integracoes from "./pages/Integracoes";
@@ -52,7 +52,11 @@ function RootEntryRoute() {
     return null;
   }
 
-  if (isAuthenticated && user && (user.role === "administrativo" || user.role === "corretor")) {
+  if (
+    isAuthenticated &&
+    user &&
+    (user.role === "administrativo" || user.role === "corretor")
+  ) {
     return null;
   }
 
@@ -85,8 +89,12 @@ function Router() {
     <Switch>
       <Route path={"/"} component={RootEntryRoute} />
       <Route path={"/imoveis"} component={Imoveis} />
+      <Route path={"/lancamentos"} component={Lancamentos} />
       <Route path={"/imoveis/novo/preview"}>
-        <ProtectedRoute component={ImovelNovoPreview} roles={["corretor", "administrativo"]} />
+        <ProtectedRoute
+          component={ImovelNovoPreview}
+          roles={["corretor", "administrativo"]}
+        />
       </Route>
       <Route path={"/imoveis/:id"} component={ImovelDetalhes} />
       <Route path={"/servicos"} component={Servicos} />
@@ -97,34 +105,55 @@ function Router() {
         <ProtectedRoute component={AreaCliente} roles={["cliente"]} />
       </Route>
       <Route path={"/minha-ficha"}>
-        <ProtectedRoute component={AdminUserDetails} roles={["cliente", "corretor", "administrativo"]} />
+        <ProtectedRoute
+          component={AdminUserDetails}
+          roles={["cliente", "corretor", "administrativo"]}
+        />
       </Route>
       <Route path={"/dashboard"}>
-        <ProtectedRoute component={Dashboard} roles={["corretor", "administrativo"]} />
+        <ProtectedRoute
+          component={Dashboard}
+          roles={["corretor", "administrativo"]}
+        />
       </Route>
       <Route path={"/crm"}>
-        <ProtectedRoute component={CRM} roles={["corretor", "administrativo"]} />
+        <ProtectedRoute
+          component={CRM}
+          roles={["corretor", "administrativo"]}
+        />
       </Route>
       <Route path={"/meus-imoveis"}>
-        <ProtectedRoute component={MeusImoveis} roles={["corretor", "administrativo"]} />
+        <ProtectedRoute
+          component={MeusImoveis}
+          roles={["corretor", "administrativo"]}
+        />
       </Route>
       <Route path={"/admin/users"}>
         <ProtectedRoute component={AdminUsers} roles={["administrativo"]} />
       </Route>
       <Route path={"/admin/users/:id"}>
-        <ProtectedRoute component={AdminUserDetails} roles={["administrativo"]} />
+        <ProtectedRoute
+          component={AdminUserDetails}
+          roles={["administrativo"]}
+        />
       </Route>
       <Route path={"/admin/proprietarios/:id"}>
-        <ProtectedRoute component={AdminUserDetails} roles={["administrativo"]} />
-      </Route>
-      <Route path={"/admin/imoveis/:id"}>
-        <ProtectedRoute component={AdminPropertyDetails} roles={["administrativo"]} />
+        <ProtectedRoute
+          component={AdminUserDetails}
+          roles={["administrativo"]}
+        />
       </Route>
       <Route path={"/admin/modulos/locacoes/nova"}>
-        <ProtectedRoute component={AdminRentalProposalNew} roles={["administrativo"]} />
+        <ProtectedRoute
+          component={AdminRentalProposalNew}
+          roles={["administrativo"]}
+        />
       </Route>
       <Route path={"/admin/modulos/locacoes/propostas/:id"}>
-        <ProtectedRoute component={AdminRentalProposalDetails} roles={["administrativo"]} />
+        <ProtectedRoute
+          component={AdminRentalProposalDetails}
+          roles={["administrativo"]}
+        />
       </Route>
       <Route path={"/admin/modulos/:module"}>
         <ProtectedRoute component={AdminModule} roles={["administrativo"]} />
@@ -138,25 +167,43 @@ function Router() {
       <Route path={"/integracoes"}>
         <ProtectedRoute component={Integracoes} roles={["administrativo"]} />
       </Route>
-      <Route path={"/plataformas-integradas"} component={LegacyIntegracoesRoute} />
+      <Route
+        path={"/plataformas-integradas"}
+        component={LegacyIntegracoesRoute}
+      />
       <Route path={"/controle-de-chaves"}>
-        <ProtectedRoute component={ControleDeChaves} roles={["administrativo"]} />
+        <ProtectedRoute
+          component={ControleDeChaves}
+          roles={["administrativo"]}
+        />
       </Route>
       <Route path={"/bonificacoes"}>
         <ProtectedRoute component={Bonificacoes} roles={["administrativo"]} />
       </Route>
       <Route path={"/evolucao-profissional"}>
-        <ProtectedRoute component={EvolucaoProfissional} roles={["corretor", "administrativo"]} />
+        <ProtectedRoute
+          component={EvolucaoProfissional}
+          roles={["corretor", "administrativo"]}
+        />
       </Route>
-      <Route path={"/trilhas-desenvolvimento"} component={LegacyTrilhasDesenvolvimentoRoute} />
+      <Route
+        path={"/trilhas-desenvolvimento"}
+        component={LegacyTrilhasDesenvolvimentoRoute}
+      />
       <Route path={"/automacao"}>
         <ProtectedRoute component={Automacao} roles={["administrativo"]} />
       </Route>
       <Route path={"/tarefas-eventos"}>
-        <ProtectedRoute component={TarefasEventos} roles={["corretor", "administrativo"]} />
+        <ProtectedRoute
+          component={TarefasEventos}
+          roles={["corretor", "administrativo"]}
+        />
       </Route>
       <Route path={"/condominios"}>
-        <ProtectedRoute component={Condominios} roles={["corretor", "administrativo"]} />
+        <ProtectedRoute
+          component={Condominios}
+          roles={["corretor", "administrativo"]}
+        />
       </Route>
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
@@ -183,10 +230,7 @@ function ScrollToTopOnRouteChange() {
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="light"
-        switchable
-      >
+      <ThemeProvider defaultTheme="light" switchable>
         <TooltipProvider>
           <ScrollToTopOnRouteChange />
           <MobileKeyboardDismiss />
@@ -197,8 +241,8 @@ function App() {
                 toast: "border",
                 error: "border border-red-500",
                 success: "border border-green-500",
-                warning: "border border-yellow-500"
-              }
+                warning: "border border-yellow-500",
+              },
             }}
           />
 

@@ -42,7 +42,8 @@ function readFileAsDataUrl(file: File) {
       }
       resolve(result);
     };
-    reader.onerror = () => reject(new Error("Nao foi possivel ler o arquivo selecionado."));
+    reader.onerror = () =>
+      reject(new Error("Nao foi possivel ler o arquivo selecionado."));
     reader.readAsDataURL(file);
   });
 }
@@ -51,13 +52,18 @@ export default function ImovelNovoPreview() {
   const [, setLocation] = useLocation();
   const { user, isAuthenticated } = useAuth();
 
-  const [draft, setDraft] = useState<NewPropertyDraftData | null>(() => loadNewPropertyDraft());
-  const [photoUrls, setPhotoUrls] = useState<string[]>(() => loadNewPropertyDraftPhotos());
+  const [draft, setDraft] = useState<NewPropertyDraftData | null>(() =>
+    loadNewPropertyDraft()
+  );
+  const [photoUrls, setPhotoUrls] = useState<string[]>(() =>
+    loadNewPropertyDraftPhotos()
+  );
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [uploading, setUploading] = useState(false);
 
   const uploadPhotoMutation = trpc.properties.uploadPhoto.useMutation();
-  const deleteUploadedPhotoMutation = trpc.properties.deleteUploadedPhoto.useMutation();
+  const deleteUploadedPhotoMutation =
+    trpc.properties.deleteUploadedPhoto.useMutation();
   const createPropertyMutation = trpc.properties.create.useMutation();
 
   useEffect(() => {
@@ -80,7 +86,8 @@ export default function ImovelNovoPreview() {
   const mainPhoto = hasPhotos ? photoUrls[currentImageIndex] : null;
 
   const displayPrice = useMemo(
-    () => formatMoneyFromCentsValue(parseMoneyCentsInput(draft?.valor ?? "") ?? 0),
+    () =>
+      formatMoneyFromCentsValue(parseMoneyCentsInput(draft?.valor ?? "") ?? 0),
     [draft?.valor]
   );
 
@@ -105,15 +112,26 @@ export default function ImovelNovoPreview() {
           dataUrl,
         });
 
-        const reduction = uploaded.originalBytes > 0
-          ? Math.max(0, 100 - Math.round((uploaded.optimizedBytes / uploaded.originalBytes) * 100))
-          : 0;
+        const reduction =
+          uploaded.originalBytes > 0
+            ? Math.max(
+                0,
+                100 -
+                  Math.round(
+                    (uploaded.optimizedBytes / uploaded.originalBytes) * 100
+                  )
+              )
+            : 0;
 
         setPhotoUrls(current => [...current, uploaded.url]);
         toast.success(`Foto processada em WebP (${reduction}% menor).`);
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Nao foi possivel enviar a imagem.");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Nao foi possivel enviar a imagem."
+      );
     } finally {
       setUploading(false);
     }
@@ -121,8 +139,12 @@ export default function ImovelNovoPreview() {
 
   const handleRemovePhoto = async (index: number) => {
     const currentUrl = photoUrls[index];
-    setPhotoUrls(current => current.filter((_, currentIndex) => currentIndex !== index));
-    setCurrentImageIndex(current => (current === 0 ? 0 : Math.max(0, current - 1)));
+    setPhotoUrls(current =>
+      current.filter((_, currentIndex) => currentIndex !== index)
+    );
+    setCurrentImageIndex(current =>
+      current === 0 ? 0 : Math.max(0, current - 1)
+    );
 
     if (currentUrl && getPropertyImageFileNameFromUrl(currentUrl)) {
       try {
@@ -150,20 +172,26 @@ export default function ImovelNovoPreview() {
     }
 
     const isCondominiumProperty = draft.emCondominio === "sim";
-    if (isCondominiumProperty && (!draft.tipoCondominio || !draft.idCondominio)) {
+    if (
+      isCondominiumProperty &&
+      (!draft.tipoCondominio || !draft.idCondominio)
+    ) {
       toast.error("Selecione o tipo e o condominio antes de salvar.");
       return;
     }
 
     try {
+      const isPartnership = draft.parceria === "sim";
       const owners = draft.owners?.length
         ? draft.owners
-        : [{
-          name: draft.ownerName,
-          email: draft.ownerEmail,
-          cpf: draft.ownerCpf,
-          phone: draft.ownerPhone,
-        }];
+        : [
+            {
+              name: draft.ownerName,
+              email: draft.ownerEmail,
+              cpf: draft.ownerCpf,
+              phone: draft.ownerPhone,
+            },
+          ];
       const [primaryOwner] = owners;
       const created = await createPropertyMutation.mutateAsync({
         titulo: draft.titulo,
@@ -188,19 +216,29 @@ export default function ImovelNovoPreview() {
           ? (draft.tipoCondominio as "casa" | "apartamento")
           : null,
         idCondominio: isCondominiumProperty ? Number(draft.idCondominio) : null,
+        parceria: isPartnership,
+        parceriaNome: isPartnership ? draft.parceriaNome : null,
+        parceriaTelefone: isPartnership ? draft.parceriaTelefone : null,
+        parceriaReferencia: isPartnership
+          ? draft.parceriaReferencia || null
+          : null,
         confirmedOwnerEmailConflict,
-        owner: {
-          name: primaryOwner.name,
-          email: primaryOwner.email.trim().toLowerCase(),
-          cpf: primaryOwner.cpf,
-          phone: primaryOwner.phone,
-        },
-        owners: owners.map(owner => ({
-          name: owner.name,
-          email: owner.email.trim().toLowerCase(),
-          cpf: owner.cpf,
-          phone: owner.phone,
-        })),
+        owner: isPartnership
+          ? undefined
+          : {
+              name: primaryOwner.name,
+              email: primaryOwner.email.trim().toLowerCase() || undefined,
+              cpf: primaryOwner.cpf || undefined,
+              phone: primaryOwner.phone,
+            },
+        owners: isPartnership
+          ? undefined
+          : owners.map(owner => ({
+              name: owner.name,
+              email: owner.email.trim().toLowerCase() || undefined,
+              cpf: owner.cpf || undefined,
+              phone: owner.phone,
+            })),
       });
 
       clearNewPropertyDraft();
@@ -235,10 +273,14 @@ export default function ImovelNovoPreview() {
               Nenhum rascunho de imóvel encontrado
             </h1>
             <p className="mt-2 text-slate-600">
-              Volte em &quot;Novo Imóvel&quot;, preencha os dados e avance para adicionar fotos.
+              Volte em &quot;Novo Imóvel&quot;, preencha os dados e avance para
+              adicionar fotos.
             </p>
             <div className="mt-6">
-              <Button asChild className="rounded-full bg-slate-950 text-white hover:bg-slate-800">
+              <Button
+                asChild
+                className="rounded-full bg-slate-950 text-white hover:bg-slate-800"
+              >
                 <Link href="/imoveis">Voltar para Imóveis</Link>
               </Button>
             </div>
@@ -282,7 +324,11 @@ export default function ImovelNovoPreview() {
                             size="icon"
                             className="absolute left-4 top-1/2 h-11 w-11 -translate-y-1/2 rounded-full border border-white/30 bg-white/85 text-slate-800 shadow-lg hover:bg-white"
                             onClick={() =>
-                              setCurrentImageIndex(prev => (prev - 1 + photoUrls.length) % photoUrls.length)
+                              setCurrentImageIndex(
+                                prev =>
+                                  (prev - 1 + photoUrls.length) %
+                                  photoUrls.length
+                              )
                             }
                           >
                             <ChevronLeft className="h-5 w-5" />
@@ -291,7 +337,11 @@ export default function ImovelNovoPreview() {
                             variant="secondary"
                             size="icon"
                             className="absolute right-4 top-1/2 h-11 w-11 -translate-y-1/2 rounded-full border border-white/30 bg-white/85 text-slate-800 shadow-lg hover:bg-white"
-                            onClick={() => setCurrentImageIndex(prev => (prev + 1) % photoUrls.length)}
+                            onClick={() =>
+                              setCurrentImageIndex(
+                                prev => (prev + 1) % photoUrls.length
+                              )
+                            }
                           >
                             <ChevronRight className="h-5 w-5" />
                           </Button>
@@ -311,7 +361,12 @@ export default function ImovelNovoPreview() {
                                   : "border-transparent hover:border-slate-300"
                               }`}
                             >
-                              <ProtectedPropertyImage src={url} alt={`Miniatura ${index + 1}`} className="h-full w-full object-cover" />
+                              <ProtectedPropertyImage
+                                src={url}
+                                variant="thumb"
+                                alt={`Miniatura ${index + 1}`}
+                                className="h-full w-full object-cover"
+                              />
                             </button>
                             <Button
                               type="button"
@@ -331,7 +386,9 @@ export default function ImovelNovoPreview() {
                   <div className="flex h-[420px] items-center justify-center bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(241,245,243,0.88))] lg:h-[340px] xl:h-[390px]">
                     <div className="text-center">
                       <ImagePlus className="mx-auto h-16 w-16 text-slate-400" />
-                      <p className="mt-3 text-sm text-slate-500">Nenhuma foto adicionada</p>
+                      <p className="mt-3 text-sm text-slate-500">
+                        Nenhuma foto adicionada
+                      </p>
                     </div>
                   </div>
                 )}
@@ -342,32 +399,43 @@ export default function ImovelNovoPreview() {
               <Card className="rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
                 <CardContent className="space-y-6 p-6 md:p-7">
                   <div>
-                    <h1 className="mb-3 text-3xl font-semibold tracking-tight text-slate-950">{draft.titulo}</h1>
+                    <h1 className="mb-3 text-3xl font-semibold tracking-tight text-slate-950">
+                      {draft.titulo}
+                    </h1>
                     <div className="flex items-start gap-2 text-slate-600">
                       <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-700" />
                       <span>
                         {draft.endereco}
                         {draft.numero ? `, ${draft.numero}` : ""}
-                        {draft.bairro ? `, ${draft.bairro}` : ""}, {draft.cidade}/{draft.estado}
+                        {draft.bairro ? `, ${draft.bairro}` : ""},{" "}
+                        {draft.cidade}/{draft.estado}
                       </span>
                     </div>
                   </div>
 
                   <div className="rounded-[28px] border border-emerald-100/70 bg-[linear-gradient(180deg,rgba(245,250,247,0.95),rgba(255,255,255,0.92))] p-4">
-                    <p className="text-xs uppercase tracking-[0.2em] text-emerald-800">Valor do imóvel</p>
-                    <p className="mt-1 text-3xl font-semibold tracking-tight text-emerald-800">{displayPrice}</p>
+                    <p className="text-xs uppercase tracking-[0.2em] text-emerald-800">
+                      Valor do imóvel
+                    </p>
+                    <p className="mt-1 text-3xl font-semibold tracking-tight text-emerald-800">
+                      {displayPrice}
+                    </p>
                     <p className="mt-2 text-sm text-slate-600 capitalize">
                       Tipo: {draft.tipo} • Finalidade: {draft.finalidade}
                     </p>
                     {draft.emCondominio === "sim" ? (
                       <p className="mt-1 text-sm text-slate-600 capitalize">
-                        Em condominio • Tipo: {draft.tipoCondominio} • Condominio #{draft.idCondominio}
+                        Em condominio • Tipo: {draft.tipoCondominio} •
+                        Condominio #{draft.idCondominio}
                       </p>
                     ) : null}
                   </div>
 
                   <div className="space-y-3 rounded-[28px] border border-slate-200 bg-white/80 p-4">
-                    <Label htmlFor="property-photo-upload" className="text-sm font-medium text-slate-800">
+                    <Label
+                      htmlFor="property-photo-upload"
+                      className="text-sm font-medium text-slate-800"
+                    >
                       Adicionar fotos (otimizadas automaticamente em WebP)
                     </Label>
                     <Input
@@ -379,7 +447,8 @@ export default function ImovelNovoPreview() {
                       disabled={uploading || uploadPhotoMutation.isPending}
                     />
                     <p className="text-xs text-slate-500">
-                      Imagens maiores sao redimensionadas para melhorar velocidade de carregamento.
+                      Imagens maiores sao redimensionadas para melhorar
+                      velocidade de carregamento.
                     </p>
                   </div>
 
@@ -391,7 +460,9 @@ export default function ImovelNovoPreview() {
                       disabled={createPropertyMutation.isPending}
                     >
                       <Upload className="mr-2 h-4 w-4" />
-                      {createPropertyMutation.isPending ? "Salvando..." : "Salvar Imóvel"}
+                      {createPropertyMutation.isPending
+                        ? "Salvando..."
+                        : "Salvar Imóvel"}
                     </Button>
                     <Button
                       type="button"

@@ -21,6 +21,7 @@ import {
   Briefcase,
   Building2,
   Gift,
+  Hammer,
   Home,
   KeyRound,
   LayoutDashboard,
@@ -57,6 +58,7 @@ export default function Header() {
   const publicMenuItems = [
     { href: "/", label: "Home", icon: Home },
     { href: "/imoveis", label: "Im\u00f3veis", icon: Building2 },
+    { href: "/lancamentos", label: "Lan\u00e7amentos", icon: Hammer },
     { href: "/servicos", label: "Nossos Servi\u00e7os", icon: Briefcase },
     { href: "/contato", label: "Fale Conosco", icon: Phone },
   ];
@@ -79,22 +81,39 @@ export default function Header() {
   ];
 
   const getMenuItems = () => {
-    const dashboardItem = { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard };
+    const dashboardItem = {
+      href: "/dashboard",
+      label: "Dashboard",
+      icon: LayoutDashboard,
+    };
 
     const items =
       isAuthenticated && user?.role === "administrativo"
-        ? [dashboardItem, ...publicMenuItems.filter(
-            item => item.href !== "/" && item.href !== "/contato" && item.href !== "/servicos"
-          )]
+        ? [
+            dashboardItem,
+            ...publicMenuItems.filter(
+              item =>
+                item.href !== "/" &&
+                item.href !== "/contato" &&
+                item.href !== "/servicos"
+            ),
+          ]
         : isAuthenticated && user?.role === "corretor"
-          ? [dashboardItem, ...publicMenuItems.filter(item => item.href !== "/" && item.href !== "/contato")]
+          ? [
+              dashboardItem,
+              ...publicMenuItems.filter(
+                item => item.href !== "/" && item.href !== "/contato"
+              ),
+            ]
           : [...publicMenuItems];
 
     if (isAuthenticated && user) {
       if (user.role === "cliente") {
         items.push(...clienteMenuItems);
       } else if (user.role === "corretor") {
-        items.push(...corretorMenuItems.filter(item => item.href !== "/dashboard"));
+        items.push(
+          ...corretorMenuItems.filter(item => item.href !== "/dashboard")
+        );
       } else if (user.role === "administrativo") {
         items.push(...adminMenuItems);
       }
@@ -143,7 +162,9 @@ export default function Header() {
       <div className="container flex h-15 items-center justify-between">
         <Link href={brandHref}>
           <a className="flex items-center gap-3 transition-opacity hover:opacity-80">
-            {APP_LOGO ? <img src={APP_LOGO} className="h-15 w-15 object-contain" /> : null}
+            {APP_LOGO ? (
+              <img src={APP_LOGO} className="h-15 w-15 object-contain" />
+            ) : null}
           </a>
         </Link>
 
@@ -201,13 +222,17 @@ export default function Header() {
                     className="gap-2 rounded-full border-[#d8d6ca] bg-white/80 text-slate-700 hover:bg-emerald-50 hover:text-emerald-900 dark:border-white/20 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-emerald-500/15 dark:hover:text-emerald-200"
                   >
                     <User className="h-4 w-4" />
-                    <span className="hidden sm:inline">{user.name || user.email}</span>
+                    <span className="hidden sm:inline">
+                      {user.name || user.email}
+                    </span>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
                   <div className="rounded-sm px-2 py-1.5 text-sm">
                     <p className="font-medium">{user.name || "Usu\u00e1rio"}</p>
-                    <p className="text-xs text-muted-foreground">{user.email}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {user.email}
+                    </p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       Papel: {ROLE_LABELS[user.role]}
                     </p>
@@ -228,13 +253,18 @@ export default function Header() {
                   {toggleTheme && isRootAdmin ? (
                     <>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => toggleTheme()} className="cursor-pointer gap-2">
+                      <DropdownMenuItem
+                        onClick={() => toggleTheme()}
+                        className="cursor-pointer gap-2"
+                      >
                         {theme === "dark" ? (
                           <Sun className="h-4 w-4" />
                         ) : (
                           <Moon className="h-4 w-4" />
                         )}
-                        {theme === "dark" ? "Voltar para modo claro" : "Ativar modo escuro (Beta)"}
+                        {theme === "dark"
+                          ? "Voltar para modo claro"
+                          : "Ativar modo escuro (Beta)"}
                       </DropdownMenuItem>
                     </>
                   ) : null}
@@ -295,7 +325,10 @@ export default function Header() {
                       </DropdownMenuItem>
                     </>
                   ) : null}
-                  <DropdownMenuItem onClick={() => logout()} className="cursor-pointer gap-2">
+                  <DropdownMenuItem
+                    onClick={() => logout()}
+                    className="cursor-pointer gap-2"
+                  >
                     <LogOut className="h-4 w-4" />
                     Sair
                   </DropdownMenuItem>
@@ -340,7 +373,9 @@ export default function Header() {
               <Link key={item.href} href={item.href}>
                 <a
                   className={getMobileNavClassName(item.href)}
-                  onClick={event => handleMenuNavigation(event, item.href, true)}
+                  onClick={event =>
+                    handleMenuNavigation(event, item.href, true)
+                  }
                 >
                   <item.icon className="h-4 w-4" />
                   <span className="flex items-center gap-2">

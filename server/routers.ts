@@ -216,8 +216,14 @@ const propertyUploadedPhotoDeleteSchema = z.object({
 
 const propertyOwnerInputSchema = z.object({
   name: z.string().trim().min(2).max(120),
-  email: z.string().trim().toLowerCase().email(),
-  cpf: cpfSchema,
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email()
+    .optional()
+    .or(z.literal("").transform(() => undefined)),
+  cpf: cpfSchema.optional().or(z.literal("").transform(() => undefined)),
   phone: z.string().trim().min(14).max(20),
   notes: z.string().trim().max(2000).optional(),
 });
@@ -230,36 +236,69 @@ const quickPropertyOwnerSchema = z.object({
 
 const condominiumTypeSchema = z.enum(["casa", "apartamento"]);
 
-const propertyMutationSchema = z.object({
-  titulo: z.string().trim().min(2).max(255),
-  descricao: z.string().trim().max(5000).nullable().optional(),
-  tipo: z.string().trim().min(2).max(50),
-  finalidade: z.string().trim().min(2).max(20),
-  valor: z.number().int().min(0),
-  valorLocacao: z.number().int().min(0).nullable().optional(),
-  area: z.number().int().min(0).nullable().optional(),
-  quartos: z.number().int().min(0).nullable().optional(),
-  banheiros: z.number().int().min(0).nullable().optional(),
-  vagas: z.number().int().min(0).nullable().optional(),
-  endereco: z.string().trim().min(2).max(255),
-  numero: z.string().trim().max(20).nullable().optional(),
-  bairro: z.string().trim().max(100).nullable().optional(),
-  cidade: z.string().trim().min(2).max(100),
-  estado: z.string().trim().min(2).max(2),
-  cep: z.string().trim().max(10).nullable().optional(),
-  latitude: z.string().trim().max(20).nullable().optional(),
-  longitude: z.string().trim().max(20).nullable().optional(),
-  fotos: z.string().trim().nullable().optional(),
-  destaque: z.number().int().min(0).max(1).optional(),
-  status: z.string().trim().max(20).optional(),
-  idCorretor: z.number().int().positive().optional(),
-  emCondominio: z.boolean().optional(),
-  tipoCondominio: condominiumTypeSchema.nullable().optional(),
-  idCondominio: z.number().int().positive().nullable().optional(),
-  owner: propertyOwnerInputSchema,
-  owners: z.array(propertyOwnerInputSchema).min(1).max(3).optional(),
-  confirmedOwnerEmailConflict: z.boolean().optional(),
-});
+const propertyMutationSchema = z
+  .object({
+    titulo: z.string().trim().min(2).max(255),
+    descricao: z.string().trim().max(5000).nullable().optional(),
+    tipo: z.string().trim().min(2).max(50),
+    finalidade: z.string().trim().min(2).max(20),
+    valor: z.number().int().min(0),
+    valorLocacao: z.number().int().min(0).nullable().optional(),
+    area: z.number().int().min(0).nullable().optional(),
+    quartos: z.number().int().min(0).nullable().optional(),
+    banheiros: z.number().int().min(0).nullable().optional(),
+    vagas: z.number().int().min(0).nullable().optional(),
+    endereco: z.string().trim().min(2).max(255),
+    numero: z.string().trim().max(20).nullable().optional(),
+    bairro: z.string().trim().max(100).nullable().optional(),
+    cidade: z.string().trim().min(2).max(100),
+    estado: z.string().trim().min(2).max(2),
+    cep: z.string().trim().max(10).nullable().optional(),
+    latitude: z.string().trim().max(20).nullable().optional(),
+    longitude: z.string().trim().max(20).nullable().optional(),
+    fotos: z.string().trim().nullable().optional(),
+    destaque: z.number().int().min(0).max(1).optional(),
+    status: z.string().trim().max(20).optional(),
+    idCorretor: z.number().int().positive().optional(),
+    emCondominio: z.boolean().optional(),
+    tipoCondominio: condominiumTypeSchema.nullable().optional(),
+    idCondominio: z.number().int().positive().nullable().optional(),
+    parceria: z.boolean().optional(),
+    parceriaNome: z.string().trim().max(160).nullable().optional(),
+    parceriaTelefone: z.string().trim().max(20).nullable().optional(),
+    parceriaReferencia: z.string().trim().max(120).nullable().optional(),
+    owner: propertyOwnerInputSchema.optional(),
+    owners: z.array(propertyOwnerInputSchema).min(1).max(3).optional(),
+    confirmedOwnerEmailConflict: z.boolean().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.parceria === true) {
+      if (!value.parceriaNome?.trim()) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["parceriaNome"],
+          message: "Informe o nome da imobiliaria parceira.",
+        });
+      }
+
+      if (!value.parceriaTelefone?.trim()) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["parceriaTelefone"],
+          message: "Informe o telefone da imobiliaria parceira.",
+        });
+      }
+      return;
+    }
+
+    if (!value.owner && (!value.owners || value.owners.length === 0)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["owner"],
+        message: "Informe ao menos um proprietario.",
+      });
+    }
+  });
 
 const propertyListSchema = z.object({
   showDeletedOnly: z.boolean().optional(),
@@ -292,6 +331,32 @@ const listCondominiumsSchema = z.object({
   limit: z.number().int().min(1).max(300).optional(),
 });
 
+const propertyLaunchMutationSchema = z.object({
+  nome: z.string().trim().min(2).max(180),
+  descricao: z.string().trim().max(5000).nullable().optional(),
+  construtora: z.string().trim().max(160).nullable().optional(),
+  tipo: z.string().trim().min(2).max(50),
+  status: z.string().trim().min(2).max(30).optional(),
+  entregaPrevista: z.string().trim().max(10).nullable().optional(),
+  valorMin: z.number().int().min(0),
+  valorMax: z.number().int().min(0).nullable().optional(),
+  areaMin: z.number().int().min(0).nullable().optional(),
+  areaMax: z.number().int().min(0).nullable().optional(),
+  quartosMin: z.number().int().min(0).nullable().optional(),
+  quartosMax: z.number().int().min(0).nullable().optional(),
+  vagasMin: z.number().int().min(0).nullable().optional(),
+  vagasMax: z.number().int().min(0).nullable().optional(),
+  unidadesDisponiveis: z.number().int().min(0).nullable().optional(),
+  endereco: z.string().trim().min(2).max(255),
+  numero: z.string().trim().max(20).nullable().optional(),
+  bairro: z.string().trim().max(100).nullable().optional(),
+  cidade: z.string().trim().min(2).max(100),
+  estado: z.string().trim().min(2).max(2),
+  cep: z.string().trim().max(10).nullable().optional(),
+  fotos: z.string().trim().nullable().optional(),
+  destaque: z.number().int().min(0).max(1).optional(),
+});
+
 const createCondominiumSchema = condominiumMutationSchema;
 
 const updateCondominiumSchema = condominiumMutationSchema.extend({
@@ -314,7 +379,12 @@ const integrationCategorySchema = z.enum([
   "automacao",
   "outro",
 ]);
-const integrationConnectionTypeSchema = z.enum(["api", "webhook", "arquivo", "manual"]);
+const integrationConnectionTypeSchema = z.enum([
+  "api",
+  "webhook",
+  "arquivo",
+  "manual",
+]);
 const integrationStatusSchema = z.enum(["rascunho", "ativo", "inativo"]);
 
 const integrationMutationSchema = z.object({
@@ -359,7 +429,7 @@ const updateIntegrationStatusSchema = z.object({
 
 const createPropertySchema = propertyMutationSchema;
 
-const updatePropertySchema = propertyMutationSchema.extend({
+const updatePropertySchema = propertyMutationSchema.safeExtend({
   id: z.number().int().positive(),
 });
 
@@ -379,7 +449,11 @@ const updatePropertyLegalDetailsSchema = z.object({
   observacoesJuridicas: z.string().trim().max(4000).optional().nullable(),
 });
 
-const propertyKeyStatusSchema = z.enum(["disponivel", "retirada", "indisponivel"]);
+const propertyKeyStatusSchema = z.enum([
+  "disponivel",
+  "retirada",
+  "indisponivel",
+]);
 
 const propertyKeyStatusRequestsListSchema = z.object({
   idImovel: z.number().int().positive(),
@@ -403,6 +477,19 @@ const propertyOwnerDetailsSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
   cpf: cpfSchema,
   phone: z.string().trim().min(14).max(20),
+  birthDate: z.string().nullable().optional(),
+  profession: z.string().trim().max(120).optional(),
+  grossMonthlyIncome: z.number().int().min(0).nullable().optional(),
+  maritalStatus: z.enum(USER_PROFILE_MARITAL_STATUSES).nullable().optional(),
+  householdIncome: z.number().int().min(0).nullable().optional(),
+  rg: z.string().trim().max(32).optional(),
+  nationality: z.string().trim().max(80).optional(),
+  address: z.string().trim().max(255).optional(),
+  neighborhood: z.string().trim().max(100).optional(),
+  addressNumber: z.string().trim().max(20).optional(),
+  city: z.string().trim().max(100).optional(),
+  state: z.string().trim().max(2).optional(),
+  zipCode: z.string().trim().max(10).optional(),
   notes: z.string().trim().max(2000).optional(),
 });
 
@@ -415,7 +502,12 @@ const taskSectorSchema = z.enum([
   "juridico",
 ]);
 const taskPersistedStatusSchema = z.enum(["pendente", "em_andamento"]);
-const taskEditableStatusSchema = z.enum(["pendente", "em_andamento", "atrasado", "concluida"]);
+const taskEditableStatusSchema = z.enum([
+  "pendente",
+  "em_andamento",
+  "atrasado",
+  "concluida",
+]);
 
 const taskUpsertBaseSchema = z.object({
   title: z.string().trim().min(2).max(180),
@@ -641,7 +733,10 @@ async function ensurePropertyExists(id: number) {
   const property = await getPropertyById(id);
 
   if (!property) {
-    throw new TRPCError({ code: "NOT_FOUND", message: "Imóvel não encontrado" });
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Imóvel não encontrado",
+    });
   }
 
   return property;
@@ -654,11 +749,17 @@ async function ensurePropertyManagementAccess(
   const property = await ensurePropertyExists(propertyId);
 
   if (user.role === "cliente") {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Voce nao tem acesso a este imovel" });
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Voce nao tem acesso a este imovel",
+    });
   }
 
   if (user.role === "corretor" && property.idCorretor !== user.id) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Voce nao tem permissao para gerenciar este imovel" });
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Voce nao tem permissao para gerenciar este imovel",
+    });
   }
 
   return property;
@@ -676,7 +777,10 @@ async function ensureLeadAccess(
   }
 
   if (user.role === "corretor" && lead.idResponsavel !== user.id) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Você não tem acesso a este lead" });
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Você não tem acesso a este lead",
+    });
   }
 
   return lead;
@@ -729,7 +833,9 @@ function normalizePropertyDocumentFileName(fileName: string) {
 }
 
 function decodeDocxDataUrl(dataUrl: string) {
-  const match = dataUrl.match(/^data:(application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document|application\/octet-stream);base64,([A-Za-z0-9+/=\s]+)$/);
+  const match = dataUrl.match(
+    /^data:(application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document|application\/octet-stream);base64,([A-Za-z0-9+/=\s]+)$/
+  );
   if (!match) {
     throw new TRPCError({
       code: "BAD_REQUEST",
@@ -756,7 +862,9 @@ function decodeDocxDataUrl(dataUrl: string) {
 }
 
 async function extractDocxTextFromDataUrl(dataUrl: string) {
-  const result = await mammoth.extractRawText({ buffer: decodeDocxDataUrl(dataUrl) });
+  const result = await mammoth.extractRawText({
+    buffer: decodeDocxDataUrl(dataUrl),
+  });
   const text = result.value
     .replace(/\r\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
@@ -825,7 +933,9 @@ function detectContractTemplateVariables(text: string) {
       end: match.index + match[0].length,
       placeholder: match[0],
       label,
-      key: CONTRACT_VARIABLE_FIELD_MAP[normalizeContractVariableLabel(label)] ?? null,
+      key:
+        CONTRACT_VARIABLE_FIELD_MAP[normalizeContractVariableLabel(label)] ??
+        null,
     });
   }
 
@@ -867,7 +977,9 @@ async function assertValidAssignees(assigneeIds: number[]) {
     });
   }
 
-  const inactiveIds = users.filter(user => user.isActive !== 1).map(user => user.id);
+  const inactiveIds = users
+    .filter(user => user.isActive !== 1)
+    .map(user => user.id);
   if (inactiveIds.length > 0) {
     throw new TRPCError({
       code: "BAD_REQUEST",
@@ -884,7 +996,10 @@ async function ensureTaskAccess(
   const task = await getTaskItemWithRelationsById(taskId);
 
   if (!task) {
-    throw new TRPCError({ code: "NOT_FOUND", message: "Tarefa/Evento nao encontrado" });
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Tarefa/Evento nao encontrado",
+    });
   }
 
   if (user.role === "administrativo") {
@@ -895,7 +1010,10 @@ async function ensureTaskAccess(
   const isAssigned = task.assignees.some(assignee => assignee.id === user.id);
 
   if (!isCreator && !isAssigned) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "Voce nao tem acesso a esta tarefa/evento" });
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Voce nao tem acesso a esta tarefa/evento",
+    });
   }
 
   return task;
@@ -941,19 +1059,25 @@ async function ensureUniqueUserIdentity(
   }
 }
 
-async function ensureBrokerUser(userId: number) {
+async function ensurePropertyResponsibleUser(userId: number) {
   const { getUserById } = await import("./db");
-  const broker = await getUserById(userId);
+  const responsible = await getUserById(userId);
 
-  if (!broker || broker.role !== "corretor") {
-    throw new TRPCError({ code: "BAD_REQUEST", message: "Selecione um corretor responsavel valido" });
+  if (!responsible || (responsible.role !== "corretor" && responsible.role !== "administrativo") || isRootAdmin(responsible)) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Selecione um responsavel pelo imovel valido",
+    });
   }
 
-  if (broker.isActive !== 1) {
-    throw new TRPCError({ code: "BAD_REQUEST", message: "O corretor responsavel precisa estar ativo" });
+  if (responsible.isActive !== 1) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "O responsavel pelo imovel precisa estar ativo",
+    });
   }
 
-  return broker;
+  return responsible;
 }
 
 function normalizeCondominiumText(value: string) {
@@ -970,7 +1094,10 @@ async function ensureCondominiumUnique(
   currentCondominiumId?: number
 ) {
   const { listCondominiums } = await import("./db");
-  const allCondominiums = await listCondominiums({ includeInactive: true, limit: 1000 });
+  const allCondominiums = await listCondominiums({
+    includeInactive: true,
+    limit: 1000,
+  });
   const normalizedNome = normalizeCondominiumText(nome);
   const normalizedCidade = normalizeCondominiumText(cidade);
 
@@ -985,7 +1112,8 @@ async function ensureCondominiumUnique(
   if (duplicated) {
     throw new TRPCError({
       code: "CONFLICT",
-      message: "Ja existe um condominio cadastrado com este nome na cidade informada.",
+      message:
+        "Ja existe um condominio cadastrado com este nome na cidade informada.",
     });
   }
 }
@@ -995,7 +1123,10 @@ async function ensureCondominiumExists(id: number) {
   const condominium = await getCondominiumById(id);
 
   if (!condominium) {
-    throw new TRPCError({ code: "NOT_FOUND", message: "Condominio nao encontrado." });
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Condominio nao encontrado.",
+    });
   }
 
   return condominium;
@@ -1006,7 +1137,10 @@ async function ensureIntegrationExists(id: number) {
   const integration = await getIntegrationById(id);
 
   if (!integration) {
-    throw new TRPCError({ code: "NOT_FOUND", message: "Integracao nao encontrada." });
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Integracao nao encontrada.",
+    });
   }
 
   return integration;
@@ -1015,9 +1149,7 @@ async function ensureIntegrationExists(id: number) {
 function normalizeCondominiumFeatures(rawFeatures?: string[]) {
   if (!rawFeatures || rawFeatures.length === 0) return [] as string[];
 
-  const normalized = rawFeatures
-    .map(item => item.trim())
-    .filter(Boolean);
+  const normalized = rawFeatures.map(item => item.trim()).filter(Boolean);
 
   return Array.from(new Set(normalized));
 }
@@ -1039,28 +1171,32 @@ async function upsertPropertyOwnerFromInput(
 
   const normalizedOwner = {
     name: ownerInput.name.trim(),
-    email: ownerInput.email.trim().toLowerCase(),
-    cpf: ownerInput.cpf,
+    email: ownerInput.email?.trim().toLowerCase() || null,
+    cpf: ownerInput.cpf || null,
     phone: ownerInput.phone.trim(),
     notes: ownerInput.notes?.trim() || null,
   };
 
-  const ownersWithSameEmail = await getPropertyOwnersByEmail(normalizedOwner.email);
-  const emailConflict = ownersWithSameEmail.find(
-    owner => owner.cpf !== normalizedOwner.cpf && owner.id !== options?.currentOwnerId
-  );
+  const ownersWithSameEmail = normalizedOwner.email
+    ? await getPropertyOwnersByEmail(normalizedOwner.email)
+    : [];
+  const emailConflict = ownersWithSameEmail.find(owner => {
+    if (owner.id === options?.currentOwnerId) return false;
+    if (!normalizedOwner.cpf || !owner.cpf) return owner.email === normalizedOwner.email;
+    return owner.cpf !== normalizedOwner.cpf;
+  });
 
   if (emailConflict && !options?.confirmedEmailConflict) {
     throw new TRPCError({
       code: "CONFLICT",
       message:
         `OWNER_EMAIL_CONFLICT::Ja existe um proprietario com este e-mail vinculado a outro CPF: ` +
-        `${emailConflict.name} (${emailConflict.cpf}). Deseja continuar mesmo assim?`,
+        `${emailConflict.name}${emailConflict.cpf ? ` (${emailConflict.cpf})` : ""}. Deseja continuar mesmo assim?`,
     });
   }
 
-  const matchedUser = await getUserByCpf(normalizedOwner.cpf);
-  const matchedOwner = await getPropertyOwnerByCpf(normalizedOwner.cpf);
+  const matchedUser = normalizedOwner.cpf ? await getUserByCpf(normalizedOwner.cpf) : undefined;
+  const matchedOwner = normalizedOwner.cpf ? await getPropertyOwnerByCpf(normalizedOwner.cpf) : undefined;
 
   if (matchedOwner) {
     return await updatePropertyOwner(matchedOwner.id, {
@@ -1101,7 +1237,10 @@ async function upsertPropertyOwnersFromInput(
   }
 
   if (uniqueOwners.length === 0) {
-    throw new TRPCError({ code: "BAD_REQUEST", message: "Informe ao menos um proprietario." });
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Informe ao menos um proprietario.",
+    });
   }
 
   return uniqueOwners.slice(0, 3);
@@ -1112,7 +1251,10 @@ async function assertContractProfileIsComplete(userId: number) {
   const user = await getUserById(userId);
 
   if (!user) {
-    throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado" });
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Cliente não encontrado",
+    });
   }
 
   const missingFields = CONTRACT_REQUIRED_USER_FIELDS.filter(field => {
@@ -1145,13 +1287,16 @@ async function getAdminUsersWithFlags(adminUserId: number) {
 }
 
 async function getAdminUserWithFlags(adminUserId: number, userId: number) {
-  const { getUserById, getViewedUserIdsByAdmin, markUserAsViewedByAdmin } = await import("./db");
+  const { getUserById, getViewedUserIdsByAdmin, markUserAsViewedByAdmin } =
+    await import("./db");
   const user = await getUserById(userId);
 
   if (!user) {
-    throw new TRPCError({ code: "NOT_FOUND", message: "Usuario nao encontrado" });
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Usuario nao encontrado",
+    });
   }
-
 
   const isTrackableNewUser =
     user.role === "cliente" && user.registrationSource === "public_signup";
@@ -1171,80 +1316,105 @@ async function getAdminUserWithFlags(adminUserId: number, userId: number) {
 export const appRouter = router({
   system: systemRouter,
   auth: router({
-    register: publicProcedure.input(registerSchema).mutation(async ({ ctx, input }) => {
-      const { createUser, linkPropertyOwnersToUserByCpf } = await import("./db");
-      await ensureUniqueUserIdentity(input.email, input.cpf);
+    register: publicProcedure
+      .input(registerSchema)
+      .mutation(async ({ ctx, input }) => {
+        const { createUser, linkPropertyOwnersToUserByCpf } = await import(
+          "./db"
+        );
+        await ensureUniqueUserIdentity(input.email, input.cpf);
 
-      const passwordHash = await hashPassword(input.password);
+        const passwordHash = await hashPassword(input.password);
         const createdUser = await createUser({
           openId: `local:${nanoid()}`,
           name: input.name.trim(),
           email: input.email,
           cpf: input.cpf,
           phone: input.phone.trim(),
-          birthDate: input.birthDate ? new Date(`${input.birthDate}T00:00:00`) : null,
+          birthDate: input.birthDate
+            ? new Date(`${input.birthDate}T00:00:00`)
+            : null,
           loginMethod: "password",
           passwordHash,
           registrationSource: "public_signup",
-        role: "cliente",
-        isActive: 1,
-        lastSignedIn: new Date(),
-      });
-      const linkedLeadPreview = await linkUserToExistingLeadsByCpf(createdUser.id, input.cpf);
-      await linkPropertyOwnersToUserByCpf(createdUser.id, input.cpf);
+          role: "cliente",
+          isActive: 1,
+          lastSignedIn: new Date(),
+        });
+        const linkedLeadPreview = await linkUserToExistingLeadsByCpf(
+          createdUser.id,
+          input.cpf
+        );
+        await linkPropertyOwnersToUserByCpf(createdUser.id, input.cpf);
 
-      const sessionToken = await sdk.createSessionToken(createdUser.openId, {
-        name: createdUser.name || createdUser.email || createdUser.openId,
-        provider: "local",
-        userId: createdUser.id,
-      });
+        const sessionToken = await sdk.createSessionToken(createdUser.openId, {
+          name: createdUser.name || createdUser.email || createdUser.openId,
+          provider: "local",
+          userId: createdUser.id,
+        });
 
-      setSessionCookie(ctx, sessionToken);
+        setSessionCookie(ctx, sessionToken);
 
-      void sendWelcomeEmail({
-        user: createdUser,
-        req: ctx.req,
-      }).catch(error => {
-        console.error("[Email] Falha ao enviar boas-vindas para novo cliente", error);
-      });
+        void sendWelcomeEmail({
+          user: createdUser,
+          req: ctx.req,
+        }).catch(error => {
+          console.error(
+            "[Email] Falha ao enviar boas-vindas para novo cliente",
+            error
+          );
+        });
 
-      return {
-        user: toSafeUser(createdUser),
-        linkedLeadPreview,
-      };
-    }),
-    login: publicProcedure.input(loginSchema).mutation(async ({ ctx, input }) => {
-      const { getUserByEmail, upsertUser } = await import("./db");
-      const user = await getUserByEmail(input.email);
+        return {
+          user: toSafeUser(createdUser),
+          linkedLeadPreview,
+        };
+      }),
+    login: publicProcedure
+      .input(loginSchema)
+      .mutation(async ({ ctx, input }) => {
+        const { getUserByEmail, upsertUser } = await import("./db");
+        const user = await getUserByEmail(input.email);
 
-      if (!user || !user.passwordHash) {
-        throw new TRPCError({ code: "UNAUTHORIZED", message: "E-mail ou senha inválidos." });
+        if (!user || !user.passwordHash) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "E-mail ou senha inválidos.",
+          });
+        }
+        if (user.isActive !== 1) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Usuário Desativado. Contate o administrador.",
+          });
+        }
 
-      }
-      if (user.isActive !== 1) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Usuário Desativado. Contate o administrador." });
-      }
+        const isPasswordValid = await verifyPassword(
+          input.password,
+          user.passwordHash
+        );
+        if (!isPasswordValid) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "E-mail ou senha inválidos.",
+          });
+        }
 
-      const isPasswordValid = await verifyPassword(input.password, user.passwordHash);
-      if (!isPasswordValid) {
-        throw new TRPCError({ code: "UNAUTHORIZED", message: "E-mail ou senha inválidos." });
-      }
+        await upsertUser({
+          openId: user.openId,
+          lastSignedIn: new Date(),
+        });
 
-      await upsertUser({
-        openId: user.openId,
-        lastSignedIn: new Date(),
-      });
+        const sessionToken = await sdk.createSessionToken(user.openId, {
+          name: user.name || user.email || user.openId,
+          provider: "local",
+          userId: user.id,
+        });
 
-      const sessionToken = await sdk.createSessionToken(user.openId, {
-        name: user.name || user.email || user.openId,
-        provider: "local",
-        userId: user.id,
-      });
+        setSessionCookie(ctx, sessionToken);
 
-      setSessionCookie(ctx, sessionToken);
-
-      return toSafeUser(user);
-    }),
+        return toSafeUser(user);
+      }),
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
@@ -1268,67 +1438,82 @@ export const appRouter = router({
           limit: input?.limit ?? 200,
         });
       }),
-    create: staffProcedure.input(createCondominiumSchema).mutation(async ({ ctx, input }) => {
-      const { createCondominium } = await import("./db");
-      await ensureCondominiumUnique(input.nome, input.cidade);
-      const normalizedFeatures = normalizeCondominiumFeatures(input.caracteristicas);
+    create: staffProcedure
+      .input(createCondominiumSchema)
+      .mutation(async ({ ctx, input }) => {
+        const { createCondominium } = await import("./db");
+        await ensureCondominiumUnique(input.nome, input.cidade);
+        const normalizedFeatures = normalizeCondominiumFeatures(
+          input.caracteristicas
+        );
 
-      return await createCondominium({
-        nome: input.nome,
-        tipo: input.tipo,
-        endereco: input.endereco,
-        numero: input.numero ?? null,
-        complemento: input.complemento ?? null,
-        bairro: input.bairro ?? null,
-        cidade: input.cidade,
-        estado: input.estado.toUpperCase(),
-        cep: input.cep ?? null,
-        referencia: input.referencia ?? null,
-        valorCondominio: input.valorCondominio ?? null,
-        valorIptu: input.valorIptu ?? null,
-        cnpj: input.cnpj ?? null,
-        administradoraNome: input.administradoraNome ?? null,
-        administradoraContato: input.administradoraContato ?? null,
-        caracteristicas:
-          normalizedFeatures.length > 0 ? JSON.stringify(normalizedFeatures) : null,
-        observacoes: input.observacoes ?? null,
-        isAtivo: 1,
-        createdByUserId: ctx.user.id,
-      });
-    }),
-    update: staffProcedure.input(updateCondominiumSchema).mutation(async ({ ctx, input }) => {
-      const { updateCondominium } = await import("./db");
-      await ensureCondominiumExists(input.id);
-      await ensureCondominiumUnique(input.nome, input.cidade, input.id);
-      const normalizedFeatures = normalizeCondominiumFeatures(input.caracteristicas);
+        return await createCondominium({
+          nome: input.nome,
+          tipo: input.tipo,
+          endereco: input.endereco,
+          numero: input.numero ?? null,
+          complemento: input.complemento ?? null,
+          bairro: input.bairro ?? null,
+          cidade: input.cidade,
+          estado: input.estado.toUpperCase(),
+          cep: input.cep ?? null,
+          referencia: input.referencia ?? null,
+          valorCondominio: input.valorCondominio ?? null,
+          valorIptu: input.valorIptu ?? null,
+          cnpj: input.cnpj ?? null,
+          administradoraNome: input.administradoraNome ?? null,
+          administradoraContato: input.administradoraContato ?? null,
+          caracteristicas:
+            normalizedFeatures.length > 0
+              ? JSON.stringify(normalizedFeatures)
+              : null,
+          observacoes: input.observacoes ?? null,
+          isAtivo: 1,
+          createdByUserId: ctx.user.id,
+        });
+      }),
+    update: staffProcedure
+      .input(updateCondominiumSchema)
+      .mutation(async ({ ctx, input }) => {
+        const { updateCondominium } = await import("./db");
+        await ensureCondominiumExists(input.id);
+        await ensureCondominiumUnique(input.nome, input.cidade, input.id);
+        const normalizedFeatures = normalizeCondominiumFeatures(
+          input.caracteristicas
+        );
 
-      const updated = await updateCondominium(input.id, {
-        nome: input.nome,
-        tipo: input.tipo,
-        endereco: input.endereco,
-        numero: input.numero ?? null,
-        complemento: input.complemento ?? null,
-        bairro: input.bairro ?? null,
-        cidade: input.cidade,
-        estado: input.estado.toUpperCase(),
-        cep: input.cep ?? null,
-        referencia: input.referencia ?? null,
-        valorCondominio: input.valorCondominio ?? null,
-        valorIptu: input.valorIptu ?? null,
-        cnpj: input.cnpj ?? null,
-        administradoraNome: input.administradoraNome ?? null,
-        administradoraContato: input.administradoraContato ?? null,
-        caracteristicas:
-          normalizedFeatures.length > 0 ? JSON.stringify(normalizedFeatures) : null,
-        observacoes: input.observacoes ?? null,
-      });
+        const updated = await updateCondominium(input.id, {
+          nome: input.nome,
+          tipo: input.tipo,
+          endereco: input.endereco,
+          numero: input.numero ?? null,
+          complemento: input.complemento ?? null,
+          bairro: input.bairro ?? null,
+          cidade: input.cidade,
+          estado: input.estado.toUpperCase(),
+          cep: input.cep ?? null,
+          referencia: input.referencia ?? null,
+          valorCondominio: input.valorCondominio ?? null,
+          valorIptu: input.valorIptu ?? null,
+          cnpj: input.cnpj ?? null,
+          administradoraNome: input.administradoraNome ?? null,
+          administradoraContato: input.administradoraContato ?? null,
+          caracteristicas:
+            normalizedFeatures.length > 0
+              ? JSON.stringify(normalizedFeatures)
+              : null,
+          observacoes: input.observacoes ?? null,
+        });
 
-      if (!updated) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Condominio nao encontrado." });
-      }
+        if (!updated) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Condominio nao encontrado.",
+          });
+        }
 
-      return updated;
-    }),
+        return updated;
+      }),
     updateStatus: adminProcedure
       .input(updateCondominiumStatusSchema)
       .mutation(async ({ input }) => {
@@ -1340,7 +1525,10 @@ export const appRouter = router({
         });
 
         if (!updated) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Condominio nao encontrado." });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Condominio nao encontrado.",
+          });
         }
 
         return updated;
@@ -1373,44 +1561,51 @@ export const appRouter = router({
           status: input?.status,
         });
       }),
-    create: adminProcedure.input(integrationMutationSchema).mutation(async ({ ctx, input }) => {
-      const { createIntegration } = await import("./db");
+    create: adminProcedure
+      .input(integrationMutationSchema)
+      .mutation(async ({ ctx, input }) => {
+        const { createIntegration } = await import("./db");
 
-      return await createIntegration({
-        name: input.name,
-        category: input.category,
-        provider: input.provider,
-        connectionType: input.connectionType,
-        status: input.status,
-        endpoint: input.endpoint ?? null,
-        apiKey: input.apiKey ?? null,
-        configJson: input.configJson ?? null,
-        notes: input.notes ?? null,
-        createdByUserId: ctx.user.id,
-      });
-    }),
-    update: adminProcedure.input(updateIntegrationSchema).mutation(async ({ input }) => {
-      const { updateIntegration } = await import("./db");
-      await ensureIntegrationExists(input.id);
+        return await createIntegration({
+          name: input.name,
+          category: input.category,
+          provider: input.provider,
+          connectionType: input.connectionType,
+          status: input.status,
+          endpoint: input.endpoint ?? null,
+          apiKey: input.apiKey ?? null,
+          configJson: input.configJson ?? null,
+          notes: input.notes ?? null,
+          createdByUserId: ctx.user.id,
+        });
+      }),
+    update: adminProcedure
+      .input(updateIntegrationSchema)
+      .mutation(async ({ input }) => {
+        const { updateIntegration } = await import("./db");
+        await ensureIntegrationExists(input.id);
 
-      const updated = await updateIntegration(input.id, {
-        name: input.name,
-        category: input.category,
-        provider: input.provider,
-        connectionType: input.connectionType,
-        status: input.status,
-        endpoint: input.endpoint ?? null,
-        apiKey: input.apiKey ?? null,
-        configJson: input.configJson ?? null,
-        notes: input.notes ?? null,
-      });
+        const updated = await updateIntegration(input.id, {
+          name: input.name,
+          category: input.category,
+          provider: input.provider,
+          connectionType: input.connectionType,
+          status: input.status,
+          endpoint: input.endpoint ?? null,
+          apiKey: input.apiKey ?? null,
+          configJson: input.configJson ?? null,
+          notes: input.notes ?? null,
+        });
 
-      if (!updated) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Integracao nao encontrada." });
-      }
+        if (!updated) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Integracao nao encontrada.",
+          });
+        }
 
-      return updated;
-    }),
+        return updated;
+      }),
     updateStatus: adminProcedure
       .input(updateIntegrationStatusSchema)
       .mutation(async ({ input }) => {
@@ -1422,27 +1617,80 @@ export const appRouter = router({
         });
 
         if (!updated) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Integracao nao encontrada." });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Integracao nao encontrada.",
+          });
         }
 
         return updated;
       }),
   }),
 
-  properties: router({
-    list: publicProcedure.input(propertyListSchema.optional()).query(async ({ ctx, input }) => {
-      const { getAllProperties } = await import("./db");
-      const isAdmin = ctx.user?.role === "administrativo";
-      const showDeletedOnly = isAdmin && input?.showDeletedOnly === true;
-      return await getAllProperties({ deletedOnly: showDeletedOnly });
+  launches: router({
+    list: publicProcedure.query(async () => {
+      const { getActivePropertyLaunches } = await import("./db");
+      return await getActivePropertyLaunches();
     }),
+    create: staffProcedure
+      .input(propertyLaunchMutationSchema)
+      .mutation(async ({ ctx, input }) => {
+        const { createPropertyLaunch } = await import("./db");
+
+        const entregaPrevista = input.entregaPrevista
+          ? new Date(`${input.entregaPrevista}T00:00:00`)
+          : null;
+
+        return await createPropertyLaunch({
+          nome: input.nome,
+          descricao: input.descricao ?? null,
+          construtora: input.construtora ?? null,
+          tipo: input.tipo,
+          status: input.status ?? "lancamento",
+          entregaPrevista,
+          valorMin: input.valorMin,
+          valorMax: input.valorMax ?? null,
+          areaMin: input.areaMin ?? null,
+          areaMax: input.areaMax ?? null,
+          quartosMin: input.quartosMin ?? null,
+          quartosMax: input.quartosMax ?? null,
+          vagasMin: input.vagasMin ?? null,
+          vagasMax: input.vagasMax ?? null,
+          unidadesDisponiveis: input.unidadesDisponiveis ?? null,
+          endereco: input.endereco,
+          numero: input.numero ?? null,
+          bairro: input.bairro ?? null,
+          cidade: input.cidade,
+          estado: input.estado,
+          cep: input.cep ?? null,
+          fotos: input.fotos ?? null,
+          destaque: input.destaque ?? 0,
+          isAtivo: 1,
+          createdByUserId: ctx.user.id,
+        });
+      }),
+  }),
+
+  properties: router({
+    list: publicProcedure
+      .input(propertyListSchema.optional())
+      .query(async ({ ctx, input }) => {
+        const { getAllProperties } = await import("./db");
+        const isAdmin = ctx.user?.role === "administrativo";
+        const showDeletedOnly = isAdmin && input?.showDeletedOnly === true;
+        return await getAllProperties({ deletedOnly: showDeletedOnly });
+      }),
     getById: publicProcedure.input(idSchema).query(async ({ ctx, input }) => {
-      const { getPropertyById, getPropertyByIdWithRelations } = await import("./db");
+      const { getPropertyById, getPropertyByIdWithRelations } = await import(
+        "./db"
+      );
       if (!ctx.user || ctx.user.role === "cliente") {
         return await getPropertyById(input.id);
       }
 
-      const propertyWithRelations = await getPropertyByIdWithRelations(input.id);
+      const propertyWithRelations = await getPropertyByIdWithRelations(
+        input.id
+      );
       if (!propertyWithRelations) {
         return propertyWithRelations;
       }
@@ -1459,10 +1707,16 @@ export const appRouter = router({
     }),
     getByIdAdmin: adminProcedure.input(idSchema).query(async ({ input }) => {
       const { getPropertyByIdWithRelations } = await import("./db");
-      const propertyWithRelations = await getPropertyByIdWithRelations(input.id, { includeDeleted: true });
+      const propertyWithRelations = await getPropertyByIdWithRelations(
+        input.id,
+        { includeDeleted: true }
+      );
 
       if (!propertyWithRelations) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Imovel nao encontrado" });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Imovel nao encontrado",
+        });
       }
 
       return propertyWithRelations;
@@ -1472,107 +1726,143 @@ export const appRouter = router({
       return await getDestacados();
     }),
     myProperties: staffProcedure.query(async ({ ctx }) => {
-      const { getAllPropertiesWithRelations, getPropertiesByCorretor } = await import("./db");
+      const { getAllPropertiesWithRelations, getPropertiesByCorretor } =
+        await import("./db");
       if (ctx.user.role === "administrativo") {
         return await getAllPropertiesWithRelations();
       }
       return await getPropertiesByCorretor(ctx.user.id);
     }),
-    create: staffProcedure.input(createPropertySchema).mutation(async ({ ctx, input }) => {
-      const { createProperty } = await import("./db");
+    create: staffProcedure
+      .input(createPropertySchema)
+      .mutation(async ({ ctx, input }) => {
+        const { createProperty, findActivePropertyByCepAndNumber } =
+          await import("./db");
 
-      const idCorretor =
-        ctx.user.role === "administrativo"
-          ? input.idCorretor
-          : ctx.user.id;
+        const idCorretor =
+          ctx.user.role === "administrativo" ? input.idCorretor : ctx.user.id;
 
-      if (!idCorretor) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Selecione o corretor responsavel antes de cadastrar o imovel.",
-        });
-      }
-
-      await ensureBrokerUser(idCorretor);
-      const ownerInputs = input.owners?.length ? input.owners : [input.owner];
-      const owners = await upsertPropertyOwnersFromInput(ownerInputs, {
-        confirmedEmailConflict: input.confirmedOwnerEmailConflict,
-      });
-      const primaryOwner = owners[0];
-      const emCondominio = input.emCondominio === true;
-      let idCondominio: number | null = emCondominio ? input.idCondominio ?? null : null;
-      let tipoCondominio: z.infer<typeof condominiumTypeSchema> | null = emCondominio
-        ? input.tipoCondominio ?? null
-        : null;
-
-      if (emCondominio) {
-        if (!idCondominio) {
+        if (!idCorretor) {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: "Selecione o condominio vinculado ao imovel.",
+            message:
+              "Selecione o responsavel pelo imovel antes de cadastrar.",
           });
         }
 
-        if (!tipoCondominio) {
+        await ensurePropertyResponsibleUser(idCorretor);
+        const isPartnership = input.parceria === true;
+        const owners = isPartnership
+          ? []
+          : await upsertPropertyOwnersFromInput(
+              input.owners?.length ? input.owners : [input.owner!],
+              {
+                confirmedEmailConflict: input.confirmedOwnerEmailConflict,
+              }
+            );
+        const primaryOwner = owners[0] ?? null;
+        const emCondominio = input.emCondominio === true;
+        let idCondominio: number | null = emCondominio
+          ? (input.idCondominio ?? null)
+          : null;
+        let tipoCondominio: z.infer<typeof condominiumTypeSchema> | null =
+          emCondominio ? (input.tipoCondominio ?? null) : null;
+
+        if (emCondominio) {
+          if (!idCondominio) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Selecione o condominio vinculado ao imovel.",
+            });
+          }
+
+          if (!tipoCondominio) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Selecione o tipo do condominio (casa ou apartamento).",
+            });
+          }
+
+          const condominium = await ensureCondominiumExists(idCondominio);
+          if (ctx.user.role !== "administrativo" && condominium.isAtivo !== 1) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "O condominio selecionado esta inativo.",
+            });
+          }
+
+          if (condominium.tipo !== tipoCondominio) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message:
+                "O tipo selecionado nao corresponde ao tipo cadastrado no condominio.",
+            });
+          }
+        } else {
+          idCondominio = null;
+          tipoCondominio = null;
+        }
+
+        const duplicateProperty = await findActivePropertyByCepAndNumber(
+          input.cep,
+          input.numero
+        );
+        if (duplicateProperty) {
           throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Selecione o tipo do condominio (casa ou apartamento).",
+            code: "CONFLICT",
+            message: `Ja existe um imovel ativo cadastrado neste CEP e numero: ${duplicateProperty.titulo}.`,
           });
         }
 
-        const condominium = await ensureCondominiumExists(idCondominio);
-        if (ctx.user.role !== "administrativo" && condominium.isAtivo !== 1) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "O condominio selecionado esta inativo.",
-          });
-        }
-
-        if (condominium.tipo !== tipoCondominio) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "O tipo selecionado nao corresponde ao tipo cadastrado no condominio.",
-          });
-        }
-      } else {
-        idCondominio = null;
-        tipoCondominio = null;
-      }
-
-      return await createProperty({
-        titulo: input.titulo,
-        descricao: input.descricao ?? null,
-        tipo: input.tipo,
-        finalidade: input.finalidade,
-        valor: input.valor,
-        valorLocacao: input.valorLocacao ?? null,
-        area: input.area ?? null,
-        quartos: input.quartos ?? null,
-        banheiros: input.banheiros ?? null,
-        vagas: input.vagas ?? null,
-        endereco: input.endereco,
-        numero: input.numero ?? null,
-        bairro: input.bairro ?? null,
-        cidade: input.cidade,
-        estado: input.estado,
-        cep: input.cep ?? null,
-        latitude: input.latitude ?? null,
-        longitude: input.longitude ?? null,
-        fotos: input.fotos ?? null,
-        destaque: input.destaque ?? 0,
-        status: input.status ?? "ativo",
-        emCondominio: emCondominio ? 1 : 0,
-        tipoCondominio,
-        idCondominio,
-        idCorretor,
-        idProprietario: primaryOwner.id,
-        createdByUserId: ctx.user.id,
-      }, { ownerIds: owners.map(owner => owner.id) });
-    }),
+        return await createProperty(
+          {
+            titulo: input.titulo,
+            descricao: input.descricao ?? null,
+            tipo: input.tipo,
+            finalidade: input.finalidade,
+            valor: input.valor,
+            valorLocacao: input.valorLocacao ?? null,
+            area: input.area ?? null,
+            quartos: input.quartos ?? null,
+            banheiros: input.banheiros ?? null,
+            vagas: input.vagas ?? null,
+            endereco: input.endereco,
+            numero: input.numero ?? null,
+            bairro: input.bairro ?? null,
+            cidade: input.cidade,
+            estado: input.estado,
+            cep: input.cep ?? null,
+            latitude: input.latitude ?? null,
+            longitude: input.longitude ?? null,
+            fotos: input.fotos ?? null,
+            destaque: input.destaque ?? 0,
+            status: input.status ?? "ativo",
+            emCondominio: emCondominio ? 1 : 0,
+            tipoCondominio,
+            idCondominio,
+            parceria: isPartnership ? 1 : 0,
+            parceriaNome: isPartnership
+              ? input.parceriaNome?.trim() || null
+              : null,
+            parceriaTelefone: isPartnership
+              ? input.parceriaTelefone?.trim() || null
+              : null,
+            parceriaReferencia: isPartnership
+              ? input.parceriaReferencia?.trim() || null
+              : null,
+            idCorretor,
+            idProprietario: primaryOwner?.id ?? null,
+            createdByUserId: ctx.user.id,
+          },
+          { ownerIds: owners.map(owner => owner.id) }
+        );
+      }),
     uploadPhoto: staffProcedure
       .input(propertyPhotoUploadSchema)
       .mutation(async ({ input }) => {
-        const { optimizeAndStorePropertyImage } = await import("./_core/property-images");
+        const { optimizeAndStorePropertyImage } = await import(
+          "./_core/property-images"
+        );
 
         try {
           return await optimizeAndStorePropertyImage({
@@ -1592,153 +1882,225 @@ export const appRouter = router({
     deleteUploadedPhoto: staffProcedure
       .input(propertyUploadedPhotoDeleteSchema)
       .mutation(async ({ input }) => {
-        const { removeStoredPropertyImageByUrl } = await import("./_core/property-images");
+        const { removeStoredPropertyImageByUrl } = await import(
+          "./_core/property-images"
+        );
         await removeStoredPropertyImageByUrl(input.url);
         return { success: true } as const;
       }),
-    update: staffProcedure.input(updatePropertySchema).mutation(async ({ ctx, input }) => {
-      const { updateProperty } = await import("./db");
-      const { id, owner: ownerInput, owners: ownerInputs, confirmedOwnerEmailConflict, ...data } = input;
-      const property = await ensurePropertyExists(id);
+    update: staffProcedure
+      .input(updatePropertySchema)
+      .mutation(async ({ ctx, input }) => {
+        const { findActivePropertyByCepAndNumber, updateProperty } =
+          await import("./db");
+        const {
+          id,
+          owner: ownerInput,
+          owners: ownerInputs,
+          confirmedOwnerEmailConflict,
+          ...data
+        } = input;
+        const property = await ensurePropertyExists(id);
 
-      if (ctx.user.role === "corretor" && property.idCorretor !== ctx.user.id) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Você não tem permissão para editar este imóvel" });
-      }
-
-      const idCorretor =
-        ctx.user.role === "corretor"
-          ? ctx.user.id
-          : data.idCorretor;
-
-      if (!idCorretor) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Selecione o corretor responsavel antes de salvar o imóvel.",
-        });
-      }
-
-      await ensureBrokerUser(idCorretor);
-      const owners = await upsertPropertyOwnersFromInput(ownerInputs?.length ? ownerInputs : [ownerInput], {
-        currentOwnerIds: property.idProprietario ? [property.idProprietario] : [],
-        confirmedEmailConflict: confirmedOwnerEmailConflict,
-      });
-      const primaryOwner = owners[0];
-      const emCondominio =
-        data.emCondominio !== undefined
-          ? data.emCondominio
-          : property.emCondominio === 1;
-      let idCondominio: number | null = emCondominio
-        ? (data.idCondominio !== undefined ? data.idCondominio : property.idCondominio ?? null)
-        : null;
-      let tipoCondominio: z.infer<typeof condominiumTypeSchema> | null = emCondominio
-        ? (data.tipoCondominio !== undefined
-          ? data.tipoCondominio
-          : property.tipoCondominio ?? null)
-        : null;
-
-      if (emCondominio) {
-        if (!idCondominio) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Selecione o condominio vinculado ao imovel.",
-          });
-        }
-
-        const condominium = await ensureCondominiumExists(idCondominio);
         if (
-          ctx.user.role !== "administrativo" &&
-          condominium.isAtivo !== 1 &&
-          condominium.id !== property.idCondominio
+          ctx.user.role === "corretor" &&
+          property.idCorretor !== ctx.user.id &&
+          property.createdByUserId !== ctx.user.id
         ) {
           throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "O condominio selecionado esta inativo.",
+            code: "FORBIDDEN",
+            message: "Você não tem permissão para editar este imóvel",
           });
         }
 
-        if (!tipoCondominio) {
-          tipoCondominio = condominium.tipo;
-        }
+        const idCorretor =
+          ctx.user.role === "corretor" ? ctx.user.id : data.idCorretor;
 
-        if (condominium.tipo !== tipoCondominio) {
+        if (!idCorretor) {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: "O tipo selecionado nao corresponde ao tipo cadastrado no condominio.",
+            message:
+              "Selecione o responsavel pelo imovel antes de salvar.",
           });
         }
-      } else {
-        idCondominio = null;
-        tipoCondominio = null;
-      }
 
-      return await updateProperty(id, {
-        titulo: data.titulo,
-        descricao: data.descricao ?? null,
-        tipo: data.tipo,
-        finalidade: data.finalidade,
-        valor: data.valor,
-        valorLocacao: data.valorLocacao ?? null,
-        area: data.area ?? null,
-        quartos: data.quartos ?? null,
-        banheiros: data.banheiros ?? null,
-        vagas: data.vagas ?? null,
-        endereco: data.endereco,
-        numero: data.numero ?? null,
-        bairro: data.bairro ?? null,
-        cidade: data.cidade,
-        estado: data.estado,
-        cep: data.cep ?? null,
-        latitude: data.latitude ?? null,
-        longitude: data.longitude ?? null,
-        fotos: data.fotos ?? null,
-        destaque: data.destaque ?? 0,
-        status: data.status ?? property.status,
-        emCondominio: emCondominio ? 1 : 0,
-        tipoCondominio,
-        idCondominio,
-        idCorretor,
-        idProprietario: primaryOwner.id,
-      }, { ownerIds: owners.map(owner => owner.id) });
-    }),
-    delete: adminProcedure.input(deletePropertySchema).mutation(async ({ ctx, input }) => {
-      const { softDeleteProperty } = await import("./db");
-      const property = await ensurePropertyExists(input.id);
+        await ensurePropertyResponsibleUser(idCorretor);
+        const isPartnership = data.parceria === true;
+        const owners = isPartnership
+          ? []
+          : await upsertPropertyOwnersFromInput(
+              ownerInputs?.length ? ownerInputs : [ownerInput!],
+              {
+                currentOwnerIds: property.idProprietario
+                  ? [property.idProprietario]
+                  : [],
+                confirmedEmailConflict: confirmedOwnerEmailConflict,
+              }
+            );
+        const primaryOwner = owners[0] ?? null;
+        const emCondominio =
+          data.emCondominio !== undefined
+            ? data.emCondominio
+            : property.emCondominio === 1;
+        let idCondominio: number | null = emCondominio
+          ? data.idCondominio !== undefined
+            ? data.idCondominio
+            : (property.idCondominio ?? null)
+          : null;
+        let tipoCondominio: z.infer<typeof condominiumTypeSchema> | null =
+          emCondominio
+            ? data.tipoCondominio !== undefined
+              ? data.tipoCondominio
+              : (property.tipoCondominio ?? null)
+            : null;
 
-      if (input.confirmationText !== "EXCLUIR IMOVEL") {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Confirme a exclusao digitando EXCLUIR IMOVEL.",
+        if (emCondominio) {
+          if (!idCondominio) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Selecione o condominio vinculado ao imovel.",
+            });
+          }
+
+          const condominium = await ensureCondominiumExists(idCondominio);
+          if (
+            ctx.user.role !== "administrativo" &&
+            condominium.isAtivo !== 1 &&
+            condominium.id !== property.idCondominio
+          ) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "O condominio selecionado esta inativo.",
+            });
+          }
+
+          if (!tipoCondominio) {
+            tipoCondominio = condominium.tipo;
+          }
+
+          if (condominium.tipo !== tipoCondominio) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message:
+                "O tipo selecionado nao corresponde ao tipo cadastrado no condominio.",
+            });
+          }
+        } else {
+          idCondominio = null;
+          tipoCondominio = null;
+        }
+
+        const duplicateProperty = await findActivePropertyByCepAndNumber(
+          data.cep,
+          data.numero,
+          {
+            excludeId: property.id,
+          }
+        );
+        if (duplicateProperty) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: `Ja existe um imovel ativo cadastrado neste CEP e numero: ${duplicateProperty.titulo}.`,
+          });
+        }
+
+        return await updateProperty(
+          id,
+          {
+            titulo: data.titulo,
+            descricao: data.descricao ?? null,
+            tipo: data.tipo,
+            finalidade: data.finalidade,
+            valor: data.valor,
+            valorLocacao: data.valorLocacao ?? null,
+            area: data.area ?? null,
+            quartos: data.quartos ?? null,
+            banheiros: data.banheiros ?? null,
+            vagas: data.vagas ?? null,
+            endereco: data.endereco,
+            numero: data.numero ?? null,
+            bairro: data.bairro ?? null,
+            cidade: data.cidade,
+            estado: data.estado,
+            cep: data.cep ?? null,
+            latitude: data.latitude ?? null,
+            longitude: data.longitude ?? null,
+            fotos: data.fotos ?? null,
+            destaque: data.destaque ?? 0,
+            status: data.status ?? property.status,
+            emCondominio: emCondominio ? 1 : 0,
+            tipoCondominio,
+            idCondominio,
+            parceria: isPartnership ? 1 : 0,
+            parceriaNome: isPartnership
+              ? data.parceriaNome?.trim() || null
+              : null,
+            parceriaTelefone: isPartnership
+              ? data.parceriaTelefone?.trim() || null
+              : null,
+            parceriaReferencia: isPartnership
+              ? data.parceriaReferencia?.trim() || null
+              : null,
+            idCorretor,
+            idProprietario: primaryOwner?.id ?? null,
+          },
+          { ownerIds: owners.map(owner => owner.id) }
+        );
+      }),
+    delete: adminProcedure
+      .input(deletePropertySchema)
+      .mutation(async ({ ctx, input }) => {
+        const { softDeleteProperty } = await import("./db");
+        const property = await ensurePropertyExists(input.id);
+
+        if (input.confirmationText !== "EXCLUIR IMOVEL") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Confirme a exclusao digitando EXCLUIR IMOVEL.",
+          });
+        }
+
+        if (property.lixeira === 1) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Este imovel ja esta na lixeira.",
+          });
+        }
+
+        return await softDeleteProperty(input.id, {
+          motivoExclusao: input.motivoExclusao.trim(),
+          excluidoPorUserId: ctx.user.id,
         });
-      }
-
-      if (property.lixeira === 1) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Este imovel ja esta na lixeira.",
-        });
-      }
-
-      return await softDeleteProperty(input.id, {
-        motivoExclusao: input.motivoExclusao.trim(),
-        excluidoPorUserId: ctx.user.id,
-      });
-    }),
+      }),
     updateLegalDetails: adminProcedure
       .input(updatePropertyLegalDetailsSchema)
       .mutation(async ({ input }) => {
-        const { getPropertyById, updatePropertyLegalDetails } = await import("./db");
-        const property = await getPropertyById(input.id, { includeDeleted: true });
+        const { getPropertyById, updatePropertyLegalDetails } = await import(
+          "./db"
+        );
+        const property = await getPropertyById(input.id, {
+          includeDeleted: true,
+        });
         if (!property) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Imovel nao encontrado" });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Imovel nao encontrado",
+          });
         }
 
         return await updatePropertyLegalDetails(input.id, {
-          inscricaoImobiliaria: normalizeOptionalText(input.inscricaoImobiliaria) ?? null,
-          matriculaRegistro: normalizeOptionalText(input.matriculaRegistro) ?? null,
-          cartorioRegistro: normalizeOptionalText(input.cartorioRegistro) ?? null,
-          registroMunicipal: normalizeOptionalText(input.registroMunicipal) ?? null,
-          informacoesLegais: normalizeOptionalText(input.informacoesLegais) ?? null,
-          observacoesJuridicas: normalizeOptionalText(input.observacoesJuridicas) ?? null,
+          inscricaoImobiliaria:
+            normalizeOptionalText(input.inscricaoImobiliaria) ?? null,
+          matriculaRegistro:
+            normalizeOptionalText(input.matriculaRegistro) ?? null,
+          cartorioRegistro:
+            normalizeOptionalText(input.cartorioRegistro) ?? null,
+          registroMunicipal:
+            normalizeOptionalText(input.registroMunicipal) ?? null,
+          informacoesLegais:
+            normalizeOptionalText(input.informacoesLegais) ?? null,
+          observacoesJuridicas:
+            normalizeOptionalText(input.observacoesJuridicas) ?? null,
         });
       }),
     documents: staffProcedure
@@ -1756,11 +2118,17 @@ export const appRouter = router({
 
         const normalizedMimeType = input.tipoArquivo.trim().toLowerCase();
         if (normalizedMimeType !== "application/pdf") {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Apenas documentos PDF sao permitidos" });
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Apenas documentos PDF sao permitidos",
+          });
         }
 
         if (!input.urlArquivo.startsWith("data:application/pdf")) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Arquivo PDF invalido" });
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Arquivo PDF invalido",
+          });
         }
 
         return await createPropertyDocument({
@@ -1774,11 +2142,15 @@ export const appRouter = router({
     deleteDocument: staffProcedure
       .input(deletePropertyDocumentSchema)
       .mutation(async ({ ctx, input }) => {
-        const { deletePropertyDocument, getPropertyDocumentById } = await import("./db");
+        const { deletePropertyDocument, getPropertyDocumentById } =
+          await import("./db");
         const document = await getPropertyDocumentById(input.id);
 
         if (!document) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Documento nao encontrado" });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Documento nao encontrado",
+          });
         }
 
         await ensurePropertyManagementAccess(ctx.user, document.idImovel);
@@ -1789,29 +2161,38 @@ export const appRouter = router({
     renameDocument: staffProcedure
       .input(renamePropertyDocumentSchema)
       .mutation(async ({ ctx, input }) => {
-        const { getPropertyDocumentById, updatePropertyDocumentName } = await import("./db");
+        const { getPropertyDocumentById, updatePropertyDocumentName } =
+          await import("./db");
         const document = await getPropertyDocumentById(input.id);
 
         if (!document) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Documento nao encontrado" });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Documento nao encontrado",
+          });
         }
 
         await ensurePropertyManagementAccess(ctx.user, document.idImovel);
 
-        const normalizedFileName = normalizePropertyDocumentFileName(input.nomeArquivo);
+        const normalizedFileName = normalizePropertyDocumentFileName(
+          input.nomeArquivo
+        );
         return await updatePropertyDocumentName(input.id, normalizedFileName);
       }),
     keyStatusRequests: staffProcedure
       .input(propertyKeyStatusRequestsListSchema)
       .query(async ({ ctx, input }) => {
-        const { getPropertyKeyStatusRequestsByPropertyId } = await import("./db");
+        const { getPropertyKeyStatusRequestsByPropertyId } = await import(
+          "./db"
+        );
         await ensurePropertyManagementAccess(ctx.user, input.idImovel);
         return await getPropertyKeyStatusRequestsByPropertyId(input.idImovel);
       }),
     requestKeyStatusChange: staffProcedure
       .input(requestPropertyKeyStatusChangeSchema)
       .mutation(async ({ ctx, input }) => {
-        const { createPropertyKeyStatusRequest, updatePropertyKeyStatus } = await import("./db");
+        const { createPropertyKeyStatusRequest, updatePropertyKeyStatus } =
+          await import("./db");
         await ensurePropertyManagementAccess(ctx.user, input.idImovel);
 
         const requestedObservation = input.requestedObservation.trim();
@@ -1828,12 +2209,15 @@ export const appRouter = router({
             reviewedAt: new Date(),
           });
 
-          const updatedProperty = await updatePropertyKeyStatus(input.idImovel, {
-            keyStatus: input.requestedStatus,
-            keyStatusObservation: requestedObservation,
-            keyStatusUpdatedByUserId: ctx.user.id,
-            keyStatusUpdatedAt: new Date(),
-          });
+          const updatedProperty = await updatePropertyKeyStatus(
+            input.idImovel,
+            {
+              keyStatus: input.requestedStatus,
+              keyStatusObservation: requestedObservation,
+              keyStatusUpdatedByUserId: ctx.user.id,
+              keyStatusUpdatedAt: new Date(),
+            }
+          );
 
           return {
             mode: "applied" as const,
@@ -1859,12 +2243,18 @@ export const appRouter = router({
     reviewKeyStatusRequest: adminProcedure
       .input(reviewPropertyKeyStatusRequestSchema)
       .mutation(async ({ ctx, input }) => {
-        const { getPropertyKeyStatusRequestById, updatePropertyKeyStatus, updatePropertyKeyStatusRequest } =
-          await import("./db");
+        const {
+          getPropertyKeyStatusRequestById,
+          updatePropertyKeyStatus,
+          updatePropertyKeyStatusRequest,
+        } = await import("./db");
 
         const request = await getPropertyKeyStatusRequestById(input.requestId);
         if (!request) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Solicitacao de chave nao encontrada" });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Solicitacao de chave nao encontrada",
+          });
         }
 
         if (request.status !== "pending") {
@@ -1875,14 +2265,18 @@ export const appRouter = router({
         }
 
         const reviewNote = normalizeOptionalText(input.reviewNote) ?? null;
-        const nextStatus = input.decision === "approved" ? "approved" : "rejected";
+        const nextStatus =
+          input.decision === "approved" ? "approved" : "rejected";
 
-        const reviewedRequest = await updatePropertyKeyStatusRequest(request.id, {
-          status: nextStatus,
-          reviewedByUserId: ctx.user.id,
-          reviewedAt: new Date(),
-          reviewNote,
-        });
+        const reviewedRequest = await updatePropertyKeyStatusRequest(
+          request.id,
+          {
+            status: nextStatus,
+            reviewedByUserId: ctx.user.id,
+            reviewedAt: new Date(),
+            reviewNote,
+          }
+        );
 
         if (nextStatus === "rejected") {
           return {
@@ -1892,12 +2286,15 @@ export const appRouter = router({
         }
 
         await ensurePropertyExists(request.idImovel);
-        const updatedProperty = await updatePropertyKeyStatus(request.idImovel, {
-          keyStatus: request.requestedStatus,
-          keyStatusObservation: request.requestedObservation,
-          keyStatusUpdatedByUserId: ctx.user.id,
-          keyStatusUpdatedAt: new Date(),
-        });
+        const updatedProperty = await updatePropertyKeyStatus(
+          request.idImovel,
+          {
+            keyStatus: request.requestedStatus,
+            keyStatusObservation: request.requestedObservation,
+            keyStatusUpdatedByUserId: ctx.user.id,
+            keyStatusUpdatedAt: new Date(),
+          }
+        );
 
         return {
           request: reviewedRequest,
@@ -1922,7 +2319,13 @@ export const appRouter = router({
       return await ensureLeadAccess(ctx.user, input.id);
     }),
     create: publicProcedure.input(z.any()).mutation(async ({ ctx, input }) => {
-      const { createLead, createLeadInteraction, getUserByCpf, getUserById, updateUser } = await import("./db");
+      const {
+        createLead,
+        createLeadInteraction,
+        getUserByCpf,
+        getUserById,
+        updateUser,
+      } = await import("./db");
       const payload = { ...(input as any) };
       const normalizedCpf = normalizeOptionalCpf(payload.cpf);
       const normalizedBirthDate = normalizeOptionalBirthDate(payload.birthDate);
@@ -1939,7 +2342,10 @@ export const appRouter = router({
       payload.assignmentCycleStartedAt = new Date();
       payload.assignmentSlaNotifiedAt = null;
 
-      if (ctx.user && (ctx.user.role === "corretor" || ctx.user.role === "administrativo")) {
+      if (
+        ctx.user &&
+        (ctx.user.role === "corretor" || ctx.user.role === "administrativo")
+      ) {
         payload.idResponsavel = ctx.user.id;
         payload.assignedAt = new Date();
       } else {
@@ -1962,8 +2368,10 @@ export const appRouter = router({
         if (currentUser?.cpf) {
           payload.userId = currentUser.id;
           payload.cpf = currentUser.cpf;
-          payload.birthDate = payload.birthDate || currentUser.birthDate || null;
-          payload.nome = payload.nome || currentUser.name || currentUser.email || "Cliente";
+          payload.birthDate =
+            payload.birthDate || currentUser.birthDate || null;
+          payload.nome =
+            payload.nome || currentUser.name || currentUser.email || "Cliente";
           payload.email = payload.email || currentUser.email || null;
           payload.telefone = payload.telefone || currentUser.phone || null;
         }
@@ -1971,7 +2379,8 @@ export const appRouter = router({
         const matchedUser = await getUserByCpf(normalizedCpf);
         if (matchedUser) {
           payload.userId = matchedUser.id;
-          payload.birthDate = payload.birthDate || matchedUser.birthDate || null;
+          payload.birthDate =
+            payload.birthDate || matchedUser.birthDate || null;
 
           if (payload.birthDate && !matchedUser.birthDate) {
             await updateUser(matchedUser.id, { birthDate: payload.birthDate });
@@ -1980,7 +2389,10 @@ export const appRouter = router({
       }
 
       if (!payload.nome) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Nome do lead e obrigatorio" });
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Nome do lead e obrigatorio",
+        });
       }
 
       const [createdLead] = await createLead(payload);
@@ -2007,7 +2419,9 @@ export const appRouter = router({
       return createdLead;
     }),
     update: staffProcedure.input(z.any()).mutation(async ({ ctx, input }) => {
-      const { createLeadInteraction, getUserByCpf, updateLead } = await import("./db");
+      const { createLeadInteraction, getUserByCpf, updateLead } = await import(
+        "./db"
+      );
       const { id, ...data } = input as any;
       const currentLead = await ensureLeadAccess(ctx.user, id);
 
@@ -2033,11 +2447,16 @@ export const appRouter = router({
         data.birthDate = normalizedBirthDate || null;
       }
 
-      const nextStatusRaw = "status" in data ? normalizeOptionalText(data.status) : currentLead.status;
+      const nextStatusRaw =
+        "status" in data
+          ? normalizeOptionalText(data.status)
+          : currentLead.status;
       const nextStatus = nextStatusRaw || currentLead.status;
       const nextResponsibleId =
         "idResponsavel" in data
-          ? (data.idResponsavel === null ? null : Number(data.idResponsavel))
+          ? data.idResponsavel === null
+            ? null
+            : Number(data.idResponsavel)
           : currentLead.idResponsavel;
 
       if (nextStatus !== "novo" && !nextResponsibleId) {
@@ -2072,61 +2491,82 @@ export const appRouter = router({
 
       return await ensureLeadAccess(ctx.user, id);
     }),
-    assign: adminProcedure.input(assignLeadSchema).mutation(async ({ ctx, input }) => {
-      const { createLeadInteraction, getUserById, updateLead } = await import("./db");
-      const lead = await ensureLeadAccess({ id: 0, role: "administrativo" }, input.leadId);
+    assign: adminProcedure
+      .input(assignLeadSchema)
+      .mutation(async ({ ctx, input }) => {
+        const { createLeadInteraction, getUserById, updateLead } = await import(
+          "./db"
+        );
+        const lead = await ensureLeadAccess(
+          { id: 0, role: "administrativo" },
+          input.leadId
+        );
 
-      if (input.userId !== null) {
-        const assignedUser = await getUserById(input.userId);
-        if (!assignedUser || assignedUser.role !== "corretor" || assignedUser.isActive !== 1) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Selecione um corretor ativo" });
+        if (input.userId !== null) {
+          const assignedUser = await getUserById(input.userId);
+          if (
+            !assignedUser ||
+            assignedUser.role !== "corretor" ||
+            assignedUser.isActive !== 1
+          ) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Selecione um corretor ativo",
+            });
+          }
         }
-      }
 
-      if (input.userId === null) {
+        if (input.userId === null) {
+          await updateLead(input.leadId, {
+            idResponsavel: null,
+            status: "novo",
+            assignedAt: null,
+            attendedAt: null,
+            assignmentCycleStartedAt: new Date(),
+            assignmentSlaNotifiedAt: null,
+          });
+
+          await createLeadInteraction({
+            idLead: input.leadId,
+            idUsuario: ctx.user.id,
+            eventType: "lead_unassigned",
+            message:
+              "Lead desvinculado do responsável e aguardando novo direcionamento.",
+          });
+
+          return await ensureLeadAccess(
+            { id: 0, role: "administrativo" },
+            input.leadId
+          );
+        }
+
         await updateLead(input.leadId, {
-          idResponsavel: null,
-          status: "novo",
-          assignedAt: null,
-          attendedAt: null,
-          assignmentCycleStartedAt: new Date(),
+          idResponsavel: input.userId,
+          assignedAt: new Date(),
           assignmentSlaNotifiedAt: null,
         });
 
         await createLeadInteraction({
           idLead: input.leadId,
           idUsuario: ctx.user.id,
-          eventType: "lead_unassigned",
-          message: "Lead desvinculado do responsável e aguardando novo direcionamento.",
+          eventType: "lead_assigned",
+          message: `Lead direcionado ao responsável ID ${input.userId}.`,
         });
 
-        return await ensureLeadAccess({ id: 0, role: "administrativo" }, input.leadId);
-      }
+        if (lead.status === "atendimento") {
+          await createLeadInteraction({
+            idLead: input.leadId,
+            idUsuario: ctx.user.id,
+            eventType: "lead_attention_required",
+            message: "Lead estava em atendimento e teve responsável alterado.",
+          });
+        }
 
-      await updateLead(input.leadId, {
-        idResponsavel: input.userId,
-        assignedAt: new Date(),
-        assignmentSlaNotifiedAt: null,
-      });
-
-      await createLeadInteraction({
-        idLead: input.leadId,
-        idUsuario: ctx.user.id,
-        eventType: "lead_assigned",
-        message: `Lead direcionado ao responsável ID ${input.userId}.`,
-      });
-
-      if (lead.status === "atendimento") {
-        await createLeadInteraction({
-          idLead: input.leadId,
-          idUsuario: ctx.user.id,
-          eventType: "lead_attention_required",
-          message: "Lead estava em atendimento e teve responsável alterado.",
-        });
-      }
-
-      return await ensureLeadAccess({ id: 0, role: "administrativo" }, input.leadId);
-    }),
+        return await ensureLeadAccess(
+          { id: 0, role: "administrativo" },
+          input.leadId
+        );
+      }),
     delete: adminProcedure.input(idSchema).mutation(async ({ input }) => {
       const { deleteLead } = await import("./db");
       await ensureLeadAccess({ id: 0, role: "administrativo" }, input.id);
@@ -2149,7 +2589,10 @@ export const appRouter = router({
     addNote: staffProcedure.input(z.any()).mutation(async ({ ctx, input }) => {
       const { createLeadInteraction, createLeadNote } = await import("./db");
       await ensureLeadAccess(ctx.user, (input as any).idLead);
-      const createdNote = await createLeadNote({ ...(input as any), idUsuario: ctx.user.id });
+      const createdNote = await createLeadNote({
+        ...(input as any),
+        idUsuario: ctx.user.id,
+      });
       await createLeadInteraction({
         idLead: (input as any).idLead,
         idUsuario: ctx.user.id,
@@ -2168,7 +2611,10 @@ export const appRouter = router({
     addFile: staffProcedure.input(z.any()).mutation(async ({ ctx, input }) => {
       const { createLeadFile, createLeadInteraction } = await import("./db");
       await ensureLeadAccess(ctx.user, (input as any).idLead);
-      const createdFile = await createLeadFile({ ...(input as any), idUsuario: ctx.user.id });
+      const createdFile = await createLeadFile({
+        ...(input as any),
+        idUsuario: ctx.user.id,
+      });
       await createLeadInteraction({
         idLead: (input as any).idLead,
         idUsuario: ctx.user.id,
@@ -2195,7 +2641,9 @@ export const appRouter = router({
       return taskItems.map(taskItem => ({
         ...taskItem,
         computedStatus: getComputedTaskStatus(taskItem),
-        isAssignedToCurrentUser: taskItem.assignees.some(assignee => assignee.id === ctx.user.id),
+        isAssignedToCurrentUser: taskItem.assignees.some(
+          assignee => assignee.id === ctx.user.id
+        ),
       }));
     }),
     templates: staffProcedure.query(async () => {
@@ -2231,7 +2679,8 @@ export const appRouter = router({
     updateTemplate: adminProcedure
       .input(updateTaskTemplateSchema)
       .mutation(async ({ input }) => {
-        const { getTaskItemTemplateById, updateTaskItemTemplate } = await import("./db");
+        const { getTaskItemTemplateById, updateTaskItemTemplate } =
+          await import("./db");
         const template = await getTaskItemTemplateById(input.id);
         if (!template) {
           throw new TRPCError({
@@ -2248,19 +2697,22 @@ export const appRouter = router({
           defaultDescription: input.defaultDescription?.trim() || null,
         });
       }),
-    deleteTemplate: adminProcedure.input(idSchema).mutation(async ({ input }) => {
-      const { deleteTaskItemTemplate, getTaskItemTemplateById } = await import("./db");
-      const template = await getTaskItemTemplateById(input.id);
-      if (!template) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Modelo personalizado nao encontrado.",
-        });
-      }
+    deleteTemplate: adminProcedure
+      .input(idSchema)
+      .mutation(async ({ input }) => {
+        const { deleteTaskItemTemplate, getTaskItemTemplateById } =
+          await import("./db");
+        const template = await getTaskItemTemplateById(input.id);
+        if (!template) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Modelo personalizado nao encontrado.",
+          });
+        }
 
-      await deleteTaskItemTemplate(input.id);
-      return { success: true } as const;
-    }),
+        await deleteTaskItemTemplate(input.id);
+        return { success: true } as const;
+      }),
     summary: staffProcedure.query(async ({ ctx }) => {
       const {
         getAllTaskItemsWithRelations,
@@ -2289,86 +2741,100 @@ export const appRouter = router({
         totalVisibleCount: taskItems.length,
       };
     }),
-    create: staffProcedure.input(createTaskItemSchema).mutation(async ({ ctx, input }) => {
-      const { createTaskItem, getTaskItemWithRelationsById, replaceTaskItemAssignees } = await import("./db");
-      const normalizedAssigneeIds = normalizeAssigneeIds(input.assigneeIds);
-      await assertValidAssignees(normalizedAssigneeIds);
+    create: staffProcedure
+      .input(createTaskItemSchema)
+      .mutation(async ({ ctx, input }) => {
+        const {
+          createTaskItem,
+          getTaskItemWithRelationsById,
+          replaceTaskItemAssignees,
+        } = await import("./db");
+        const normalizedAssigneeIds = normalizeAssigneeIds(input.assigneeIds);
+        await assertValidAssignees(normalizedAssigneeIds);
 
-      const dueAt = parseOptionalTaskDueAt(input.dueAt);
-      if (input.kind === "evento" && !dueAt) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Eventos precisam ter data e horario definidos.",
+        const dueAt = parseOptionalTaskDueAt(input.dueAt);
+        if (input.kind === "evento" && !dueAt) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Eventos precisam ter data e horario definidos.",
+          });
+        }
+
+        const created = await createTaskItem({
+          title: input.title.trim(),
+          kind: input.kind,
+          sector: input.sector,
+          status: input.status,
+          dueAt,
+          description: input.description?.trim() || null,
+          createdByUserId: ctx.user.id,
         });
-      }
 
-      const created = await createTaskItem({
-        title: input.title.trim(),
-        kind: input.kind,
-        sector: input.sector,
-        status: input.status,
-        dueAt,
-        description: input.description?.trim() || null,
-        createdByUserId: ctx.user.id,
-      });
+        await replaceTaskItemAssignees(created.id, normalizedAssigneeIds);
+        const fullTaskItem = await getTaskItemWithRelationsById(created.id);
 
-      await replaceTaskItemAssignees(created.id, normalizedAssigneeIds);
-      const fullTaskItem = await getTaskItemWithRelationsById(created.id);
+        if (!fullTaskItem) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Nao foi possivel carregar a tarefa criada.",
+          });
+        }
 
-      if (!fullTaskItem) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Nao foi possivel carregar a tarefa criada.",
-        });
-      }
-
-      return {
-        ...fullTaskItem,
-        computedStatus: getComputedTaskStatus(fullTaskItem),
-        isAssignedToCurrentUser: fullTaskItem.assignees.some(assignee => assignee.id === ctx.user.id),
-      };
-    }),
-    update: staffProcedure.input(updateTaskItemSchema).mutation(async ({ ctx, input }) => {
-      const { getTaskItemWithRelationsById, replaceTaskItemAssignees, updateTaskItem } = await import("./db");
-      const currentTask = await ensureTaskEditAccess(ctx.user, input.id);
-
-      const normalizedAssigneeIds = normalizeAssigneeIds(input.assigneeIds);
-      await assertValidAssignees(normalizedAssigneeIds);
-
-      const dueAt = parseOptionalTaskDueAt(input.dueAt);
-      if (currentTask.kind === "evento" && !dueAt) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Eventos precisam ter data e horario definidos.",
-        });
-      }
-
-      await updateTaskItem(input.id, {
-        dueAt,
-        description: input.description?.trim() || null,
-        status: input.status === "atrasado" ? "pendente" : input.status,
-      });
-      await replaceTaskItemAssignees(input.id, normalizedAssigneeIds);
-
-      const updatedTaskItem = await getTaskItemWithRelationsById(input.id);
-      if (!updatedTaskItem) {
-        throw new TRPCError({
-          code: "NOT_FOUND",
-          message: "Nao foi possivel carregar a tarefa atualizada.",
-        });
-      }
-
-      return {
-        action: "updated" as const,
-        task: {
-          ...updatedTaskItem,
-          computedStatus: getComputedTaskStatus(updatedTaskItem),
-          isAssignedToCurrentUser: updatedTaskItem.assignees.some(
+        return {
+          ...fullTaskItem,
+          computedStatus: getComputedTaskStatus(fullTaskItem),
+          isAssignedToCurrentUser: fullTaskItem.assignees.some(
             assignee => assignee.id === ctx.user.id
           ),
-        },
-      };
-    }),
+        };
+      }),
+    update: staffProcedure
+      .input(updateTaskItemSchema)
+      .mutation(async ({ ctx, input }) => {
+        const {
+          getTaskItemWithRelationsById,
+          replaceTaskItemAssignees,
+          updateTaskItem,
+        } = await import("./db");
+        const currentTask = await ensureTaskEditAccess(ctx.user, input.id);
+
+        const normalizedAssigneeIds = normalizeAssigneeIds(input.assigneeIds);
+        await assertValidAssignees(normalizedAssigneeIds);
+
+        const dueAt = parseOptionalTaskDueAt(input.dueAt);
+        if (currentTask.kind === "evento" && !dueAt) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Eventos precisam ter data e horario definidos.",
+          });
+        }
+
+        await updateTaskItem(input.id, {
+          dueAt,
+          description: input.description?.trim() || null,
+          status: input.status === "atrasado" ? "pendente" : input.status,
+        });
+        await replaceTaskItemAssignees(input.id, normalizedAssigneeIds);
+
+        const updatedTaskItem = await getTaskItemWithRelationsById(input.id);
+        if (!updatedTaskItem) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Nao foi possivel carregar a tarefa atualizada.",
+          });
+        }
+
+        return {
+          action: "updated" as const,
+          task: {
+            ...updatedTaskItem,
+            computedStatus: getComputedTaskStatus(updatedTaskItem),
+            isAssignedToCurrentUser: updatedTaskItem.assignees.some(
+              assignee => assignee.id === ctx.user.id
+            ),
+          },
+        };
+      }),
     delete: staffProcedure.input(idSchema).mutation(async ({ ctx, input }) => {
       const { deleteTaskItem } = await import("./db");
       await ensureTaskEditAccess(ctx.user, input.id);
@@ -2382,22 +2848,24 @@ export const appRouter = router({
         await ensureTaskAccess(ctx.user, input.taskId);
         return await getTaskItemNotes(input.taskId);
       }),
-    addNote: staffProcedure.input(taskNoteSchema).mutation(async ({ ctx, input }) => {
-      const { createTaskItemNote, updateTaskItem } = await import("./db");
-      const task = await ensureTaskEditAccess(ctx.user, input.taskId);
+    addNote: staffProcedure
+      .input(taskNoteSchema)
+      .mutation(async ({ ctx, input }) => {
+        const { createTaskItemNote, updateTaskItem } = await import("./db");
+        const task = await ensureTaskEditAccess(ctx.user, input.taskId);
 
-      const createdNote = await createTaskItemNote({
-        taskId: input.taskId,
-        userId: ctx.user.id,
-        note: input.note.trim(),
-      });
+        const createdNote = await createTaskItemNote({
+          taskId: input.taskId,
+          userId: ctx.user.id,
+          note: input.note.trim(),
+        });
 
-      if (task.status !== "concluida") {
-        await updateTaskItem(input.taskId, {});
-      }
+        if (task.status !== "concluida") {
+          await updateTaskItem(input.taskId, {});
+        }
 
-      return createdNote;
-    }),
+        return createdNote;
+      }),
   }),
 
   contracts: router({
@@ -2421,33 +2889,35 @@ export const appRouter = router({
       const { getAllPropertyOwners } = await import("./db");
       return await getAllPropertyOwners();
     }),
-    createQuick: adminProcedure.input(quickPropertyOwnerSchema).mutation(async ({ input }) => {
-      const {
-        createPropertyOwner,
-        getPropertyOwnerByCpf,
-        getUserByCpf,
-        updatePropertyOwner,
-      } = await import("./db");
+    createQuick: adminProcedure
+      .input(quickPropertyOwnerSchema)
+      .mutation(async ({ input }) => {
+        const {
+          createPropertyOwner,
+          getPropertyOwnerByCpf,
+          getUserByCpf,
+          updatePropertyOwner,
+        } = await import("./db");
 
-      const matchedUser = await getUserByCpf(input.cpf);
-      const existingOwner = await getPropertyOwnerByCpf(input.cpf);
+        const matchedUser = await getUserByCpf(input.cpf);
+        const existingOwner = await getPropertyOwnerByCpf(input.cpf);
 
-      if (existingOwner) {
-        return await updatePropertyOwner(existingOwner.id, {
+        if (existingOwner) {
+          return await updatePropertyOwner(existingOwner.id, {
+            name: input.name.trim(),
+            email: input.email.trim().toLowerCase(),
+            userId: matchedUser?.id ?? existingOwner.userId ?? null,
+          });
+        }
+
+        return await createPropertyOwner({
           name: input.name.trim(),
           email: input.email.trim().toLowerCase(),
-          userId: matchedUser?.id ?? existingOwner.userId ?? null,
+          cpf: input.cpf,
+          phone: "",
+          userId: matchedUser?.id ?? null,
         });
-      }
-
-      return await createPropertyOwner({
-        name: input.name.trim(),
-        email: input.email.trim().toLowerCase(),
-        cpf: input.cpf,
-        phone: "",
-        userId: matchedUser?.id ?? null,
-      });
-    }),
+      }),
   }),
 
   contractTemplates: router({
@@ -2455,38 +2925,44 @@ export const appRouter = router({
       const { getContractTemplates } = await import("./db");
       return await getContractTemplates();
     }),
-    extractDocxText: adminProcedure.input(contractTemplateDocxSchema).mutation(async ({ input }) => {
-      const extractedText = await extractDocxTextFromDataUrl(input.dataUrl);
-      return {
-        fileName: input.fileName,
-        mimeType: input.mimeType,
-        extractedText,
-        detectedVariables: detectContractTemplateVariables(extractedText),
-      };
-    }),
-    create: adminProcedure.input(createContractTemplateSchema).mutation(async ({ ctx, input }) => {
-      const { createContractTemplate } = await import("./db");
-      return await createContractTemplate({
-        name: input.name,
-        notes: input.notes?.trim() || null,
-        originalFileName: input.originalFileName,
-        originalMimeType: input.originalMimeType,
-        originalFileData: input.originalFileData,
-        extractedText: input.extractedText,
-        reviewedText: input.reviewedText,
-        variableHighlights: JSON.stringify(input.variableHighlights),
-        createdByUserId: ctx.user.id,
-      });
-    }),
-    update: adminProcedure.input(updateContractTemplateSchema).mutation(async ({ input }) => {
-      const { updateContractTemplate } = await import("./db");
-      return await updateContractTemplate(input.id, {
-        name: input.name,
-        notes: input.notes?.trim() || null,
-        reviewedText: input.reviewedText,
-        variableHighlights: JSON.stringify(input.variableHighlights),
-      });
-    }),
+    extractDocxText: adminProcedure
+      .input(contractTemplateDocxSchema)
+      .mutation(async ({ input }) => {
+        const extractedText = await extractDocxTextFromDataUrl(input.dataUrl);
+        return {
+          fileName: input.fileName,
+          mimeType: input.mimeType,
+          extractedText,
+          detectedVariables: detectContractTemplateVariables(extractedText),
+        };
+      }),
+    create: adminProcedure
+      .input(createContractTemplateSchema)
+      .mutation(async ({ ctx, input }) => {
+        const { createContractTemplate } = await import("./db");
+        return await createContractTemplate({
+          name: input.name,
+          notes: input.notes?.trim() || null,
+          originalFileName: input.originalFileName,
+          originalMimeType: input.originalMimeType,
+          originalFileData: input.originalFileData,
+          extractedText: input.extractedText,
+          reviewedText: input.reviewedText,
+          variableHighlights: JSON.stringify(input.variableHighlights),
+          createdByUserId: ctx.user.id,
+        });
+      }),
+    update: adminProcedure
+      .input(updateContractTemplateSchema)
+      .mutation(async ({ input }) => {
+        const { updateContractTemplate } = await import("./db");
+        return await updateContractTemplate(input.id, {
+          name: input.name,
+          notes: input.notes?.trim() || null,
+          reviewedText: input.reviewedText,
+          variableHighlights: JSON.stringify(input.variableHighlights),
+        });
+      }),
     delete: adminProcedure.input(idSchema).mutation(async ({ input }) => {
       const { deleteContractTemplate } = await import("./db");
       await deleteContractTemplate(input.id);
@@ -2503,188 +2979,289 @@ export const appRouter = router({
       const { getRentalProposalById } = await import("./db");
       const proposal = await getRentalProposalById(input.id);
       if (!proposal) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Proposta de locacao nao encontrada." });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Proposta de locacao nao encontrada.",
+        });
       }
       return proposal;
     }),
-    create: adminProcedure.input(createRentalProposalSchema).mutation(async ({ ctx, input }) => {
-      const { createRentalProposal, getPropertyByIdWithRelations, getPropertyOwnerById, getUserById } = await import("./db");
-      const property = await getPropertyByIdWithRelations(input.propertyId);
-      if (!property) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Imovel nao encontrado." });
-      }
+    create: adminProcedure
+      .input(createRentalProposalSchema)
+      .mutation(async ({ ctx, input }) => {
+        const {
+          createRentalProposal,
+          getPropertyByIdWithRelations,
+          getPropertyOwnerById,
+          getUserById,
+        } = await import("./db");
+        const property = await getPropertyByIdWithRelations(input.propertyId);
+        if (!property) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Imovel nao encontrado.",
+          });
+        }
 
-      const broker = await getUserById(input.brokerUserId);
-      if (!broker || (broker.role !== "corretor" && broker.role !== "administrativo")) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Selecione um corretor responsavel valido." });
-      }
+        const broker = await getUserById(input.brokerUserId);
+        if (
+          !broker ||
+          (broker.role !== "corretor" && broker.role !== "administrativo")
+        ) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Selecione um corretor responsavel valido.",
+          });
+        }
 
-      const tenantUserIds = uniquePositiveIds(input.tenantUserIds?.length ? input.tenantUserIds : [input.tenantUserId]);
-      if (tenantUserIds.length === 0) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Selecione ao menos um locatario." });
-      }
+        const tenantUserIds = uniquePositiveIds(
+          input.tenantUserIds?.length
+            ? input.tenantUserIds
+            : [input.tenantUserId]
+        );
+        if (tenantUserIds.length === 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Selecione ao menos um locatario.",
+          });
+        }
 
-      const tenants = await Promise.all(tenantUserIds.map(id => getUserById(id)));
-      if (tenants.some(tenant => !tenant || tenant.role !== "cliente")) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Selecione locatarios validos." });
-      }
+        const tenants = await Promise.all(
+          tenantUserIds.map(id => getUserById(id))
+        );
+        if (tenants.some(tenant => !tenant || tenant.role !== "cliente")) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Selecione locatarios validos.",
+          });
+        }
 
-      const propertyOwnerIds = property.proprietarios?.length
-        ? property.proprietarios.map((owner: { id: number }) => owner.id)
-        : property.idProprietario
-          ? [property.idProprietario]
-          : [];
-      const ownerIds = uniquePositiveIds(input.ownerIds?.length ? input.ownerIds : propertyOwnerIds);
-      if (ownerIds.length === 0) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Selecione ao menos um proprietario." });
-      }
+        const propertyOwnerIds = property.proprietarios?.length
+          ? property.proprietarios.map((owner: { id: number }) => owner.id)
+          : property.idProprietario
+            ? [property.idProprietario]
+            : [];
+        const ownerIds = uniquePositiveIds(
+          input.ownerIds?.length ? input.ownerIds : propertyOwnerIds
+        );
+        if (ownerIds.length === 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Selecione ao menos um proprietario.",
+          });
+        }
 
-      const owners = await Promise.all(ownerIds.map(id => getPropertyOwnerById(id)));
-      if (owners.some(owner => !owner)) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Selecione proprietarios validos." });
-      }
+        const owners = await Promise.all(
+          ownerIds.map(id => getPropertyOwnerById(id))
+        );
+        if (owners.some(owner => !owner)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Selecione proprietarios validos.",
+          });
+        }
 
-      if (!input.ownerConfirmed) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Confirme os dados basicos dos proprietarios." });
-      }
+        if (!input.ownerConfirmed) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Confirme os dados basicos dos proprietarios.",
+          });
+        }
 
-      if (!input.tenantConfirmed) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Confirme os dados basicos dos locatarios." });
-      }
+        if (!input.tenantConfirmed) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Confirme os dados basicos dos locatarios.",
+          });
+        }
 
-      const contextSnapshot = {
-        property,
-        owner: owners[0] ?? property.proprietario ?? null,
-        owners,
-        broker: toSafeUser(broker),
-        tenant: toSafeUser(tenants[0]!),
-        tenants: tenants.map(tenant => toSafeUser(tenant!)),
-        lease: {
-          leaseTermMonths: input.leaseTermMonths,
-          adjustmentIndex: input.adjustmentIndex,
-          rentAmount: input.rentAmount,
-          condominiumAmount: input.condominiumAmount ?? null,
-          startDate: input.startDate,
-          dueDay: input.dueDay,
-        },
-      };
+        const contextSnapshot = {
+          property,
+          owner: owners[0] ?? property.proprietario ?? null,
+          owners,
+          broker: toSafeUser(broker),
+          tenant: toSafeUser(tenants[0]!),
+          tenants: tenants.map(tenant => toSafeUser(tenant!)),
+          lease: {
+            leaseTermMonths: input.leaseTermMonths,
+            adjustmentIndex: input.adjustmentIndex,
+            rentAmount: input.rentAmount,
+            condominiumAmount: input.condominiumAmount ?? null,
+            startDate: input.startDate,
+            dueDay: input.dueDay,
+          },
+        };
 
-      return await createRentalProposal({
-        status: "rascunho",
-        currentStep: "modelos_contrato",
-        propertyId: input.propertyId,
-        ownerId: ownerIds[0] ?? null,
-        brokerUserId: input.brokerUserId,
-        tenantUserId: tenantUserIds[0],
-        ownerConfirmedAt: new Date(),
-        tenantConfirmedAt: new Date(),
-        leaseTermMonths: input.leaseTermMonths,
-        adjustmentIndex: input.adjustmentIndex,
-        rentAmount: input.rentAmount,
-        condominiumAmount: input.condominiumAmount ?? null,
-        startDate: new Date(`${input.startDate}T00:00:00`),
-        dueDay: input.dueDay,
-        contextSnapshot: JSON.stringify(contextSnapshot),
-        notes: input.notes?.trim() || null,
-        createdByUserId: ctx.user.id,
-      }, { tenantUserIds, ownerIds });
-    }),
-    update: adminProcedure.input(updateRentalProposalSchema).mutation(async ({ input }) => {
-      const {
-        getRentalProposalById,
-        getPropertyByIdWithRelations,
-        getPropertyOwnerById,
-        getUserById,
-        updateRentalProposal,
-      } = await import("./db");
+        return await createRentalProposal(
+          {
+            status: "rascunho",
+            currentStep: "modelos_contrato",
+            propertyId: input.propertyId,
+            ownerId: ownerIds[0] ?? null,
+            brokerUserId: input.brokerUserId,
+            tenantUserId: tenantUserIds[0],
+            ownerConfirmedAt: new Date(),
+            tenantConfirmedAt: new Date(),
+            leaseTermMonths: input.leaseTermMonths,
+            adjustmentIndex: input.adjustmentIndex,
+            rentAmount: input.rentAmount,
+            condominiumAmount: input.condominiumAmount ?? null,
+            startDate: new Date(`${input.startDate}T00:00:00`),
+            dueDay: input.dueDay,
+            contextSnapshot: JSON.stringify(contextSnapshot),
+            notes: input.notes?.trim() || null,
+            createdByUserId: ctx.user.id,
+          },
+          { tenantUserIds, ownerIds }
+        );
+      }),
+    update: adminProcedure
+      .input(updateRentalProposalSchema)
+      .mutation(async ({ input }) => {
+        const {
+          getRentalProposalById,
+          getPropertyByIdWithRelations,
+          getPropertyOwnerById,
+          getUserById,
+          updateRentalProposal,
+        } = await import("./db");
 
-      const currentProposal = await getRentalProposalById(input.id);
-      if (!currentProposal) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Proposta de locacao nao encontrada." });
-      }
+        const currentProposal = await getRentalProposalById(input.id);
+        if (!currentProposal) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Proposta de locacao nao encontrada.",
+          });
+        }
 
-      const property = await getPropertyByIdWithRelations(input.propertyId);
-      if (!property) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Imovel nao encontrado." });
-      }
+        const property = await getPropertyByIdWithRelations(input.propertyId);
+        if (!property) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Imovel nao encontrado.",
+          });
+        }
 
-      const broker = await getUserById(input.brokerUserId);
-      if (!broker || (broker.role !== "corretor" && broker.role !== "administrativo")) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Selecione um corretor responsavel valido." });
-      }
+        const broker = await getUserById(input.brokerUserId);
+        if (
+          !broker ||
+          (broker.role !== "corretor" && broker.role !== "administrativo")
+        ) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Selecione um corretor responsavel valido.",
+          });
+        }
 
-      const tenantUserIds = uniquePositiveIds(input.tenantUserIds?.length ? input.tenantUserIds : [input.tenantUserId]);
-      if (tenantUserIds.length === 0) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Selecione ao menos um locatario." });
-      }
+        const tenantUserIds = uniquePositiveIds(
+          input.tenantUserIds?.length
+            ? input.tenantUserIds
+            : [input.tenantUserId]
+        );
+        if (tenantUserIds.length === 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Selecione ao menos um locatario.",
+          });
+        }
 
-      const tenants = await Promise.all(tenantUserIds.map(id => getUserById(id)));
-      if (tenants.some(tenant => !tenant || tenant.role !== "cliente")) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Selecione locatarios validos." });
-      }
+        const tenants = await Promise.all(
+          tenantUserIds.map(id => getUserById(id))
+        );
+        if (tenants.some(tenant => !tenant || tenant.role !== "cliente")) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Selecione locatarios validos.",
+          });
+        }
 
-      const propertyOwnerIds = property.proprietarios?.length
-        ? property.proprietarios.map((owner: { id: number }) => owner.id)
-        : property.idProprietario
-          ? [property.idProprietario]
-          : [];
-      const ownerIds = uniquePositiveIds(input.ownerIds?.length ? input.ownerIds : propertyOwnerIds);
-      if (ownerIds.length === 0) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Selecione ao menos um proprietario." });
-      }
+        const propertyOwnerIds = property.proprietarios?.length
+          ? property.proprietarios.map((owner: { id: number }) => owner.id)
+          : property.idProprietario
+            ? [property.idProprietario]
+            : [];
+        const ownerIds = uniquePositiveIds(
+          input.ownerIds?.length ? input.ownerIds : propertyOwnerIds
+        );
+        if (ownerIds.length === 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Selecione ao menos um proprietario.",
+          });
+        }
 
-      const owners = await Promise.all(ownerIds.map(id => getPropertyOwnerById(id)));
-      if (owners.some(owner => !owner)) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Selecione proprietarios validos." });
-      }
+        const owners = await Promise.all(
+          ownerIds.map(id => getPropertyOwnerById(id))
+        );
+        if (owners.some(owner => !owner)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Selecione proprietarios validos.",
+          });
+        }
 
-      if (!input.ownerConfirmed) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Confirme os dados basicos dos proprietarios." });
-      }
+        if (!input.ownerConfirmed) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Confirme os dados basicos dos proprietarios.",
+          });
+        }
 
-      if (!input.tenantConfirmed) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Confirme os dados basicos dos locatarios." });
-      }
+        if (!input.tenantConfirmed) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Confirme os dados basicos dos locatarios.",
+          });
+        }
 
-      const contextSnapshot = {
-        property,
-        owner: owners[0] ?? property.proprietario ?? null,
-        owners,
-        broker: toSafeUser(broker),
-        tenant: toSafeUser(tenants[0]!),
-        tenants: tenants.map(tenant => toSafeUser(tenant!)),
-        lease: {
-          leaseTermMonths: input.leaseTermMonths,
-          adjustmentIndex: input.adjustmentIndex,
-          rentAmount: input.rentAmount,
-          condominiumAmount: input.condominiumAmount ?? null,
-          startDate: input.startDate,
-          dueDay: input.dueDay,
-        },
-      };
+        const contextSnapshot = {
+          property,
+          owner: owners[0] ?? property.proprietario ?? null,
+          owners,
+          broker: toSafeUser(broker),
+          tenant: toSafeUser(tenants[0]!),
+          tenants: tenants.map(tenant => toSafeUser(tenant!)),
+          lease: {
+            leaseTermMonths: input.leaseTermMonths,
+            adjustmentIndex: input.adjustmentIndex,
+            rentAmount: input.rentAmount,
+            condominiumAmount: input.condominiumAmount ?? null,
+            startDate: input.startDate,
+            dueDay: input.dueDay,
+          },
+        };
 
-      return await updateRentalProposal(input.id, {
-        propertyId: input.propertyId,
-        ownerId: ownerIds[0] ?? null,
-        brokerUserId: input.brokerUserId,
-        tenantUserId: tenantUserIds[0],
-        ownerConfirmedAt: new Date(),
-        tenantConfirmedAt: new Date(),
-        leaseTermMonths: input.leaseTermMonths,
-        adjustmentIndex: input.adjustmentIndex,
-        rentAmount: input.rentAmount,
-        condominiumAmount: input.condominiumAmount ?? null,
-        startDate: new Date(`${input.startDate}T00:00:00`),
-        dueDay: input.dueDay,
-        contextSnapshot: JSON.stringify(contextSnapshot),
-        notes: input.notes?.trim() || null,
-      }, { tenantUserIds, ownerIds });
-    }),
+        return await updateRentalProposal(
+          input.id,
+          {
+            propertyId: input.propertyId,
+            ownerId: ownerIds[0] ?? null,
+            brokerUserId: input.brokerUserId,
+            tenantUserId: tenantUserIds[0],
+            ownerConfirmedAt: new Date(),
+            tenantConfirmedAt: new Date(),
+            leaseTermMonths: input.leaseTermMonths,
+            adjustmentIndex: input.adjustmentIndex,
+            rentAmount: input.rentAmount,
+            condominiumAmount: input.condominiumAmount ?? null,
+            startDate: new Date(`${input.startDate}T00:00:00`),
+            dueDay: input.dueDay,
+            contextSnapshot: JSON.stringify(contextSnapshot),
+            notes: input.notes?.trim() || null,
+          },
+          { tenantUserIds, ownerIds }
+        );
+      }),
     delete: adminProcedure.input(idSchema).mutation(async ({ input }) => {
-      const { deleteRentalProposal, getRentalProposalById } = await import("./db");
+      const { deleteRentalProposal, getRentalProposalById } = await import(
+        "./db"
+      );
       const proposal = await getRentalProposalById(input.id);
       if (!proposal) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Proposta de locacao nao encontrada." });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Proposta de locacao nao encontrada.",
+        });
       }
       await deleteRentalProposal(input.id);
       return { success: true } as const;
@@ -2698,7 +3275,10 @@ export const appRouter = router({
     }),
     create: clientProcedure.input(z.any()).mutation(async ({ ctx, input }) => {
       const { createDocument } = await import("./db");
-      return await createDocument({ ...(input as any), idUsuario: ctx.user.id });
+      return await createDocument({
+        ...(input as any),
+        idUsuario: ctx.user.id,
+      });
     }),
     updateStatus: adminProcedure.input(z.any()).mutation(async ({ input }) => {
       const { id, status } = input as any;
@@ -2708,56 +3288,71 @@ export const appRouter = router({
   }),
 
   profile: router({
-    update: protectedProcedure.input(profileDetailsSchema).mutation(async ({ ctx, input }) => {
-      const { getUserById, linkPropertyOwnersToUserByCpf, updateUser } = await import("./db");
-      const user = await getUserById(ctx.user.id);
-      if (!user) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Usuario nao encontrado" });
-      }
-      assertRootAdminMutable(user);
-      /*
+    update: protectedProcedure
+      .input(profileDetailsSchema)
+      .mutation(async ({ ctx, input }) => {
+        const { getUserById, linkPropertyOwnersToUserByCpf, updateUser } =
+          await import("./db");
+        const user = await getUserById(ctx.user.id);
+        if (!user) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Usuario nao encontrado",
+          });
+        }
+        assertRootAdminMutable(user);
+        /*
 
         throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
       }
 
       */
-      await ensureUniqueUserIdentity(input.email, input.cpf, ctx.user.id);
-      const normalizedCreci = user.role === "corretor" ? normalizeOptionalCreci(input.creci) : undefined;
+        await ensureUniqueUserIdentity(input.email, input.cpf, ctx.user.id);
+        const normalizedCreci =
+          user.role === "corretor"
+            ? normalizeOptionalCreci(input.creci)
+            : undefined;
 
-      await updateUser(ctx.user.id, {
-        name: input.name.trim(),
-        email: input.email,
-        cpf: input.cpf,
-        phone: input.phone?.trim() || null,
-        creci: user.role === "corretor" ? normalizedCreci || null : null,
-        creciStatus: user.role === "corretor" && normalizedCreci ? "pending" : null,
-        creciVerifiedAt: null,
-        creciVerifiedByUserId: null,
-        birthDate: input.birthDate ? new Date(`${input.birthDate}T00:00:00`) : null,
-        profession: input.profession?.trim() || null,
-        grossMonthlyIncome: input.grossMonthlyIncome ?? null,
-        maritalStatus: input.maritalStatus ?? null,
-        householdIncome: input.householdIncome ?? null,
-        rg: input.rg?.trim() || null,
-        nationality: input.nationality?.trim() || null,
-        address: input.address?.trim() || null,
-        neighborhood: input.neighborhood?.trim() || null,
-        addressNumber: input.addressNumber?.trim() || null,
-        city: input.city?.trim() || null,
-        state: input.state?.trim() || null,
-        zipCode: input.zipCode?.trim() || null,
-        notes: input.notes?.trim() || null,
-      });
-      await linkUserToExistingLeadsByCpf(ctx.user.id, input.cpf);
-      await linkPropertyOwnersToUserByCpf(ctx.user.id, input.cpf);
+        await updateUser(ctx.user.id, {
+          name: input.name.trim(),
+          email: input.email,
+          cpf: input.cpf,
+          phone: input.phone?.trim() || null,
+          creci: user.role === "corretor" ? normalizedCreci || null : null,
+          creciStatus:
+            user.role === "corretor" && normalizedCreci ? "pending" : null,
+          creciVerifiedAt: null,
+          creciVerifiedByUserId: null,
+          birthDate: input.birthDate
+            ? new Date(`${input.birthDate}T00:00:00`)
+            : null,
+          profession: input.profession?.trim() || null,
+          grossMonthlyIncome: input.grossMonthlyIncome ?? null,
+          maritalStatus: input.maritalStatus ?? null,
+          householdIncome: input.householdIncome ?? null,
+          rg: input.rg?.trim() || null,
+          nationality: input.nationality?.trim() || null,
+          address: input.address?.trim() || null,
+          neighborhood: input.neighborhood?.trim() || null,
+          addressNumber: input.addressNumber?.trim() || null,
+          city: input.city?.trim() || null,
+          state: input.state?.trim() || null,
+          zipCode: input.zipCode?.trim() || null,
+          notes: input.notes?.trim() || null,
+        });
+        await linkUserToExistingLeadsByCpf(ctx.user.id, input.cpf);
+        await linkPropertyOwnersToUserByCpf(ctx.user.id, input.cpf);
 
-      const updatedUser = await getUserById(ctx.user.id);
-      if (!updatedUser) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Usuário não encontrado" });
-      }
+        const updatedUser = await getUserById(ctx.user.id);
+        if (!updatedUser) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Usuário não encontrado",
+          });
+        }
 
-      return toSafeUser(updatedUser);
-    }),
+        return toSafeUser(updatedUser);
+      }),
   }),
 
   admin: router({
@@ -2778,23 +3373,121 @@ export const appRouter = router({
       assertRootAdminProfileAccessible(user);
       return user;
     }),
-    propertyOwnerById: adminProcedure.input(idSchema).query(async ({ input }) => {
-      const { getPropertyOwnerById, getUserById } = await import("./db");
-      const owner = await getPropertyOwnerById(input.id);
+    propertyOwnerById: adminProcedure
+      .input(idSchema)
+      .query(async ({ input }) => {
+        const { getPropertyOwnerById, getUserById } = await import("./db");
+        const owner = await getPropertyOwnerById(input.id);
 
-      if (!owner) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Proprietario nao encontrado" });
-      }
+        if (!owner) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Proprietario nao encontrado",
+          });
+        }
 
-      const linkedUser = owner.userId ? await getUserById(owner.userId) : null;
+        const linkedUser = owner.userId
+          ? await getUserById(owner.userId)
+          : null;
 
-      return {
-        ...owner,
-        linkedUser: linkedUser ? toSafeUser(linkedUser) : null,
-      };
-    }),
+        return {
+          ...owner,
+          linkedUser: linkedUser ? toSafeUser(linkedUser) : null,
+        };
+      }),
+    createPropertyOwnerLogin: adminProcedure
+      .input(idSchema)
+      .mutation(async ({ ctx, input }) => {
+        const {
+          createUser,
+          getPropertyOwnerById,
+          getUserByCpf,
+          getUserByEmail,
+          updatePropertyOwner,
+        } = await import("./db");
+        const owner = await getPropertyOwnerById(input.id);
+
+        if (!owner) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Proprietario nao encontrado",
+          });
+        }
+
+        if (owner.userId) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Este proprietario ja possui login cadastrado.",
+          });
+        }
+
+        if (!owner.email || !owner.cpf) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Preencha e-mail e CPF na ficha do proprietario antes de cadastrar login.",
+          });
+        }
+
+        const existingByCpf = await getUserByCpf(owner.cpf);
+        if (existingByCpf) {
+          await updatePropertyOwner(owner.id, { userId: existingByCpf.id });
+          return { user: toSafeUser(existingByCpf), temporaryPassword: null };
+        }
+
+        const existingByEmail = await getUserByEmail(owner.email);
+        if (existingByEmail) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message:
+              "Ja existe um usuario com este e-mail. Vincule pelo CPF ou ajuste o e-mail do proprietario.",
+          });
+        }
+
+        const temporaryPassword = nanoid(12);
+        const createdUser = await createUser({
+          openId: `local:${nanoid()}`,
+          name: owner.name,
+          email: owner.email,
+          cpf: owner.cpf,
+          phone: owner.phone || null,
+          birthDate: owner.birthDate ?? null,
+          profession: owner.profession ?? null,
+          grossMonthlyIncome: owner.grossMonthlyIncome ?? null,
+          maritalStatus: owner.maritalStatus ?? null,
+          householdIncome: owner.householdIncome ?? null,
+          rg: owner.rg ?? null,
+          nationality: owner.nationality ?? null,
+          address: owner.address ?? null,
+          neighborhood: owner.neighborhood ?? null,
+          addressNumber: owner.addressNumber ?? null,
+          city: owner.city ?? null,
+          state: owner.state ?? null,
+          zipCode: owner.zipCode ?? null,
+          notes: owner.notes ?? null,
+          loginMethod: "password",
+          passwordHash: await hashPassword(temporaryPassword),
+          registrationSource: "admin_created",
+          role: "cliente",
+          isActive: 1,
+        });
+
+        await updatePropertyOwner(owner.id, { userId: createdUser.id });
+
+        void sendWelcomeEmail({
+          user: createdUser,
+          req: ctx.req,
+        }).catch(error => {
+          console.error(
+            "[Email] Falha ao enviar boas-vindas para proprietario",
+            error
+          );
+        });
+
+        return { user: toSafeUser(createdUser), temporaryPassword };
+      }),
     markAllNewUsersAsViewed: adminProcedure.mutation(async ({ ctx }) => {
-      const { getAllUsers, getViewedUserIdsByAdmin, markUsersAsViewedByAdmin } = await import("./db");
+      const { getAllUsers, getViewedUserIdsByAdmin, markUsersAsViewedByAdmin } =
+        await import("./db");
       const users = await getAllUsers();
       const viewedIds = new Set(await getViewedUserIdsByAdmin(ctx.user.id));
       const newUserIds = users
@@ -2817,12 +3510,15 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-        const { createUser, linkPropertyOwnersToUserByCpf } = await import("./db");
+        const { createUser, linkPropertyOwnersToUserByCpf } = await import(
+          "./db"
+        );
         await ensureUniqueUserIdentity(input.email, input.cpf);
         const leadLinkPreview = await getLeadLinkPreviewByCpf(input.cpf);
 
         if (leadLinkPreview && !input.confirmedLeadLink) {
-          const interestLabel = leadLinkPreview.latestInterest || "Interesse nao informado";
+          const interestLabel =
+            leadLinkPreview.latestInterest || "Interesse nao informado";
           throw new TRPCError({
             code: "BAD_REQUEST",
             message: `Esse usuario ja e um lead e tem interesse em: ${interestLabel}. O sistema vinculara o acesso de usuario ao lead.`,
@@ -2830,7 +3526,10 @@ export const appRouter = router({
         }
 
         const passwordHash = await hashPassword(input.password);
-        const normalizedCreci = input.role === "corretor" ? normalizeOptionalCreci(input.creci) : undefined;
+        const normalizedCreci =
+          input.role === "corretor"
+            ? normalizeOptionalCreci(input.creci)
+            : undefined;
         const createdUser = await createUser({
           openId: `local:${nanoid()}`,
           name: input.name.trim(),
@@ -2846,14 +3545,20 @@ export const appRouter = router({
           role: input.role,
           isActive: 1,
         });
-        const linkedLeadPreview = await linkUserToExistingLeadsByCpf(createdUser.id, input.cpf);
+        const linkedLeadPreview = await linkUserToExistingLeadsByCpf(
+          createdUser.id,
+          input.cpf
+        );
         await linkPropertyOwnersToUserByCpf(createdUser.id, input.cpf);
 
         void sendWelcomeEmail({
           user: createdUser,
           req: ctx.req,
         }).catch(error => {
-          console.error("[Email] Falha ao enviar boas-vindas para novo usuario criado pelo admin", error);
+          console.error(
+            "[Email] Falha ao enviar boas-vindas para novo usuario criado pelo admin",
+            error
+          );
         });
 
         return {
@@ -2861,72 +3566,87 @@ export const appRouter = router({
           linkedLeadPreview,
         };
       }),
-    updateUser: adminProcedure.input(adminUpdateUserSchema).mutation(async ({ ctx, input }) => {
-      const { getUserById, updateUser } = await import("./db");
-      const actingUser = await getUserById(ctx.user.id);
-      const targetUser = await getUserById(input.id);
+    updateUser: adminProcedure
+      .input(adminUpdateUserSchema)
+      .mutation(async ({ ctx, input }) => {
+        const { getUserById, updateUser } = await import("./db");
+        const actingUser = await getUserById(ctx.user.id);
+        const targetUser = await getUserById(input.id);
 
-      if (!actingUser) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Usuario administrador nao encontrado" });
-      }
-      if (!targetUser) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Usuario nao encontrado" });
-      }
+        if (!actingUser) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Usuario administrador nao encontrado",
+          });
+        }
+        if (!targetUser) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Usuario nao encontrado",
+          });
+        }
 
-      const actingIsRoot = isRootAdmin(actingUser);
-      const targetIsRoot = isRootAdmin(targetUser);
-      const isRootPasswordOnlyUpdate =
-        targetIsRoot &&
-        targetUser.id === ctx.user.id &&
-        input.password !== undefined &&
-        input.name === undefined &&
-        input.role === undefined &&
-        input.isActive === undefined;
+        const actingIsRoot = isRootAdmin(actingUser);
+        const targetIsRoot = isRootAdmin(targetUser);
+        const isRootPasswordOnlyUpdate =
+          targetIsRoot &&
+          targetUser.id === ctx.user.id &&
+          input.password !== undefined &&
+          input.name === undefined &&
+          input.role === undefined &&
+          input.isActive === undefined;
 
-      if (targetIsRoot && !isRootPasswordOnlyUpdate) {
-        assertRootAdminMutable(targetUser);
-      }
+        if (targetIsRoot && !isRootPasswordOnlyUpdate) {
+          assertRootAdminMutable(targetUser);
+        }
 
-      if (ctx.user.id === targetUser.id && input.isActive === 0) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Voce nao pode desativar sua propria conta" });
-      }
+        if (ctx.user.id === targetUser.id && input.isActive === 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Voce nao pode desativar sua propria conta",
+          });
+        }
 
-      if (
-        targetUser.role === "administrativo" &&
-        targetUser.id !== ctx.user.id &&
-        !actingIsRoot
-      ) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Apenas o proprio administrador ou o admin principal podem editar contas administrativas",
-        });
-      }
+        if (
+          targetUser.role === "administrativo" &&
+          targetUser.id !== ctx.user.id &&
+          !actingIsRoot
+        ) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message:
+              "Apenas o proprio administrador ou o admin principal podem editar contas administrativas",
+          });
+        }
 
-      const updatePayload: Record<string, unknown> = {};
+        const updatePayload: Record<string, unknown> = {};
 
-      if (input.name !== undefined) {
-        updatePayload.name = input.name.trim();
-      }
-      if (input.role !== undefined) {
-        updatePayload.role = input.role;
-      }
-      if (input.isActive !== undefined) {
-        updatePayload.isActive = input.isActive;
-      }
-      if (input.password) {
-        updatePayload.passwordHash = await hashPassword(input.password);
-        updatePayload.loginMethod = "password";
-      }
+        if (input.name !== undefined) {
+          updatePayload.name = input.name.trim();
+        }
+        if (input.role !== undefined) {
+          updatePayload.role = input.role;
+        }
+        if (input.isActive !== undefined) {
+          updatePayload.isActive = input.isActive;
+        }
+        if (input.password) {
+          updatePayload.passwordHash = await hashPassword(input.password);
+          updatePayload.loginMethod = "password";
+        }
 
-      await updateUser(input.id, updatePayload);
+        await updateUser(input.id, updatePayload);
 
-      const updatedUser = await getUserById(input.id);
-      if (!updatedUser) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Usuario nao encontrado" });
-      }
+        const updatedUser = await getUserById(input.id);
+        if (!updatedUser) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Usuario nao encontrado",
+          });
+        }
 
-      return toSafeUser(updatedUser);
-    }),
+        return toSafeUser(updatedUser);
+      }),
     validateCreci: adminProcedure
       .input(adminValidateCreciSchema)
       .mutation(async ({ ctx, input }) => {
@@ -2934,15 +3654,24 @@ export const appRouter = router({
         const user = await getUserById(input.userId);
 
         if (!user) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Usuario nao encontrado" });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Usuario nao encontrado",
+          });
         }
 
         if (user.role !== "corretor") {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Somente corretores possuem CRECI" });
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Somente corretores possuem CRECI",
+          });
         }
 
         if (!user.creci || !isValidCreci(user.creci)) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Cadastre um CRECI valido antes de validar" });
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Cadastre um CRECI valido antes de validar",
+          });
         }
 
         await updateUser(input.userId, {
@@ -2954,7 +3683,10 @@ export const appRouter = router({
 
         const updatedUser = await getUserById(input.userId);
         if (!updatedUser) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Usuario nao encontrado" });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Usuario nao encontrado",
+          });
         }
 
         return toSafeUser(updatedUser);
@@ -2967,10 +3699,16 @@ export const appRouter = router({
         const targetUser = await getUserById(input.userId);
 
         if (!actingUser) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Usuario administrador nao encontrado" });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Usuario administrador nao encontrado",
+          });
         }
         if (!targetUser) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Usuario nao encontrado" });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Usuario nao encontrado",
+          });
         }
 
         const actingIsRoot = isRootAdmin(actingUser);
@@ -2983,17 +3721,25 @@ export const appRouter = router({
           });
         }
 
-        if (targetUser.role === "administrativo" && targetUser.id !== ctx.user.id && !actingIsRoot) {
+        if (
+          targetUser.role === "administrativo" &&
+          targetUser.id !== ctx.user.id &&
+          !actingIsRoot
+        ) {
           throw new TRPCError({
             code: "FORBIDDEN",
-            message: "Apenas o admin principal pode excluir outros administradores",
+            message:
+              "Apenas o admin principal pode excluir outros administradores",
           });
         }
 
         const linkedLeads = await getLeadsByUserId(targetUser.id);
 
         return {
-          mode: targetUser.role === "administrativo" ? "revoke_access" : "delete_user",
+          mode:
+            targetUser.role === "administrativo"
+              ? "revoke_access"
+              : "delete_user",
           isSelf: targetUser.id === ctx.user.id,
           user: toSafeUser(targetUser),
           linkedLeads: linkedLeads.map(lead => ({
@@ -3006,86 +3752,102 @@ export const appRouter = router({
           })),
         };
       }),
-    deleteUser: adminProcedure.input(adminDeleteUserSchema).mutation(async ({ ctx, input }) => {
-      const {
-        deleteLeadsByUserId,
-        deleteUserById,
-        getLeadsByUserId,
-        getUserById,
-        revokeUserAccess,
-        unlinkLeadsFromUser,
-      } = await import("./db");
-      const actingUser = await getUserById(ctx.user.id);
-      const targetUser = await getUserById(input.userId);
+    deleteUser: adminProcedure
+      .input(adminDeleteUserSchema)
+      .mutation(async ({ ctx, input }) => {
+        const {
+          deleteLeadsByUserId,
+          deleteUserById,
+          getLeadsByUserId,
+          getUserById,
+          revokeUserAccess,
+          unlinkLeadsFromUser,
+        } = await import("./db");
+        const actingUser = await getUserById(ctx.user.id);
+        const targetUser = await getUserById(input.userId);
 
-      if (!actingUser) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Usuario administrador nao encontrado" });
-      }
-      if (!targetUser) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "Usuario nao encontrado" });
-      }
-
-      const actingIsRoot = isRootAdmin(actingUser);
-      const targetIsRoot = isRootAdmin(targetUser);
-
-      if (targetIsRoot) {
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "O admin principal do sistema nao pode ser excluido",
-        });
-      }
-
-      const linkedLeads = await getLeadsByUserId(targetUser.id);
-
-      if (targetUser.role === "administrativo") {
-        if (targetUser.id !== ctx.user.id && !actingIsRoot) {
+        if (!actingUser) {
           throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "Apenas o admin principal pode excluir outros administradores",
+            code: "NOT_FOUND",
+            message: "Usuario administrador nao encontrado",
+          });
+        }
+        if (!targetUser) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Usuario nao encontrado",
           });
         }
 
-        await revokeUserAccess(targetUser.id);
+        const actingIsRoot = isRootAdmin(actingUser);
+        const targetIsRoot = isRootAdmin(targetUser);
 
-        if (targetUser.id === ctx.user.id) {
-          clearSessionCookie(ctx);
+        if (targetIsRoot) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "O admin principal do sistema nao pode ser excluido",
+          });
         }
 
+        const linkedLeads = await getLeadsByUserId(targetUser.id);
+
+        if (targetUser.role === "administrativo") {
+          if (targetUser.id !== ctx.user.id && !actingIsRoot) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message:
+                "Apenas o admin principal pode excluir outros administradores",
+            });
+          }
+
+          await revokeUserAccess(targetUser.id);
+
+          if (targetUser.id === ctx.user.id) {
+            clearSessionCookie(ctx);
+          }
+
+          return {
+            mode: "revoke_access" as const,
+            isSelf: targetUser.id === ctx.user.id,
+            deletedLeadCount: 0,
+            unlinkedLeadCount: linkedLeads.length,
+          };
+        }
+
+        if (input.deleteLinkedLeads) {
+          await deleteLeadsByUserId(targetUser.id);
+        } else if (linkedLeads.length > 0) {
+          await unlinkLeadsFromUser(targetUser.id);
+        }
+
+        await deleteUserById(targetUser.id);
+
         return {
-          mode: "revoke_access" as const,
+          mode: "delete_user" as const,
           isSelf: targetUser.id === ctx.user.id,
-          deletedLeadCount: 0,
-          unlinkedLeadCount: linkedLeads.length,
+          deletedLeadCount: input.deleteLinkedLeads ? linkedLeads.length : 0,
+          unlinkedLeadCount: input.deleteLinkedLeads ? 0 : linkedLeads.length,
         };
-      }
-
-      if (input.deleteLinkedLeads) {
-        await deleteLeadsByUserId(targetUser.id);
-      } else if (linkedLeads.length > 0) {
-        await unlinkLeadsFromUser(targetUser.id);
-      }
-
-      await deleteUserById(targetUser.id);
-
-      return {
-        mode: "delete_user" as const,
-        isSelf: targetUser.id === ctx.user.id,
-        deletedLeadCount: input.deleteLinkedLeads ? linkedLeads.length : 0,
-        unlinkedLeadCount: input.deleteLinkedLeads ? 0 : linkedLeads.length,
-      };
-    }),
+      }),
     updateUserDetails: adminProcedure
       .input(adminUserDetailsSchema)
       .mutation(async ({ ctx, input }) => {
-        const { getUserById, linkPropertyOwnersToUserByCpf, updateUser } = await import("./db");
+        const { getUserById, linkPropertyOwnersToUserByCpf, updateUser } =
+          await import("./db");
         const actingUser = await getUserById(ctx.user.id);
         const user = await getUserById(input.id);
 
         if (!actingUser) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Usuario administrador nao encontrado" });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Usuario administrador nao encontrado",
+          });
         }
         if (!user) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Usuario nao encontrado" });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Usuario nao encontrado",
+          });
         }
 
         const actingIsRoot = isRootAdmin(actingUser);
@@ -3102,12 +3864,16 @@ export const appRouter = router({
         ) {
           throw new TRPCError({
             code: "FORBIDDEN",
-            message: "Apenas o proprio administrador ou o admin principal podem editar contas administrativas",
+            message:
+              "Apenas o proprio administrador ou o admin principal podem editar contas administrativas",
           });
         }
 
         await ensureUniqueUserIdentity(input.email, input.cpf, input.id);
-        const normalizedCreci = input.role === "corretor" ? normalizeOptionalCreci(input.creci) : undefined;
+        const normalizedCreci =
+          input.role === "corretor"
+            ? normalizeOptionalCreci(input.creci)
+            : undefined;
 
         await updateUser(input.id, {
           name: input.name.trim(),
@@ -3117,11 +3883,15 @@ export const appRouter = router({
           isActive: input.isActive,
           phone: input.phone?.trim() || null,
           creci: input.role === "corretor" ? normalizedCreci || null : null,
-          creciStatus: input.role === "corretor" && normalizedCreci ? "verified" : null,
-          creciVerifiedAt: input.role === "corretor" && normalizedCreci ? new Date() : null,
+          creciStatus:
+            input.role === "corretor" && normalizedCreci ? "verified" : null,
+          creciVerifiedAt:
+            input.role === "corretor" && normalizedCreci ? new Date() : null,
           creciVerifiedByUserId:
             input.role === "corretor" && normalizedCreci ? ctx.user.id : null,
-          birthDate: input.birthDate ? new Date(`${input.birthDate}T00:00:00`) : null,
+          birthDate: input.birthDate
+            ? new Date(`${input.birthDate}T00:00:00`)
+            : null,
           profession: input.profession?.trim() || null,
           grossMonthlyIncome: input.grossMonthlyIncome ?? null,
           maritalStatus: input.maritalStatus ?? null,
@@ -3141,7 +3911,10 @@ export const appRouter = router({
 
         const updatedUser = await getUserById(input.id);
         if (!updatedUser) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Usuario nao encontrado" });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Usuario nao encontrado",
+          });
         }
 
         return toSafeUser(updatedUser);
@@ -3149,15 +3922,25 @@ export const appRouter = router({
     updatePropertyOwnerDetails: adminProcedure
       .input(propertyOwnerDetailsSchema)
       .mutation(async ({ input }) => {
-        const { getPropertyOwnerByCpf, getPropertyOwnersByEmail, getUserByCpf, updatePropertyOwner } = await import("./db");
+        const {
+          getPropertyOwnerByCpf,
+          getPropertyOwnersByEmail,
+          getUserByCpf,
+          updatePropertyOwner,
+        } = await import("./db");
         const duplicatedOwner = await getPropertyOwnerByCpf(input.cpf);
 
         if (duplicatedOwner && duplicatedOwner.id !== input.id) {
-          throw new TRPCError({ code: "CONFLICT", message: "CPF ja cadastrado para outro proprietario" });
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "CPF ja cadastrado para outro proprietario",
+          });
         }
 
         const ownersWithSameEmail = await getPropertyOwnersByEmail(input.email);
-        const emailConflict = ownersWithSameEmail.find(owner => owner.id !== input.id && owner.cpf !== input.cpf);
+        const emailConflict = ownersWithSameEmail.find(
+          owner => owner.id !== input.id && owner.cpf !== input.cpf
+        );
 
         if (emailConflict) {
           throw new TRPCError({
@@ -3175,6 +3958,21 @@ export const appRouter = router({
           email: input.email,
           cpf: input.cpf,
           phone: input.phone.trim(),
+          birthDate: input.birthDate
+            ? new Date(`${input.birthDate}T00:00:00`)
+            : null,
+          profession: input.profession?.trim() || null,
+          grossMonthlyIncome: input.grossMonthlyIncome ?? null,
+          maritalStatus: input.maritalStatus ?? null,
+          householdIncome: input.householdIncome ?? null,
+          rg: input.rg?.trim() || null,
+          nationality: input.nationality?.trim() || null,
+          address: input.address?.trim() || null,
+          neighborhood: input.neighborhood?.trim() || null,
+          addressNumber: input.addressNumber?.trim() || null,
+          city: input.city?.trim() || null,
+          state: input.state?.trim() || null,
+          zipCode: input.zipCode?.trim() || null,
           notes: input.notes?.trim() || null,
           userId: linkedUser?.id ?? null,
         });
@@ -3192,9 +3990,16 @@ export const appRouter = router({
         const targetUser = await getUserById(input.id);
 
         if (!actingUser) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Usuario administrador nao encontrado" });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Usuario administrador nao encontrado",
+          });
         }
-        if (targetUser && isRootAdmin(targetUser) && input.role !== "administrativo") {
+        if (
+          targetUser &&
+          isRootAdmin(targetUser) &&
+          input.role !== "administrativo"
+        ) {
           throw new TRPCError({
             code: "FORBIDDEN",
             message: "O admin principal do sistema nao pode perder permissao",
@@ -3207,7 +4012,8 @@ export const appRouter = router({
         ) {
           throw new TRPCError({
             code: "FORBIDDEN",
-            message: "Apenas o admin principal pode alterar outros administradores",
+            message:
+              "Apenas o admin principal pode alterar outros administradores",
           });
         }
 

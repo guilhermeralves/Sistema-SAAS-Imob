@@ -2,12 +2,14 @@ import { useEffect, useMemo, useRef, useState, type ImgHTMLAttributes } from "re
 import { cn } from "@/lib/utils";
 import {
   PROPERTY_IMAGE_REQUEST_HEADER,
+  type PropertyImageVariant,
   toPropertyImageMediaEndpoint,
 } from "@/lib/property-image";
 
 type ProtectedPropertyImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "src"> & {
   src?: string | null;
   fallbackSrc?: string;
+  variant?: PropertyImageVariant;
 };
 
 const INLINE_FALLBACK_SVG =
@@ -17,6 +19,7 @@ const DEFAULT_FALLBACK_SRC = INLINE_FALLBACK_SVG;
 export default function ProtectedPropertyImage({
   src,
   fallbackSrc = DEFAULT_FALLBACK_SRC,
+  variant = "large",
   className,
   style,
   onContextMenu,
@@ -26,8 +29,8 @@ export default function ProtectedPropertyImage({
   const safeFallback = fallbackSrc || INLINE_FALLBACK_SVG;
   const normalizedSource = src?.trim() || safeFallback;
   const mediaEndpoint = useMemo(
-    () => toPropertyImageMediaEndpoint(normalizedSource),
-    [normalizedSource]
+    () => toPropertyImageMediaEndpoint(normalizedSource, variant),
+    [normalizedSource, variant]
   );
   const [renderedSrc, setRenderedSrc] = useState<string>(normalizedSource);
   const activeBlobUrlRef = useRef<string | null>(null);

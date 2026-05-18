@@ -269,6 +269,7 @@ export default function Home() {
                       <div className="relative h-56 overflow-hidden">
                         <ProtectedPropertyImage
                           src={getFirstPhoto(imovel.fotos)}
+                          variant="thumb"
                           alt={imovel.titulo}
                           className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
                         />

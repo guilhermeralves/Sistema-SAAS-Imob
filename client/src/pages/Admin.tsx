@@ -610,8 +610,9 @@ export function AdminModule() {
     }
 
     return (
-      <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white/80">
-        <Table>
+      <div className="space-y-3">
+        <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white/80">
+          <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Título</TableHead>
@@ -633,7 +634,7 @@ export function AdminModule() {
                 <TableRow
                   key={property.id}
                   data-property-row={property.id}
-                  className={property.id === highlightedPropertyId ? "bg-primary/5 ring-1 ring-primary/20" : ""}
+                  className={property.id === highlightedPropertyId ? "bg-sky-100/80 ring-1 ring-sky-200" : ""}
                 >
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-2">
@@ -675,7 +676,7 @@ export function AdminModule() {
                   <TableCell>
                     <div className="flex items-center justify-end gap-2">
                       <Button variant="outline" size="icon" asChild className="h-8 w-8">
-                        <Link href={`/admin/imoveis/${property.id}`}>
+                        <Link href={`/imoveis/${property.id}?editar=1`}>
                           <a aria-label={`Abrir ficha do imóvel ${property.titulo}`}>
                             <Settings2 className="h-4 w-4" />
                           </a>
@@ -696,7 +697,8 @@ export function AdminModule() {
               );
             })}
           </TableBody>
-        </Table>
+          </Table>
+        </div>
       </div>
     );
   };

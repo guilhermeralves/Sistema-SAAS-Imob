@@ -1,4 +1,4 @@
-﻿import { useMemo, useState, type ChangeEvent } from "react";
+﻿import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import Layout from "@/components/Layout";
 import {
@@ -13,6 +13,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import MoneyInput from "@/components/MoneyInput";
 import ProtectedPropertyImage from "@/components/ProtectedPropertyImage";
 import {
   Dialog,
@@ -29,7 +31,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { lookupCep } from "@/lib/cep";
+import { formatCpf, isValidCpf, normalizeCpf } from "@/lib/cpf";
+import { parseMoneyCentsInput } from "@/lib/money";
+import { formatPhoneNumber } from "@/lib/phone";
 import { trpc } from "@/lib/trpc";
+import { useUnsavedChangesNavigationGuard } from "@/hooks/useUnsavedChangesNavigationGuard";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
   ArrowLeft,
@@ -39,10 +54,12 @@ import {
   Download,
   Eye,
   FileText,
+  ImagePlus,
   MapPin,
   MessageCircle,
   MoreHorizontal,
   Pencil,
+  Plus,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -50,12 +67,196 @@ import { toast } from "sonner";
 
 const WHATSAPP_NUMBER = "5511999999999";
 const CONTACT_INTEREST_PROPERTY_STORAGE_KEY = "afg:contact-interest-property";
+const LEGAL_FIELD_CLASS = "rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
   }).format(value / 100);
+}
+
+type PropertyEditFormState = {
+  titulo: string;
+  descricao: string;
+  tipo: string;
+  finalidade: string;
+  idCorretor: string;
+  valor: string;
+  valorLocacao: string;
+  area: string;
+  quartos: string;
+  banheiros: string;
+  vagas: string;
+  endereco: string;
+  numero: string;
+  bairro: string;
+  cidade: string;
+  estado: string;
+  cep: string;
+  destaque: string;
+  ownerName: string;
+  ownerEmail: string;
+  ownerCpf: string;
+  ownerPhone: string;
+};
+
+type LegalFormState = {
+  inscricaoImobiliaria: string;
+  matriculaRegistro: string;
+  cartorioRegistro: string;
+  registroMunicipal: string;
+  informacoesLegais: string;
+  observacoesJuridicas: string;
+};
+
+const EMPTY_LEGAL_FORM: LegalFormState = {
+  inscricaoImobiliaria: "",
+  matriculaRegistro: "",
+  cartorioRegistro: "",
+  registroMunicipal: "",
+  informacoesLegais: "",
+  observacoesJuridicas: "",
+};
+
+function createEmptyEditForm(): PropertyEditFormState {
+  return {
+    titulo: "",
+    descricao: "",
+    tipo: "apartamento",
+    finalidade: "venda",
+    idCorretor: "",
+    valor: "",
+    valorLocacao: "",
+    area: "",
+    quartos: "",
+    banheiros: "",
+    vagas: "",
+    endereco: "",
+    numero: "",
+    bairro: "",
+    cidade: "",
+    estado: "",
+    cep: "",
+    destaque: "0",
+    ownerName: "",
+    ownerEmail: "",
+    ownerCpf: "",
+    ownerPhone: "",
+  };
+}
+
+function formatZipCode(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 5) return digits;
+  return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      if (!result) {
+        reject(new Error("Nao foi possivel ler o arquivo selecionado."));
+        return;
+      }
+      resolve(result);
+    };
+    reader.onerror = () => reject(new Error("Nao foi possivel ler o arquivo selecionado."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function parsePropertyPhotos(value: string | null | undefined) {
+  try {
+    const parsed = value ? JSON.parse(value) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function buildPropertyEditForm(property: {
+  titulo?: string | null;
+  descricao?: string | null;
+  tipo?: string | null;
+  finalidade?: string | null;
+  idCorretor?: number | null;
+  valor?: number | null;
+  valorLocacao?: number | null;
+  area?: number | null;
+  quartos?: number | null;
+  banheiros?: number | null;
+  vagas?: number | null;
+  endereco?: string | null;
+  numero?: string | null;
+  bairro?: string | null;
+  cidade?: string | null;
+  estado?: string | null;
+  cep?: string | null;
+  destaque?: number | null;
+  proprietario?: {
+    name?: string | null;
+    email?: string | null;
+    cpf?: string | null;
+    phone?: string | null;
+  } | null;
+}): PropertyEditFormState {
+  return {
+    titulo: property.titulo || "",
+    descricao: property.descricao || "",
+    tipo: property.tipo || "apartamento",
+    finalidade: property.finalidade || "venda",
+    idCorretor: property.idCorretor ? String(property.idCorretor) : "",
+    valor: property.valor ? String(property.valor) : "",
+    valorLocacao: property.valorLocacao ? String(property.valorLocacao) : "",
+    area: property.area?.toString() || "",
+    quartos: property.quartos?.toString() || "",
+    banheiros: property.banheiros?.toString() || "",
+    vagas: property.vagas?.toString() || "",
+    endereco: property.endereco || "",
+    numero: property.numero || "",
+    bairro: property.bairro || "",
+    cidade: property.cidade || "",
+    estado: property.estado || "",
+    cep: property.cep || "",
+    destaque: String(property.destaque ?? 0),
+    ownerName: property.proprietario?.name || "",
+    ownerEmail: property.proprietario?.email || "",
+    ownerCpf: property.proprietario?.cpf || "",
+    ownerPhone: property.proprietario?.phone || "",
+  };
+}
+
+function buildLegalForm(property: {
+  inscricaoImobiliaria?: string | null;
+  matriculaRegistro?: string | null;
+  cartorioRegistro?: string | null;
+  registroMunicipal?: string | null;
+  informacoesLegais?: string | null;
+  observacoesJuridicas?: string | null;
+}): LegalFormState {
+  return {
+    inscricaoImobiliaria: property.inscricaoImobiliaria ?? "",
+    matriculaRegistro: property.matriculaRegistro ?? "",
+    cartorioRegistro: property.cartorioRegistro ?? "",
+    registroMunicipal: property.registroMunicipal ?? "",
+    informacoesLegais: property.informacoesLegais ?? "",
+    observacoesJuridicas: property.observacoesJuridicas ?? "",
+  };
+}
+
+function createPropertyEditSnapshot(
+  editForm: PropertyEditFormState,
+  legalForm: LegalFormState,
+  photos: string[]
+) {
+  return JSON.stringify({
+    editForm,
+    legalForm,
+    photos,
+  });
 }
 
 function getPropertyStatusPresentation(status: string | null | undefined) {
@@ -90,6 +291,7 @@ function getPropertyStatusPresentation(status: string | null | undefined) {
 
 export default function ImovelDetalhes() {
   const { user, isAuthenticated } = useAuth();
+  const utils = trpc.useUtils();
   const [, setLocation] = useLocation();
   const [, params] = useRoute("/imoveis/:id");
   const id = params?.id ? parseInt(params.id, 10) : 0;
@@ -97,6 +299,10 @@ export default function ImovelDetalhes() {
     typeof window !== "undefined"
       ? new URLSearchParams(window.location.search).get("fromRentalProposal")
       : null;
+  const shouldStartEditing =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("editar") === "1"
+      : false;
   const backHref = fromRentalProposalId
     ? `/admin/modulos/locacoes/propostas/${fromRentalProposalId}`
     : "/imoveis";
@@ -105,22 +311,46 @@ export default function ImovelDetalhes() {
   const [documentsOpen, setDocumentsOpen] = useState(false);
   const [locationChoiceOpen, setLocationChoiceOpen] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState(false);
+  const [isEditingProperty, setIsEditingProperty] = useState(false);
+  const [editForm, setEditForm] = useState<PropertyEditFormState>(createEmptyEditForm);
+  const [editingPhotoUrls, setEditingPhotoUrls] = useState<string[]>([]);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [cepLoading, setCepLoading] = useState(false);
+  const [cepError, setCepError] = useState("");
+  const cepLookupTimeoutRef = useRef<number | null>(null);
+  const [legalForm, setLegalForm] = useState<LegalFormState>(EMPTY_LEGAL_FORM);
+  const [initialPropertyEditSnapshot, setInitialPropertyEditSnapshot] = useState("");
   const [documentPendingDelete, setDocumentPendingDelete] = useState<number | null>(null);
   const [documentPendingRename, setDocumentPendingRename] = useState<{ id: number; nomeArquivo: string } | null>(null);
 
   const { data: imovel, isLoading } = trpc.properties.getById.useQuery({ id });
+  const { data: adminUsers } = trpc.admin.users.useQuery(undefined, {
+    enabled: isAuthenticated && user?.role === "administrativo",
+  });
+
+  const activeResponsibleUsers = useMemo(
+    () =>
+      adminUsers?.filter(
+        candidate =>
+          (candidate.role === "corretor" || candidate.role === "administrativo") &&
+          candidate.isActive === 1 &&
+          !(candidate.role === "administrativo" && candidate.registrationSource === "bootstrap")
+      ) || [],
+    [adminUsers]
+  );
 
   const canManageProperty =
     isAuthenticated &&
     user &&
     imovel &&
-    (user.role === "administrativo" || (user.role === "corretor" && user.id === imovel.idCorretor));
+    (user.role === "administrativo" ||
+      (user.role === "corretor" && (user.id === imovel.idCorretor || user.id === imovel.createdByUserId)));
   const isAdminViewer = user?.role === "administrativo";
 
   const propertyDocuments = trpc.properties.documents.useQuery(
     { idImovel: id },
     {
-      enabled: Boolean(documentsOpen && canManageProperty && id),
+      enabled: Boolean((documentsOpen || (isEditingProperty && canManageProperty)) && canManageProperty && id),
       refetchOnWindowFocus: false,
     }
   );
@@ -159,6 +389,40 @@ export default function ImovelDetalhes() {
     },
   });
 
+  const updateProperty = trpc.properties.update.useMutation({
+    onError: error => {
+      toast.error(error.message || "Nao foi possivel atualizar o imovel.");
+    },
+  });
+
+  const uploadPhotoMutation = trpc.properties.uploadPhoto.useMutation();
+  const deleteUploadedPhotoMutation = trpc.properties.deleteUploadedPhoto.useMutation();
+  const updateLegalDetails = trpc.properties.updateLegalDetails.useMutation({
+    onError: error => {
+      toast.error(error.message || "Nao foi possivel salvar os dados legais do imovel.");
+    },
+  });
+
+  useEffect(() => {
+    if (!imovel || isEditingProperty) return;
+
+    setLegalForm(buildLegalForm(imovel));
+  }, [imovel, isEditingProperty]);
+
+  useEffect(() => {
+    if (!shouldStartEditing || !imovel || !canManageProperty || isEditingProperty) return;
+
+    const nextEditForm = buildPropertyEditForm(imovel);
+    const nextLegalForm = buildLegalForm(imovel);
+    const nextPhotos = parsePropertyPhotos(imovel.fotos);
+
+    setEditForm(nextEditForm);
+    setLegalForm(nextLegalForm);
+    setEditingPhotoUrls(nextPhotos);
+    setInitialPropertyEditSnapshot(createPropertyEditSnapshot(nextEditForm, nextLegalForm, nextPhotos));
+    setIsEditingProperty(true);
+  }, [canManageProperty, imovel, isEditingProperty, shouldStartEditing]);
+
   const propertyStatus = useMemo(
     () => getPropertyStatusPresentation(imovel?.status),
     [imovel?.status]
@@ -177,6 +441,19 @@ export default function ImovelDetalhes() {
     (isAdminViewer || isBrokerViewer) &&
       (imovel?.corretorResponsavel || (shouldShowOwnerInVinculos && propertyOwners.length > 0))
   );
+  const currentPropertyEditSnapshot = useMemo(
+    () => createPropertyEditSnapshot(editForm, legalForm, editingPhotoUrls),
+    [editForm, editingPhotoUrls, legalForm]
+  );
+  const hasUnsavedPropertyChanges = Boolean(
+    isEditingProperty &&
+      initialPropertyEditSnapshot &&
+      currentPropertyEditSnapshot !== initialPropertyEditSnapshot
+  );
+  const { requestNavigation, UnsavedChangesDialog } = useUnsavedChangesNavigationGuard({
+    isDirty: hasUnsavedPropertyChanges,
+    shouldAllowPath: path => path.startsWith(`/imoveis/${id}`),
+  });
 
   if (isLoading) {
     return (
@@ -337,11 +614,478 @@ export default function ImovelDetalhes() {
   const handleGoToPropertyDetails = () => {
     const targetPath =
       user?.role === "administrativo"
-        ? `/admin?highlightProperty=${imovel.id}`
+        ? `/admin/modulos/imoveis?highlightProperty=${imovel.id}`
         : `/meus-imoveis?highlightProperty=${imovel.id}`;
 
-    setLocation(targetPath);
+    requestNavigation(targetPath);
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  };
+
+  const handleEditProperty = () => {
+    const nextEditForm = buildPropertyEditForm(imovel);
+    const nextLegalForm = buildLegalForm(imovel);
+    const nextPhotos = Array.isArray(fotos) ? fotos : [];
+
+    setEditForm(nextEditForm);
+    setLegalForm(nextLegalForm);
+    setEditingPhotoUrls(nextPhotos);
+    setInitialPropertyEditSnapshot(createPropertyEditSnapshot(nextEditForm, nextLegalForm, nextPhotos));
+    setIsEditingProperty(true);
+    window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+  };
+
+  const handleZipCodeChange = (value: string) => {
+    const formattedValue = formatZipCode(value);
+    setEditForm(current => ({ ...current, cep: formattedValue }));
+    setCepError("");
+
+    if (cepLookupTimeoutRef.current !== null) {
+      window.clearTimeout(cepLookupTimeoutRef.current);
+    }
+
+    if (formattedValue.replace(/\D/g, "").length < 8) {
+      setCepLoading(false);
+      return;
+    }
+
+    setCepLoading(true);
+    cepLookupTimeoutRef.current = window.setTimeout(async () => {
+      const result = await lookupCep(formattedValue);
+
+      if (result.status !== "success") {
+        setCepError(
+          result.status === "not_found"
+            ? "CEP nao encontrado"
+            : "Servico de CEP indisponivel no momento"
+        );
+        setCepLoading(false);
+        return;
+      }
+
+      setEditForm(current => ({
+        ...current,
+        cep: formattedValue,
+        endereco: result.data.endereco,
+        bairro: result.data.bairro,
+        cidade: result.data.cidade,
+        estado: result.data.estado,
+      }));
+      setCepError("");
+      setCepLoading(false);
+    }, 500);
+  };
+
+  const handleUploadEditPhotos = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+    if (!files.length) return;
+
+    const validFiles = files.filter(file => file.type.startsWith("image/"));
+    if (!validFiles.length) {
+      toast.error("Selecione ao menos uma imagem valida.");
+      return;
+    }
+
+    setUploadingPhoto(true);
+    try {
+      for (const file of validFiles) {
+        const uploaded = await uploadPhotoMutation.mutateAsync({
+          fileName: file.name,
+          dataUrl: await readFileAsDataUrl(file),
+        });
+        setEditingPhotoUrls(current => [...current, uploaded.url]);
+      }
+      toast.success("Foto adicionada.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Nao foi possivel enviar a imagem.");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  const handleRemoveEditPhoto = async (index: number) => {
+    const currentUrl = editingPhotoUrls[index];
+    setEditingPhotoUrls(current => current.filter((_, currentIndex) => currentIndex !== index));
+
+    try {
+      if (currentUrl) {
+        await deleteUploadedPhotoMutation.mutateAsync({ url: currentUrl });
+      }
+    } catch {
+      // A imagem pode ser antiga/remota; remover a referencia no salvamento basta.
+    }
+  };
+
+  const handlePhotoDragStart = (event: React.DragEvent<HTMLDivElement>, index: number) => {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", String(index));
+  };
+
+  const handlePhotoDrop = (event: React.DragEvent<HTMLDivElement>, targetIndex: number) => {
+    event.preventDefault();
+    const sourceIndex = Number(event.dataTransfer.getData("text/plain"));
+
+    if (!Number.isInteger(sourceIndex) || sourceIndex === targetIndex) return;
+
+    setEditingPhotoUrls(current => {
+      if (sourceIndex < 0 || sourceIndex >= current.length || targetIndex < 0 || targetIndex >= current.length) {
+        return current;
+      }
+
+      const next = [...current];
+      const [movedPhoto] = next.splice(sourceIndex, 1);
+      next.splice(targetIndex, 0, movedPhoto);
+      return next;
+    });
+  };
+
+  const submitPropertyEdit = async () => {
+    const isRentalOnly = editForm.finalidade === "locacao";
+    const mainValue = isRentalOnly ? editForm.valorLocacao : editForm.valor;
+
+    if (!editForm.titulo || !mainValue || !editForm.endereco || !editForm.cidade || !editForm.estado) {
+      toast.error("Preencha todos os campos obrigatorios.");
+      return;
+    }
+    if (user?.role === "administrativo" && !editForm.idCorretor) {
+      toast.error("Selecione o responsavel pelo imovel.");
+      return;
+    }
+    if (!editForm.ownerName || !editForm.ownerPhone) {
+      toast.error("Preencha nome e telefone do proprietario.");
+      return;
+    }
+    if (editForm.ownerCpf && !isValidCpf(editForm.ownerCpf)) {
+      toast.error("CPF do proprietario invalido.");
+      return;
+    }
+
+    const editedOwner = {
+      name: editForm.ownerName,
+      email: editForm.ownerEmail.trim().toLowerCase() || undefined,
+      cpf: editForm.ownerCpf ? normalizeCpf(editForm.ownerCpf) : undefined,
+      phone: editForm.ownerPhone,
+    };
+    const ownersPayload = propertyOwners.length
+      ? propertyOwners.map((owner: { name: string; email?: string | null; cpf?: string | null; phone: string }, index: number) =>
+          index === 0
+            ? editedOwner
+            : {
+                name: owner.name,
+                email: owner.email?.trim().toLowerCase() || undefined,
+                cpf: owner.cpf ? normalizeCpf(owner.cpf) : undefined,
+                phone: owner.phone,
+              }
+        )
+      : [editedOwner];
+
+    try {
+      await updateProperty.mutateAsync({
+        id: imovel.id,
+        titulo: editForm.titulo,
+        descricao: editForm.descricao,
+        tipo: editForm.tipo,
+        finalidade: editForm.finalidade,
+        valor: parseMoneyCentsInput(isRentalOnly ? editForm.valorLocacao : editForm.valor) ?? 0,
+        valorLocacao: isRentalOnly || editForm.finalidade === "ambos"
+          ? parseMoneyCentsInput(editForm.valorLocacao)
+          : null,
+        area: editForm.area ? parseInt(editForm.area, 10) : null,
+        quartos: editForm.quartos ? parseInt(editForm.quartos, 10) : null,
+        banheiros: editForm.banheiros ? parseInt(editForm.banheiros, 10) : null,
+        vagas: editForm.vagas ? parseInt(editForm.vagas, 10) : null,
+        endereco: editForm.endereco,
+        numero: editForm.numero || null,
+        bairro: editForm.bairro,
+        cidade: editForm.cidade,
+        estado: editForm.estado,
+        cep: editForm.cep,
+        destaque: parseInt(editForm.destaque, 10),
+        idCorretor: editForm.idCorretor ? parseInt(editForm.idCorretor, 10) : undefined,
+        fotos: JSON.stringify(editingPhotoUrls),
+        owner: editedOwner,
+        owners: ownersPayload,
+      });
+
+      if (isAdminViewer) {
+        await updateLegalDetails.mutateAsync({
+          id: imovel.id,
+          inscricaoImobiliaria: legalForm.inscricaoImobiliaria || null,
+          matriculaRegistro: legalForm.matriculaRegistro || null,
+          cartorioRegistro: legalForm.cartorioRegistro || null,
+          registroMunicipal: legalForm.registroMunicipal || null,
+          informacoesLegais: legalForm.informacoesLegais || null,
+          observacoesJuridicas: legalForm.observacoesJuridicas || null,
+        });
+      }
+
+      setInitialPropertyEditSnapshot(createPropertyEditSnapshot(editForm, legalForm, editingPhotoUrls));
+      toast.success("Imovel atualizado com sucesso.");
+      setIsEditingProperty(false);
+      await utils.properties.getById.invalidate({ id });
+      await utils.properties.getByIdAdmin.invalidate({ id });
+      await utils.properties.list.invalidate();
+      await utils.properties.myProperties.invalidate();
+    } catch {
+      // As mensagens de erro sao tratadas nas mutations.
+    }
+  };
+
+  const renderLegalDetailsCard = (editable = true) => {
+    if (!isAdminViewer) return null;
+
+    const readOnlyValue = (value: string) => value.trim() || "Nao informado";
+
+    return (
+      <Card
+        className={
+          editable
+            ? "rounded-[24px] border-slate-100 bg-slate-50/70 shadow-none"
+            : "rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]"
+        }
+      >
+        <CardContent className={editable ? "space-y-5 p-5" : "space-y-5 p-6 md:p-7"}>
+          <div>
+            <h2 className="text-base font-semibold text-slate-950">Dados legais e juridicos</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Informacoes oficiais, registros e observacoes juridicas do imovel.
+            </p>
+          </div>
+
+          {editable ? (
+            <>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="legal-inscricao-imobiliaria">Inscricao imobiliaria</Label>
+                  <Input
+                    id="legal-inscricao-imobiliaria"
+                    className={LEGAL_FIELD_CLASS}
+                    value={legalForm.inscricaoImobiliaria}
+                    onChange={event =>
+                      setLegalForm(current => ({ ...current, inscricaoImobiliaria: event.target.value }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="legal-matricula-registro">Matricula do registro</Label>
+                  <Input
+                    id="legal-matricula-registro"
+                    className={LEGAL_FIELD_CLASS}
+                    value={legalForm.matriculaRegistro}
+                    onChange={event =>
+                      setLegalForm(current => ({ ...current, matriculaRegistro: event.target.value }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="legal-observacoes-juridicas">Observacoes juridicas</Label>
+                <Textarea
+                  id="legal-observacoes-juridicas"
+                  className="min-h-[120px] rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
+                  value={legalForm.observacoesJuridicas}
+                  onChange={event =>
+                    setLegalForm(current => ({ ...current, observacoesJuridicas: event.target.value }))
+                  }
+                />
+              </div>
+            </>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Inscricao imobiliaria</p>
+                  <p className="mt-2 text-sm font-medium text-slate-900">
+                    {readOnlyValue(legalForm.inscricaoImobiliaria)}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Matricula do registro</p>
+                  <p className="mt-2 text-sm font-medium text-slate-900">
+                    {readOnlyValue(legalForm.matriculaRegistro)}
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Observacoes juridicas</p>
+                <p className="mt-2 whitespace-pre-line text-sm leading-6 text-slate-700">
+                  {readOnlyValue(legalForm.observacoesJuridicas)}
+                </p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const renderValuesCard = () => (
+    <div className="rounded-[24px] border border-slate-100 bg-slate-50/70 p-5">
+      <h2 className="mb-4 text-base font-semibold text-slate-950">Valores e caracteristicas</h2>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {editForm.finalidade === "locacao" ? (
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor="edit-valor-locacao">Valor de locacao (R$) *</Label>
+            <MoneyInput
+              id="edit-valor-locacao"
+              value={editForm.valorLocacao}
+              onValueChange={value => setEditForm({ ...editForm, valorLocacao: value })}
+              placeholder="R$ 0,00"
+            />
+          </div>
+        ) : editForm.finalidade === "ambos" ? (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="edit-valor">Valor de venda (R$) *</Label>
+              <MoneyInput
+                id="edit-valor"
+                value={editForm.valor}
+                onValueChange={value => setEditForm({ ...editForm, valor: value })}
+                placeholder="R$ 0,00"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-valor-locacao">Valor de locacao (R$)</Label>
+              <MoneyInput
+                id="edit-valor-locacao"
+                value={editForm.valorLocacao}
+                onValueChange={value => setEditForm({ ...editForm, valorLocacao: value })}
+                placeholder="R$ 0,00"
+              />
+            </div>
+          </>
+        ) : (
+          <div className="space-y-2 sm:col-span-2">
+            <Label htmlFor="edit-valor">Valor de venda (R$) *</Label>
+            <MoneyInput
+              id="edit-valor"
+              value={editForm.valor}
+              onValueChange={value => setEditForm({ ...editForm, valor: value })}
+              placeholder="R$ 0,00"
+            />
+          </div>
+        )}
+        <div className="space-y-2">
+          <Label htmlFor="edit-area">Area (m2)</Label>
+          <Input
+            id="edit-area"
+            type="number"
+            value={editForm.area}
+            onChange={event => setEditForm({ ...editForm, area: event.target.value })}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="edit-quartos">Quartos</Label>
+          <Input
+            id="edit-quartos"
+            type="number"
+            value={editForm.quartos}
+            onChange={event => setEditForm({ ...editForm, quartos: event.target.value })}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="edit-banheiros">Banheiros</Label>
+          <Input
+            id="edit-banheiros"
+            type="number"
+            value={editForm.banheiros}
+            onChange={event => setEditForm({ ...editForm, banheiros: event.target.value })}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="edit-vagas">Vagas</Label>
+          <Input
+            id="edit-vagas"
+            type="number"
+            value={editForm.vagas}
+            onChange={event => setEditForm({ ...editForm, vagas: event.target.value })}
+          />
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderDocumentsCard = () => {
+    if (!canManageProperty) return null;
+
+    const documents = propertyDocuments.data ?? [];
+
+    return (
+      <div className="rounded-[24px] border border-slate-100 bg-slate-50/70 p-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-base font-semibold text-slate-950">Documentos</h2>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 rounded-full bg-white"
+            disabled={uploadingDocument || addPropertyDocument.isPending}
+            onClick={() => document.getElementById("property-document-inline-upload")?.click()}
+            aria-label="Adicionar documento"
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+          <Input
+            id="property-document-inline-upload"
+            type="file"
+            accept="application/pdf,.pdf"
+            className="hidden"
+            onChange={handleDocumentUpload}
+            disabled={uploadingDocument || addPropertyDocument.isPending}
+          />
+        </div>
+
+        {propertyDocuments.isLoading ? (
+          <div className="space-y-2">
+            {[1, 2].map(item => (
+              <div key={item} className="h-12 animate-pulse rounded-2xl bg-white/80" />
+            ))}
+          </div>
+        ) : documents.length > 0 ? (
+          <div className="space-y-2">
+            {documents.map(document => (
+              <div
+                key={document.id}
+                className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-white/85 px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-slate-900">{document.nomeArquivo}</p>
+                  <p className="text-xs text-slate-500">{formatStoredDate(document.createdAt)}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 rounded-full"
+                    onClick={() => handleOpenDocument(document.urlArquivo)}
+                    aria-label="Visualizar documento"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 rounded-full text-destructive hover:text-destructive"
+                    onClick={() => setDocumentPendingDelete(document.id)}
+                    aria-label="Excluir documento"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed bg-white/70 px-4 py-8 text-center text-sm text-slate-500">
+            <FileText className="mx-auto mb-2 h-6 w-6 text-slate-400" />
+            Nenhum documento anexado.
+          </div>
+        )}
+      </div>
+    );
   };
 
   const isMobileDevice = () => {
@@ -387,18 +1131,324 @@ export default function ImovelDetalhes() {
       <div className="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.88),rgba(244,240,232,0.82)_45%,rgba(248,248,246,1)_100%)] pb-12">
         <div className="container py-6 md:py-7">
           <div className="mb-4 lg:mb-3">
-            <Link href={backHref}>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="mb-2 gap-2 rounded-full border border-white/70 bg-white/80 text-slate-700 shadow-sm hover:bg-white lg:mb-2"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                {backLabel}
-              </Button>
-            </Link>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="mb-2 gap-2 rounded-full border border-white/70 bg-white/80 text-slate-700 shadow-sm hover:bg-white lg:mb-2"
+              onClick={() => requestNavigation(backHref)}
+            >
+              <ArrowLeft className="h-4 w-4" />
+              {backLabel}
+            </Button>
           </div>
 
+          {isEditingProperty && canManageProperty ? (
+            <Card className="rounded-[32px] border-white/70 bg-white/95 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
+              <CardContent className="space-y-6 p-5 md:p-7">
+                <div className="flex flex-col gap-3 border-b border-slate-200/80 pb-5 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-800">
+                      Ficha do imovel
+                    </p>
+                    <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
+                      Editar Imovel
+                    </h1>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Edite os dados do anuncio, vinculos, endereco e fotos nesta mesma ficha.
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      className="rounded-full bg-emerald-700 px-5 text-white hover:bg-emerald-800"
+                      onClick={submitPropertyEdit}
+                      disabled={updateProperty.isPending || updateLegalDetails.isPending}
+                    >
+                      {updateProperty.isPending || updateLegalDetails.isPending ? "Salvando..." : "Salvar alteracoes"}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+                  <div className="space-y-5">
+                    <div className="rounded-[24px] border border-slate-100 bg-slate-50/70 p-5">
+                      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <h2 className="text-base font-semibold text-slate-950">Fotos do imovel</h2>
+                          <p className="text-sm text-slate-600">Adicione, remova ou arraste as imagens para mudar a ordem.</p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="relative overflow-hidden rounded-full"
+                          disabled={uploadingPhoto || uploadPhotoMutation.isPending}
+                        >
+                          <Upload className="mr-2 h-4 w-4" />
+                          {uploadingPhoto || uploadPhotoMutation.isPending ? "Enviando..." : "Adicionar"}
+                          <Input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            className="absolute inset-0 cursor-pointer opacity-0"
+                            onChange={handleUploadEditPhotos}
+                            disabled={uploadingPhoto || uploadPhotoMutation.isPending}
+                          />
+                        </Button>
+                      </div>
+
+                      {editingPhotoUrls.length > 0 ? (
+                        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                          {editingPhotoUrls.map((url, index) => (
+                            <div
+                              key={`${url}-${index}`}
+                              draggable
+                              onDragStart={event => handlePhotoDragStart(event, index)}
+                              onDragOver={event => {
+                                event.preventDefault();
+                                event.dataTransfer.dropEffect = "move";
+                              }}
+                              onDrop={event => handlePhotoDrop(event, index)}
+                              className="group relative cursor-grab overflow-hidden rounded-2xl border bg-white active:cursor-grabbing"
+                              title="Arraste para mudar a ordem"
+                            >
+                              <ProtectedPropertyImage
+                                src={url}
+                                alt={`Foto ${index + 1}`}
+                                className="h-32 w-full object-cover"
+                              />
+                              <div className="absolute bottom-2 left-2 rounded-full bg-slate-950/75 px-2 py-1 text-xs font-semibold text-white">
+                                {index + 1}
+                              </div>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="secondary"
+                                className="absolute right-2 top-2 h-8 w-8 rounded-full border border-white bg-white text-destructive shadow-sm hover:bg-rose-50"
+                                onClick={() => handleRemoveEditPhoto(index)}
+                                disabled={deleteUploadedPhotoMutation.isPending}
+                                aria-label={`Remover foto ${index + 1}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex min-h-28 items-center justify-center rounded-2xl border border-dashed bg-white/70 text-sm text-slate-500">
+                          <ImagePlus className="mr-2 h-4 w-4" />
+                          Nenhuma foto cadastrada.
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="rounded-[24px] border border-slate-100 bg-slate-50/70 p-5">
+                      <h2 className="mb-4 text-base font-semibold text-slate-950">Dados principais</h2>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="max-w-xl space-y-2 md:col-span-2">
+                          <Label htmlFor="edit-titulo">Titulo *</Label>
+                          <Input
+                            id="edit-titulo"
+                            value={editForm.titulo}
+                            onChange={event => setEditForm({ ...editForm, titulo: event.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-tipo">Tipo *</Label>
+                          <Select value={editForm.tipo} onValueChange={value => setEditForm({ ...editForm, tipo: value })}>
+                            <SelectTrigger id="edit-tipo">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="apartamento">Apartamento</SelectItem>
+                              <SelectItem value="casa">Casa</SelectItem>
+                              <SelectItem value="terreno">Terreno</SelectItem>
+                              <SelectItem value="comercial">Comercial</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-finalidade">Finalidade *</Label>
+                          <Select value={editForm.finalidade} onValueChange={value => setEditForm({ ...editForm, finalidade: value })}>
+                            <SelectTrigger id="edit-finalidade">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="venda">Venda</SelectItem>
+                              <SelectItem value="locacao">Locacao</SelectItem>
+                              <SelectItem value="ambos">Ambos</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2 md:col-span-2">
+                          <Label htmlFor="edit-descricao">Descricao</Label>
+                          <Textarea
+                            id="edit-descricao"
+                            value={editForm.descricao}
+                            onChange={event => setEditForm({ ...editForm, descricao: event.target.value })}
+                            className="min-h-[160px]"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid gap-5 2xl:grid-cols-2">
+                    {renderLegalDetailsCard()}
+
+                    <div className="rounded-[24px] border border-slate-100 bg-slate-50/70 p-5">
+                      <h2 className="mb-4 text-base font-semibold text-slate-950">Endereco</h2>
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-2 md:col-span-2">
+                          <Label htmlFor="edit-endereco">Endereco *</Label>
+                          <Input
+                            id="edit-endereco"
+                            value={editForm.endereco}
+                            onChange={event => setEditForm({ ...editForm, endereco: event.target.value })}
+                            disabled={cepLoading}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-numero">Numero</Label>
+                          <Input
+                            id="edit-numero"
+                            value={editForm.numero}
+                            onChange={event => setEditForm({ ...editForm, numero: event.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-bairro">Bairro</Label>
+                          <Input
+                            id="edit-bairro"
+                            value={editForm.bairro}
+                            onChange={event => setEditForm({ ...editForm, bairro: event.target.value })}
+                            disabled={cepLoading}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-cidade">Cidade *</Label>
+                          <Input
+                            id="edit-cidade"
+                            value={editForm.cidade}
+                            onChange={event => setEditForm({ ...editForm, cidade: event.target.value })}
+                            disabled={cepLoading}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-estado">Estado *</Label>
+                          <Input
+                            id="edit-estado"
+                            maxLength={2}
+                            value={editForm.estado}
+                            onChange={event => setEditForm({ ...editForm, estado: event.target.value.toUpperCase() })}
+                            disabled={cepLoading}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-cep">CEP</Label>
+                          <Input
+                            id="edit-cep"
+                            value={editForm.cep}
+                            inputMode="numeric"
+                            maxLength={9}
+                            onChange={event => handleZipCodeChange(event.target.value)}
+                          />
+                          {cepLoading ? <p className="text-xs text-slate-500">Buscando CEP...</p> : null}
+                          {cepError ? <p className="text-xs text-red-500">{cepError}</p> : null}
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-destaque">Destaque na Home?</Label>
+                          <Select value={editForm.destaque} onValueChange={value => setEditForm({ ...editForm, destaque: value })}>
+                            <SelectTrigger id="edit-destaque">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="0">Nao</SelectItem>
+                              <SelectItem value="1">Sim</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-5">
+                    <div className="rounded-[24px] border border-slate-100 bg-slate-50/70 p-5">
+                      <h2 className="mb-4 text-base font-semibold text-slate-950">Corretor / Responsavel</h2>
+                      {user?.role === "administrativo" ? (
+                        <Select
+                          value={editForm.idCorretor || "empty"}
+                          onValueChange={value => setEditForm({ ...editForm, idCorretor: value === "empty" ? "" : value })}
+                        >
+                          <SelectTrigger id="edit-id-corretor">
+                            <SelectValue placeholder="Selecione o responsavel" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="empty">Selecione</SelectItem>
+                            {activeResponsibleUsers.map(responsible => (
+                              <SelectItem key={responsible.id} value={String(responsible.id)}>
+                                {responsible.name || responsible.email}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input value={user?.name || user?.email || "Corretor"} disabled />
+                      )}
+                    </div>
+
+                    {renderValuesCard()}
+
+                    <div className="rounded-[24px] border border-slate-100 bg-slate-50/70 p-5">
+                      <h2 className="mb-1 text-base font-semibold text-slate-950">Proprietario do imovel</h2>
+                      <p className="mb-4 text-sm text-slate-600">
+                        Nome e telefone sao obrigatorios. CPF e e-mail ajudam a reaproveitar cadastros existentes.
+                      </p>
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-owner-name">Nome e sobrenome *</Label>
+                          <Input
+                            id="edit-owner-name"
+                            value={editForm.ownerName}
+                            onChange={event => setEditForm({ ...editForm, ownerName: event.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-owner-email">E-mail</Label>
+                          <Input
+                            id="edit-owner-email"
+                            type="email"
+                            value={editForm.ownerEmail}
+                            onChange={event => setEditForm({ ...editForm, ownerEmail: event.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-owner-phone">Telefone *</Label>
+                          <Input
+                            id="edit-owner-phone"
+                            value={editForm.ownerPhone}
+                            onChange={event => setEditForm({ ...editForm, ownerPhone: formatPhoneNumber(event.target.value) })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-owner-cpf">CPF</Label>
+                          <Input
+                            id="edit-owner-cpf"
+                            inputMode="numeric"
+                            maxLength={14}
+                            value={editForm.ownerCpf}
+                            onChange={event => setEditForm({ ...editForm, ownerCpf: formatCpf(event.target.value) })}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {renderDocumentsCard()}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.18fr)_minmax(360px,0.82fr)]">
           <div className="space-y-6 xl:sticky xl:top-6 xl:self-start">
             <Card className="overflow-hidden rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
@@ -449,9 +1499,9 @@ export default function ImovelDetalhes() {
                     {imovel.finalidade === "locacao" ? "Valor da locacao" : "Valor do imóvel"}
                   </p>
                   <p className="text-[1.95rem] font-semibold leading-none tracking-tight xl:text-[2.15rem]">
-                    {formatCurrency(imovel.valor)}
+                    {formatCurrency(imovel.finalidade === "locacao" ? (imovel.valorLocacao ?? imovel.valor) : imovel.valor)}
                   </p>
-                  {imovel.valorLocacao && imovel.finalidade !== "venda" ? (
+                  {imovel.valorLocacao && imovel.finalidade === "ambos" ? (
                     <p className="mt-2 text-sm text-white/80">
                       Locacao: {formatCurrency(imovel.valorLocacao)}/mes
                     </p>
@@ -534,6 +1584,9 @@ export default function ImovelDetalhes() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={handleEditProperty}>
+                            Editar
+                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={handleGoToPropertyDetails}>
                             Ir para Detalhes
                           </DropdownMenuItem>
@@ -696,8 +1749,11 @@ export default function ImovelDetalhes() {
                 </CardContent>
               </Card>
             ) : null}
+
+            {renderLegalDetailsCard(false)}
           </div>
         </div>
+          )}
         </div>
 
         <Dialog open={locationChoiceOpen} onOpenChange={setLocationChoiceOpen}>
@@ -911,6 +1967,7 @@ export default function ImovelDetalhes() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        {UnsavedChangesDialog}
       </div>
     </Layout>
   );

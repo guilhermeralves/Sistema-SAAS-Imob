@@ -14,6 +14,7 @@ import {
   InsertLeadNote,
   InsertPropertyDocument,
   InsertPropertyKeyStatusRequest,
+  InsertPropertyLaunch,
   InsertPropertyOwner,
   InsertProperty,
   InsertTaskItem,
@@ -43,6 +44,7 @@ import {
   taskItems,
   propertyDocuments,
   propertyKeyStatusRequests,
+  propertyLaunches,
   propertyOwnerLinks,
   propertyOwners,
   properties,
@@ -213,7 +215,10 @@ export async function getViewedUserIdsByAdmin(adminUserId: number) {
   return rows.map(row => row.viewedUserId);
 }
 
-export async function markUserAsViewedByAdmin(adminUserId: number, viewedUserId: number) {
+export async function markUserAsViewedByAdmin(
+  adminUserId: number,
+  viewedUserId: number
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -231,7 +236,10 @@ export async function markUserAsViewedByAdmin(adminUserId: number, viewedUserId:
     });
 }
 
-export async function markUsersAsViewedByAdmin(adminUserId: number, viewedUserIds: number[]) {
+export async function markUsersAsViewedByAdmin(
+  adminUserId: number,
+  viewedUserIds: number[]
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   if (viewedUserIds.length === 0) return;
@@ -259,7 +267,12 @@ export async function hasNewPublicUsersForAdmin(adminUserId: number) {
       id: users.id,
     })
     .from(users)
-    .where(and(eq(users.role, "cliente"), eq(users.registrationSource, "public_signup")));
+    .where(
+      and(
+        eq(users.role, "cliente"),
+        eq(users.registrationSource, "public_signup")
+      )
+    );
 
   if (publicUsers.length === 0) {
     return false;
@@ -330,7 +343,11 @@ export async function getUserByCpf(cpf: string) {
     return undefined;
   }
 
-  const result = await db.select().from(users).where(eq(users.cpf, cpf)).limit(2);
+  const result = await db
+    .select()
+    .from(users)
+    .where(eq(users.cpf, cpf))
+    .limit(2);
 
   if (result.length > 1) {
     throw new Error("Multiple users found for the same cpf");
@@ -343,7 +360,11 @@ export async function getPropertyOwnerById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
 
-  const result = await db.select().from(propertyOwners).where(eq(propertyOwners.id, id)).limit(1);
+  const result = await db
+    .select()
+    .from(propertyOwners)
+    .where(eq(propertyOwners.id, id))
+    .limit(1);
   return result[0];
 }
 
@@ -351,14 +372,21 @@ export async function getAllPropertyOwners() {
   const db = await getDb();
   if (!db) return [];
 
-  return await db.select().from(propertyOwners).orderBy(desc(propertyOwners.createdAt));
+  return await db
+    .select()
+    .from(propertyOwners)
+    .orderBy(desc(propertyOwners.createdAt));
 }
 
 export async function getPropertyOwnerByCpf(cpf: string) {
   const db = await getDb();
   if (!db) return undefined;
 
-  const result = await db.select().from(propertyOwners).where(eq(propertyOwners.cpf, cpf)).limit(2);
+  const result = await db
+    .select()
+    .from(propertyOwners)
+    .where(eq(propertyOwners.cpf, cpf))
+    .limit(2);
 
   if (result.length > 1) {
     throw new Error("Multiple property owners found for the same cpf");
@@ -382,11 +410,17 @@ export async function createPropertyOwner(data: InsertPropertyOwner) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  const [createdOwner] = await db.insert(propertyOwners).values(data).returning();
+  const [createdOwner] = await db
+    .insert(propertyOwners)
+    .values(data)
+    .returning();
   return createdOwner;
 }
 
-export async function updatePropertyOwner(id: number, data: Partial<InsertPropertyOwner>) {
+export async function updatePropertyOwner(
+  id: number,
+  data: Partial<InsertPropertyOwner>
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -444,8 +478,13 @@ export async function listCondominiums(options?: ListCondominiumsOptions) {
   const db = await getDb();
   if (!db) return [];
 
-  const rows = await db.select().from(condominios).orderBy(desc(condominios.createdAt));
-  const normalizedSearch = options?.search ? normalizeSearchTerm(options.search) : "";
+  const rows = await db
+    .select()
+    .from(condominios)
+    .orderBy(desc(condominios.createdAt));
+  const normalizedSearch = options?.search
+    ? normalizeSearchTerm(options.search)
+    : "";
   const normalizedTerms = normalizedSearch.split(/\s+/).filter(Boolean);
 
   const filtered = rows.filter(item => {
@@ -465,7 +504,11 @@ export async function getCondominiumById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
 
-  const rows = await db.select().from(condominios).where(eq(condominios.id, id)).limit(1);
+  const rows = await db
+    .select()
+    .from(condominios)
+    .where(eq(condominios.id, id))
+    .limit(1);
   return rows[0];
 }
 
@@ -477,7 +520,10 @@ export async function createCondominium(data: InsertCondominium) {
   return created;
 }
 
-export async function updateCondominium(id: number, data: Partial<InsertCondominium>) {
+export async function updateCondominium(
+  id: number,
+  data: Partial<InsertCondominium>
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -519,7 +565,12 @@ export async function deleteCondominiumAndDetachProperties(id: number) {
 }
 
 type ListIntegrationsOptions = {
-  category?: "portal_divulgacao" | "financeiro" | "assinaturas_eletronicas" | "automacao" | "outro";
+  category?:
+    | "portal_divulgacao"
+    | "financeiro"
+    | "assinaturas_eletronicas"
+    | "automacao"
+    | "outro";
   status?: "rascunho" | "ativo" | "inativo";
 };
 
@@ -527,7 +578,10 @@ export async function listIntegrations(options?: ListIntegrationsOptions) {
   const db = await getDb();
   if (!db) return [];
 
-  const rows = await db.select().from(integrations).orderBy(desc(integrations.updatedAt));
+  const rows = await db
+    .select()
+    .from(integrations)
+    .orderBy(desc(integrations.updatedAt));
 
   return rows.filter(item => {
     if (options?.category && item.category !== options.category) return false;
@@ -540,7 +594,11 @@ export async function getIntegrationById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
 
-  const rows = await db.select().from(integrations).where(eq(integrations.id, id)).limit(1);
+  const rows = await db
+    .select()
+    .from(integrations)
+    .where(eq(integrations.id, id))
+    .limit(1);
   return rows[0];
 }
 
@@ -552,7 +610,10 @@ export async function createIntegration(data: InsertIntegration) {
   return created;
 }
 
-export async function updateIntegration(id: number, data: Partial<InsertIntegration>) {
+export async function updateIntegration(
+  id: number,
+  data: Partial<InsertIntegration>
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -565,7 +626,10 @@ export async function updateIntegration(id: number, data: Partial<InsertIntegrat
   return updated;
 }
 
-export async function linkPropertyOwnersToUserByCpf(userId: number, cpf: string) {
+export async function linkPropertyOwnersToUserByCpf(
+  userId: number,
+  cpf: string
+) {
   const db = await getDb();
   if (!db) return;
 
@@ -581,7 +645,10 @@ async function enrichPropertiesWithRelations(propertyRows: Array<any>) {
 
   const propertyIds = propertyRows.map(property => property.id);
   const ownerLinks = propertyIds.length
-    ? await db.select().from(propertyOwnerLinks).where(inArray(propertyOwnerLinks.propertyId, propertyIds))
+    ? await db
+        .select()
+        .from(propertyOwnerLinks)
+        .where(inArray(propertyOwnerLinks.propertyId, propertyIds))
     : [];
 
   const ownerIds = Array.from(
@@ -593,29 +660,48 @@ async function enrichPropertiesWithRelations(propertyRows: Array<any>) {
     )
   );
   const userIds = Array.from(
-    new Set(propertyRows.flatMap(property => [property.idCorretor, property.createdByUserId]))
+    new Set(
+      propertyRows.flatMap(property => [
+        property.idCorretor,
+        property.createdByUserId,
+      ])
+    )
   );
   const condominiumIds = Array.from(
     new Set(
       propertyRows
         .map(property => property.idCondominio)
-        .filter((condominiumId): condominiumId is number => typeof condominiumId === "number")
+        .filter(
+          (condominiumId): condominiumId is number =>
+            typeof condominiumId === "number"
+        )
     )
   );
 
-  const owners = ownerIds.length > 0
-    ? await db.select().from(propertyOwners).where(inArray(propertyOwners.id, ownerIds))
-    : [];
-  const relatedUsers = userIds.length > 0
-    ? await db.select().from(users).where(inArray(users.id, userIds))
-    : [];
-  const relatedCondominiums = condominiumIds.length > 0
-    ? await db.select().from(condominios).where(inArray(condominios.id, condominiumIds))
-    : [];
+  const owners =
+    ownerIds.length > 0
+      ? await db
+          .select()
+          .from(propertyOwners)
+          .where(inArray(propertyOwners.id, ownerIds))
+      : [];
+  const relatedUsers =
+    userIds.length > 0
+      ? await db.select().from(users).where(inArray(users.id, userIds))
+      : [];
+  const relatedCondominiums =
+    condominiumIds.length > 0
+      ? await db
+          .select()
+          .from(condominios)
+          .where(inArray(condominios.id, condominiumIds))
+      : [];
 
   const ownersById = new Map(owners.map(owner => [owner.id, owner]));
   const usersById = new Map(relatedUsers.map(user => [user.id, user]));
-  const condominiumsById = new Map(relatedCondominiums.map(item => [item.id, item]));
+  const condominiumsById = new Map(
+    relatedCondominiums.map(item => [item.id, item])
+  );
   const ownerLinksByPropertyId = new Map<number, typeof ownerLinks>();
 
   for (const link of ownerLinks) {
@@ -639,11 +725,16 @@ async function enrichPropertiesWithRelations(propertyRows: Array<any>) {
   }));
 }
 
-async function replacePropertyOwnerLinks(propertyId: number, ownerIds: number[]) {
+async function replacePropertyOwnerLinks(
+  propertyId: number,
+  ownerIds: number[]
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db.delete(propertyOwnerLinks).where(eq(propertyOwnerLinks.propertyId, propertyId));
+  await db
+    .delete(propertyOwnerLinks)
+    .where(eq(propertyOwnerLinks.propertyId, propertyId));
 
   if (ownerIds.length === 0) return;
 
@@ -672,7 +763,10 @@ export async function getAllProperties(options?: {
   }
 
   if (options?.includeDeleted) {
-    return await db.select().from(properties).orderBy(desc(properties.createdAt));
+    return await db
+      .select()
+      .from(properties)
+      .orderBy(desc(properties.createdAt));
   }
 
   return await db
@@ -682,7 +776,10 @@ export async function getAllProperties(options?: {
     .orderBy(desc(properties.createdAt));
 }
 
-export async function getPropertyById(id: number, options?: { includeDeleted?: boolean }) {
+export async function getPropertyById(
+  id: number,
+  options?: { includeDeleted?: boolean }
+) {
   const db = await getDb();
   if (!db) return undefined;
 
@@ -694,7 +791,10 @@ export async function getPropertyById(id: number, options?: { includeDeleted?: b
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function getPropertyByIdWithRelations(id: number, options?: { includeDeleted?: boolean }) {
+export async function getPropertyByIdWithRelations(
+  id: number,
+  options?: { includeDeleted?: boolean }
+) {
   const property = await getPropertyById(id, options);
   if (!property) return undefined;
 
@@ -702,7 +802,10 @@ export async function getPropertyByIdWithRelations(id: number, options?: { inclu
   return enrichedProperty;
 }
 
-export async function getPropertiesByCorretor(idCorretor: number, options?: { deletedOnly?: boolean }) {
+export async function getPropertiesByCorretor(
+  idCorretor: number,
+  options?: { deletedOnly?: boolean }
+) {
   const db = await getDb();
   if (!db) return [];
 
@@ -753,18 +856,88 @@ export async function getDestacados() {
     .limit(6);
 }
 
-export async function createProperty(data: InsertProperty, relations?: { ownerIds?: number[] }) {
+function normalizePropertyCep(value: string | null | undefined) {
+  const digits = (value ?? "").replace(/\D/g, "");
+  return digits || null;
+}
+
+function normalizePropertyNumber(value: string | null | undefined) {
+  const normalized = (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "")
+    .trim()
+    .toLowerCase();
+
+  return normalized || null;
+}
+
+export async function findActivePropertyByCepAndNumber(
+  cep: string | null | undefined,
+  numero: string | null | undefined,
+  options?: { excludeId?: number }
+) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const normalizedCep = normalizePropertyCep(cep);
+  const normalizedNumber = normalizePropertyNumber(numero);
+
+  if (!normalizedCep || !normalizedNumber) return undefined;
+
+  const rows = await db
+    .select()
+    .from(properties)
+    .where(eq(properties.lixeira, 0));
+
+  return rows.find(property => {
+    if (options?.excludeId && property.id === options.excludeId) return false;
+    return (
+      normalizePropertyCep(property.cep) === normalizedCep &&
+      normalizePropertyNumber(property.numero) === normalizedNumber
+    );
+  });
+}
+
+export async function getActivePropertyLaunches() {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(propertyLaunches)
+    .where(eq(propertyLaunches.isAtivo, 1))
+    .orderBy(desc(propertyLaunches.destaque), desc(propertyLaunches.createdAt));
+}
+
+export async function createPropertyLaunch(data: InsertPropertyLaunch) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [created] = await db.insert(propertyLaunches).values(data).returning();
+  return created;
+}
+
+export async function createProperty(
+  data: InsertProperty,
+  relations?: { ownerIds?: number[] }
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [created] = await db.insert(properties).values(data).returning();
   await replacePropertyOwnerLinks(
     created.id,
-    relations?.ownerIds ?? (created.idProprietario ? [created.idProprietario] : [])
+    relations?.ownerIds ??
+      (created.idProprietario ? [created.idProprietario] : [])
   );
   return created;
 }
 
-export async function updateProperty(id: number, data: Partial<InsertProperty>, relations?: { ownerIds?: number[] }) {
+export async function updateProperty(
+  id: number,
+  data: Partial<InsertProperty>,
+  relations?: { ownerIds?: number[] }
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(properties).set(data).where(eq(properties.id, id));
@@ -800,7 +973,9 @@ export async function updatePropertyKeyStatus(
   return updated;
 }
 
-export async function getPropertyKeyStatusRequestsByPropertyId(idImovel: number) {
+export async function getPropertyKeyStatusRequestsByPropertyId(
+  idImovel: number
+) {
   const db = await getDb();
   if (!db) return [];
 
@@ -824,11 +999,16 @@ export async function getPropertyKeyStatusRequestById(id: number) {
   return rows[0];
 }
 
-export async function createPropertyKeyStatusRequest(data: InsertPropertyKeyStatusRequest) {
+export async function createPropertyKeyStatusRequest(
+  data: InsertPropertyKeyStatusRequest
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  const [created] = await db.insert(propertyKeyStatusRequests).values(data).returning();
+  const [created] = await db
+    .insert(propertyKeyStatusRequests)
+    .values(data)
+    .returning();
   return created;
 }
 
@@ -1030,7 +1210,12 @@ async function enrichLeadBirthDateByCpf<
   const cpfsWithoutBirthDate = Array.from(
     new Set(
       rows
-        .filter(row => !row.userBirthDate && typeof row.cpf === "string" && row.cpf.length > 0)
+        .filter(
+          row =>
+            !row.userBirthDate &&
+            typeof row.cpf === "string" &&
+            row.cpf.length > 0
+        )
         .map(row => row.cpf as string)
     )
   );
@@ -1074,7 +1259,11 @@ export async function getLeadsByCpf(cpf: string) {
   const db = await getDb();
   if (!db) return [];
 
-  return await db.select().from(leads).where(eq(leads.cpf, cpf)).orderBy(desc(leads.createdAt));
+  return await db
+    .select()
+    .from(leads)
+    .where(eq(leads.cpf, cpf))
+    .orderBy(desc(leads.createdAt));
 }
 
 export async function getLeadsByUserId(userId: number) {
@@ -1243,7 +1432,9 @@ export type TaskItemTemplateWithCreator = TaskItemTemplate & {
   createdBy: TaskActor | null;
 };
 
-async function enrichTaskItemsWithRelations(taskRows: TaskItem[]): Promise<TaskItemWithRelations[]> {
+async function enrichTaskItemsWithRelations(
+  taskRows: TaskItem[]
+): Promise<TaskItemWithRelations[]> {
   const db = await getDb();
   if (!db || taskRows.length === 0) {
     return taskRows.map(task => ({
@@ -1316,7 +1507,9 @@ async function enrichTaskTemplatesWithCreator(
     }));
   }
 
-  const userIds = Array.from(new Set(templateRows.map(template => template.createdByUserId)));
+  const userIds = Array.from(
+    new Set(templateRows.map(template => template.createdByUserId))
+  );
   const relatedUsers =
     userIds.length > 0
       ? await db.select().from(users).where(inArray(users.id, userIds))
@@ -1351,7 +1544,10 @@ export async function getAllTaskItemTemplatesWithCreator() {
   const db = await getDb();
   if (!db) return [];
 
-  const rows = await db.select().from(taskItemTemplates).orderBy(desc(taskItemTemplates.updatedAt));
+  const rows = await db
+    .select()
+    .from(taskItemTemplates)
+    .orderBy(desc(taskItemTemplates.updatedAt));
   return await enrichTaskTemplatesWithCreator(rows);
 }
 
@@ -1359,7 +1555,11 @@ export async function getTaskItemTemplateById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
 
-  const rows = await db.select().from(taskItemTemplates).where(eq(taskItemTemplates.id, id)).limit(1);
+  const rows = await db
+    .select()
+    .from(taskItemTemplates)
+    .where(eq(taskItemTemplates.id, id))
+    .limit(1);
   return rows[0];
 }
 
@@ -1371,7 +1571,10 @@ export async function createTaskItemTemplate(data: InsertTaskItemTemplate) {
   return created;
 }
 
-export async function updateTaskItemTemplate(id: number, data: Partial<InsertTaskItemTemplate>) {
+export async function updateTaskItemTemplate(
+  id: number,
+  data: Partial<InsertTaskItemTemplate>
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -1395,7 +1598,10 @@ export async function getAllTaskItemsWithRelations() {
   const db = await getDb();
   if (!db) return [];
 
-  const rows = await db.select().from(taskItems).orderBy(desc(taskItems.updatedAt));
+  const rows = await db
+    .select()
+    .from(taskItems)
+    .orderBy(desc(taskItems.updatedAt));
   return await enrichTaskItemsWithRelations(rows);
 }
 
@@ -1435,7 +1641,11 @@ export async function getTaskItemById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
 
-  const rows = await db.select().from(taskItems).where(eq(taskItems.id, id)).limit(1);
+  const rows = await db
+    .select()
+    .from(taskItems)
+    .where(eq(taskItems.id, id))
+    .limit(1);
   return rows[0];
 }
 
@@ -1467,7 +1677,10 @@ export async function createTaskItem(data: InsertTaskItem) {
   return created;
 }
 
-export async function updateTaskItem(id: number, data: Partial<InsertTaskItem>) {
+export async function updateTaskItem(
+  id: number,
+  data: Partial<InsertTaskItem>
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -1480,11 +1693,16 @@ export async function updateTaskItem(id: number, data: Partial<InsertTaskItem>) 
   return updated;
 }
 
-export async function replaceTaskItemAssignees(taskId: number, userIds: number[]) {
+export async function replaceTaskItemAssignees(
+  taskId: number,
+  userIds: number[]
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db.delete(taskItemAssignments).where(eq(taskItemAssignments.taskId, taskId));
+  await db
+    .delete(taskItemAssignments)
+    .where(eq(taskItemAssignments.taskId, taskId));
 
   if (userIds.length === 0) return;
 
@@ -1502,7 +1720,9 @@ export async function deleteTaskItem(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db.delete(taskItemAssignments).where(eq(taskItemAssignments.taskId, id));
+  await db
+    .delete(taskItemAssignments)
+    .where(eq(taskItemAssignments.taskId, id));
   await db.delete(taskItemNotes).where(eq(taskItemNotes.taskId, id));
   await db.delete(taskItems).where(eq(taskItems.id, id));
 }
@@ -1529,8 +1749,12 @@ export async function purgeCompletedTaskItemsOlderThan(days: number) {
 
   const staleTaskIds = staleCompletedRows.map(row => row.id);
 
-  await db.delete(taskItemAssignments).where(inArray(taskItemAssignments.taskId, staleTaskIds));
-  await db.delete(taskItemNotes).where(inArray(taskItemNotes.taskId, staleTaskIds));
+  await db
+    .delete(taskItemAssignments)
+    .where(inArray(taskItemAssignments.taskId, staleTaskIds));
+  await db
+    .delete(taskItemNotes)
+    .where(inArray(taskItemNotes.taskId, staleTaskIds));
   await db.delete(taskItems).where(inArray(taskItems.id, staleTaskIds));
 
   return staleTaskIds.length;
@@ -1580,7 +1804,10 @@ export async function createContract(data: InsertContract) {
 export async function getContractTemplates() {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(contractTemplates).orderBy(desc(contractTemplates.createdAt));
+  return await db
+    .select()
+    .from(contractTemplates)
+    .orderBy(desc(contractTemplates.createdAt));
 }
 
 export async function createContractTemplate(data: InsertContractTemplate) {
@@ -1590,7 +1817,10 @@ export async function createContractTemplate(data: InsertContractTemplate) {
   return created;
 }
 
-export async function updateContractTemplate(id: number, data: Partial<InsertContractTemplate>) {
+export async function updateContractTemplate(
+  id: number,
+  data: Partial<InsertContractTemplate>
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [updated] = await db
@@ -1618,14 +1848,22 @@ export async function getRentalProposals() {
     .orderBy(desc(rentalProposals.createdAt));
 
   const proposalIds = rows.map(row => row.id);
-  const propertyIds = Array.from(new Set(rows.map(row => row.propertyId).filter(Boolean)));
+  const propertyIds = Array.from(
+    new Set(rows.map(row => row.propertyId).filter(Boolean))
+  );
 
   const [tenantLinks, ownerLinks] = await Promise.all([
     proposalIds.length
-      ? db.select().from(rentalProposalTenants).where(inArray(rentalProposalTenants.rentalProposalId, proposalIds))
+      ? db
+          .select()
+          .from(rentalProposalTenants)
+          .where(inArray(rentalProposalTenants.rentalProposalId, proposalIds))
       : Promise.resolve([]),
     proposalIds.length
-      ? db.select().from(rentalProposalOwners).where(inArray(rentalProposalOwners.rentalProposalId, proposalIds))
+      ? db
+          .select()
+          .from(rentalProposalOwners)
+          .where(inArray(rentalProposalOwners.rentalProposalId, proposalIds))
       : Promise.resolve([]),
   ]);
 
@@ -1647,12 +1885,23 @@ export async function getRentalProposals() {
   );
 
   const [propertyRows, userRows, ownerRows] = await Promise.all([
-    propertyIds.length ? db.select().from(properties).where(inArray(properties.id, propertyIds)) : Promise.resolve([]),
-    userIds.length ? db.select().from(users).where(inArray(users.id, userIds)) : Promise.resolve([]),
-    ownerIds.length ? db.select().from(propertyOwners).where(inArray(propertyOwners.id, ownerIds)) : Promise.resolve([]),
+    propertyIds.length
+      ? db.select().from(properties).where(inArray(properties.id, propertyIds))
+      : Promise.resolve([]),
+    userIds.length
+      ? db.select().from(users).where(inArray(users.id, userIds))
+      : Promise.resolve([]),
+    ownerIds.length
+      ? db
+          .select()
+          .from(propertyOwners)
+          .where(inArray(propertyOwners.id, ownerIds))
+      : Promise.resolve([]),
   ]);
 
-  const propertiesById = new Map(propertyRows.map(property => [property.id, property]));
+  const propertiesById = new Map(
+    propertyRows.map(property => [property.id, property])
+  );
   const usersById = new Map(userRows.map(user => [user.id, user]));
   const ownersById = new Map(ownerRows.map(owner => [owner.id, owner]));
   const tenantLinksByProposalId = new Map<number, typeof tenantLinks>();
@@ -1687,8 +1936,12 @@ export async function getRentalProposals() {
       property: propertiesById.get(row.propertyId) ?? null,
       broker: usersById.get(row.brokerUserId) ?? null,
       tenant: usersById.get(row.tenantUserId) ?? null,
-      tenants: linkedTenants.length ? linkedTenants : fallbackTenant ? [fallbackTenant] : [],
-      owner: row.ownerId ? ownersById.get(row.ownerId) ?? null : null,
+      tenants: linkedTenants.length
+        ? linkedTenants
+        : fallbackTenant
+          ? [fallbackTenant]
+          : [],
+      owner: row.ownerId ? (ownersById.get(row.ownerId) ?? null) : null,
       owners: linkedOwners.length
         ? linkedOwners
         : fallbackOwner
@@ -1729,17 +1982,33 @@ export async function getRentalProposalById(id: number) {
     .sort((a, b) => a.position - b.position)
     .map(link => link.ownerId);
 
-  const tenantIds = linkedTenantIds.length ? linkedTenantIds : [proposal.tenantUserId];
-  const ownerIds = linkedOwnerIds.length ? linkedOwnerIds : proposal.ownerId ? [proposal.ownerId] : [];
+  const tenantIds = linkedTenantIds.length
+    ? linkedTenantIds
+    : [proposal.tenantUserId];
+  const ownerIds = linkedOwnerIds.length
+    ? linkedOwnerIds
+    : proposal.ownerId
+      ? [proposal.ownerId]
+      : [];
 
-  const [property, broker, tenant, owner, tenantRows, ownerRows] = await Promise.all([
-    getPropertyByIdWithRelations(proposal.propertyId),
-    getUserById(proposal.brokerUserId),
-    getUserById(proposal.tenantUserId),
-    proposal.ownerId ? getPropertyOwnerById(proposal.ownerId) : Promise.resolve(undefined),
-    tenantIds.length ? db.select().from(users).where(inArray(users.id, tenantIds)) : Promise.resolve([]),
-    ownerIds.length ? db.select().from(propertyOwners).where(inArray(propertyOwners.id, ownerIds)) : Promise.resolve([]),
-  ]);
+  const [property, broker, tenant, owner, tenantRows, ownerRows] =
+    await Promise.all([
+      getPropertyByIdWithRelations(proposal.propertyId),
+      getUserById(proposal.brokerUserId),
+      getUserById(proposal.tenantUserId),
+      proposal.ownerId
+        ? getPropertyOwnerById(proposal.ownerId)
+        : Promise.resolve(undefined),
+      tenantIds.length
+        ? db.select().from(users).where(inArray(users.id, tenantIds))
+        : Promise.resolve([]),
+      ownerIds.length
+        ? db
+            .select()
+            .from(propertyOwners)
+            .where(inArray(propertyOwners.id, ownerIds))
+        : Promise.resolve([]),
+    ]);
 
   const tenantsById = new Map(tenantRows.map(item => [item.id, item]));
   const ownersById = new Map(ownerRows.map(item => [item.id, item]));
@@ -1761,7 +2030,10 @@ export async function getRentalProposalById(id: number) {
   };
 }
 
-async function replaceRentalProposalTenants(rentalProposalId: number, tenantUserIds: number[]) {
+async function replaceRentalProposalTenants(
+  rentalProposalId: number,
+  tenantUserIds: number[]
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -1780,7 +2052,10 @@ async function replaceRentalProposalTenants(rentalProposalId: number, tenantUser
   );
 }
 
-async function replaceRentalProposalOwners(rentalProposalId: number, ownerIds: number[]) {
+async function replaceRentalProposalOwners(
+  rentalProposalId: number,
+  ownerIds: number[]
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -1806,7 +2081,10 @@ export async function createRentalProposal(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [created] = await db.insert(rentalProposals).values(data).returning();
-  await replaceRentalProposalTenants(created.id, relations?.tenantUserIds ?? [created.tenantUserId]);
+  await replaceRentalProposalTenants(
+    created.id,
+    relations?.tenantUserIds ?? [created.tenantUserId]
+  );
   await replaceRentalProposalOwners(
     created.id,
     relations?.ownerIds ?? (created.ownerId ? [created.ownerId] : [])
@@ -1838,8 +2116,12 @@ export async function updateRentalProposal(
 export async function deleteRentalProposal(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.delete(rentalProposalTenants).where(eq(rentalProposalTenants.rentalProposalId, id));
-  await db.delete(rentalProposalOwners).where(eq(rentalProposalOwners.rentalProposalId, id));
+  await db
+    .delete(rentalProposalTenants)
+    .where(eq(rentalProposalTenants.rentalProposalId, id));
+  await db
+    .delete(rentalProposalOwners)
+    .where(eq(rentalProposalOwners.rentalProposalId, id));
   await db.delete(rentalProposals).where(eq(rentalProposals.id, id));
 }
 
@@ -1859,7 +2141,10 @@ export async function createDocument(data: InsertDocument) {
   return await db.insert(documents).values(data);
 }
 
-export async function updateDocument(id: number, data: Partial<InsertDocument>) {
+export async function updateDocument(
+  id: number,
+  data: Partial<InsertDocument>
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(documents).set(data).where(eq(documents.id, id));
@@ -1884,7 +2169,11 @@ export async function createPropertyDocument(data: InsertPropertyDocument) {
 export async function getPropertyDocumentById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(propertyDocuments).where(eq(propertyDocuments.id, id)).limit(1);
+  const result = await db
+    .select()
+    .from(propertyDocuments)
+    .where(eq(propertyDocuments.id, id))
+    .limit(1);
   return result[0];
 }
 
@@ -1894,7 +2183,10 @@ export async function deletePropertyDocument(id: number) {
   await db.delete(propertyDocuments).where(eq(propertyDocuments.id, id));
 }
 
-export async function updatePropertyDocumentName(id: number, nomeArquivo: string) {
+export async function updatePropertyDocumentName(
+  id: number,
+  nomeArquivo: string
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 

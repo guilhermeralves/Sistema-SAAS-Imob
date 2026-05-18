@@ -1,0 +1,2 @@
+ALTER TABLE "propertyOwners" ALTER COLUMN "email" DROP NOT NULL;
+ALTER TABLE "propertyOwners" ALTER COLUMN "cpf" DROP NOT NULL;

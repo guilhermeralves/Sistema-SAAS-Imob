@@ -1,0 +1,13 @@
+ALTER TABLE "propertyOwners" ADD COLUMN IF NOT EXISTS "birthDate" date;
+ALTER TABLE "propertyOwners" ADD COLUMN IF NOT EXISTS "profession" varchar(120);
+ALTER TABLE "propertyOwners" ADD COLUMN IF NOT EXISTS "grossMonthlyIncome" integer;
+ALTER TABLE "propertyOwners" ADD COLUMN IF NOT EXISTS "maritalStatus" varchar(40);
+ALTER TABLE "propertyOwners" ADD COLUMN IF NOT EXISTS "householdIncome" integer;
+ALTER TABLE "propertyOwners" ADD COLUMN IF NOT EXISTS "rg" varchar(32);
+ALTER TABLE "propertyOwners" ADD COLUMN IF NOT EXISTS "nationality" varchar(80);
+ALTER TABLE "propertyOwners" ADD COLUMN IF NOT EXISTS "address" varchar(255);
+ALTER TABLE "propertyOwners" ADD COLUMN IF NOT EXISTS "neighborhood" varchar(100);
+ALTER TABLE "propertyOwners" ADD COLUMN IF NOT EXISTS "addressNumber" varchar(20);
+ALTER TABLE "propertyOwners" ADD COLUMN IF NOT EXISTS "city" varchar(100);
+ALTER TABLE "propertyOwners" ADD COLUMN IF NOT EXISTS "state" varchar(2);
+ALTER TABLE "propertyOwners" ADD COLUMN IF NOT EXISTS "zipCode" varchar(10);

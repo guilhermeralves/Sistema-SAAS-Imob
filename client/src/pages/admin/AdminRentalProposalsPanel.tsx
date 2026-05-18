@@ -1,14 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { formatStoredDate } from "@/lib/date";
 import { trpc } from "@/lib/trpc";
@@ -25,7 +15,6 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { getRentalProposalDetailsPath } from "./rentalProposalReference";
-import { toast } from "sonner";
 
 type RentalProposalListItem = {
   id: number;
@@ -126,10 +115,8 @@ function getStatusLabel(value: string) {
 }
 
 export default function AdminRentalProposalsPanel() {
-  const utils = trpc.useUtils();
   const proposalsWorkspaceRef = useRef<HTMLDivElement | null>(null);
   const [selectedProposalId, setSelectedProposalId] = useState<number | null>(null);
-  const [proposalPendingDelete, setProposalPendingDelete] = useState<RentalProposalListItem | null>(null);
   const { data: proposals, isLoading: loadingProposals } = trpc.rentalProposals.list.useQuery();
 
   const selectedProposal = useMemo(
@@ -138,20 +125,6 @@ export default function AdminRentalProposalsPanel() {
   );
 
   const currentStepIndex = getProposalStepIndex(selectedProposal);
-
-  const deleteProposal = trpc.rentalProposals.delete.useMutation({
-    onSuccess: async () => {
-      toast.success("Proposta de locação excluída com sucesso.");
-      if (proposalPendingDelete?.id === selectedProposalId) {
-        setSelectedProposalId(null);
-      }
-      setProposalPendingDelete(null);
-      await utils.rentalProposals.list.invalidate();
-    },
-    onError: error => {
-      toast.error(error.message || "Não foi possível excluir a proposta de locação.");
-    },
-  });
 
   useEffect(() => {
     if (!proposals?.length) {
@@ -226,6 +199,7 @@ export default function AdminRentalProposalsPanel() {
           {proposals.map(proposal => {
             const isSelected = proposal.id === selectedProposalId;
             const shouldShowReference = proposal.status !== "rascunho" && proposal.currentStep !== "modelos_contrato";
+            const referenceLabel = shouldShowReference ? "Gerado no contrato" : "Rascunho";
 
             return (
               <div
@@ -260,7 +234,7 @@ export default function AdminRentalProposalsPanel() {
                     <p className="mt-1 text-xs font-semibold uppercase tracking-[0.08em] text-emerald-700">
                       Cód. Referência{" "}
                       <span className="text-slate-700">
-                        {shouldShowReference ? "Gerado no contrato" : "Pendente até gerar contrato"}
+                        {referenceLabel}
                       </span>
                     </p>
                     <p className="mt-2 text-sm text-slate-600">
@@ -272,9 +246,6 @@ export default function AdminRentalProposalsPanel() {
                     <p className="mt-2 text-xs text-slate-500">Criada em {formatStoredDate(proposal.createdAt)}</p>
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-                      {getStatusLabel(proposal.status)}
-                    </span>
                     <Button
                       type="button"
                       variant="outline"
@@ -289,18 +260,6 @@ export default function AdminRentalProposalsPanel() {
                         <a>Detalhes</a>
                       </Link>
                     </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-8 rounded-full border-rose-200 bg-white px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50 hover:text-rose-800"
-                      onClick={event => {
-                        event.stopPropagation();
-                        setProposalPendingDelete(proposal);
-                      }}
-                    >
-                      Excluir
-                    </Button>
                   </div>
                 </div>
               </div>
@@ -310,38 +269,6 @@ export default function AdminRentalProposalsPanel() {
 
         <RentalProposalProcessPanel selectedProposal={selectedProposal} currentStepIndex={currentStepIndex} />
       </div>
-
-      <AlertDialog
-        open={proposalPendingDelete !== null}
-        onOpenChange={open => {
-          if (!open) setProposalPendingDelete(null);
-        }}
-      >
-        <AlertDialogContent className="rounded-[28px] border-white/80 bg-[#f7f6f2]">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir proposta de locação?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {proposalPendingDelete
-                ? `A proposta de "${proposalPendingDelete.property?.titulo || `imóvel ID ${proposalPendingDelete.propertyId}`}" será removida.`
-                : "Confirme a exclusão da proposta de locação."}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-full bg-white">Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              className="rounded-full bg-rose-700 text-white hover:bg-rose-800"
-              disabled={deleteProposal.isPending}
-              onClick={event => {
-                event.preventDefault();
-                if (!proposalPendingDelete) return;
-                deleteProposal.mutate({ id: proposalPendingDelete.id });
-              }}
-            >
-              {deleteProposal.isPending ? "Excluindo..." : "Excluir proposta"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   );
 }

@@ -13,6 +13,7 @@ import {
   ensurePropertyUploadDir,
   getPropertyImageAbsolutePath,
   PROPERTY_IMAGE_REQUEST_HEADER,
+  type PropertyImageVariant,
 } from "./property-images";
 import { startLeadSlaScheduler } from "./leadSla";
 import { serveStatic, setupVite } from "./vite";
@@ -47,7 +48,12 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-  app.get("/api/media/properties/:fileName", async (req, res) => {
+  const sendPropertyImage = async (
+    req: express.Request,
+    res: express.Response,
+    variant: PropertyImageVariant,
+    fileName: string
+  ) => {
     const mediaIntent = req.header(PROPERTY_IMAGE_REQUEST_HEADER) === "1";
 
     if (!mediaIntent) {
@@ -55,8 +61,7 @@ async function startServer() {
       return;
     }
 
-    const fileName = String(req.params.fileName || "").trim();
-    const absolutePath = getPropertyImageAbsolutePath(fileName);
+    const absolutePath = getPropertyImageAbsolutePath(fileName, variant);
 
     if (!absolutePath) {
       res.status(404).end();
@@ -84,6 +89,19 @@ async function startServer() {
         res.status(404).end();
       }
     });
+  };
+
+  app.get("/api/media/properties/:variant(large|thumb)/:fileName", async (req, res) => {
+    await sendPropertyImage(
+      req,
+      res,
+      req.params.variant as PropertyImageVariant,
+      String(req.params.fileName || "").trim()
+    );
+  });
+
+  app.get("/api/media/properties/:fileName", async (req, res) => {
+    await sendPropertyImage(req, res, "large", String(req.params.fileName || "").trim());
   });
 
   // OAuth callback under /api/oauth/callback

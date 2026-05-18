@@ -1,4 +1,13 @@
-import { date, integer, pgTable, serial, text, timestamp, uniqueIndex, varchar } from "drizzle-orm/pg-core";
+import {
+  date,
+  integer,
+  pgTable,
+  serial,
+  text,
+  timestamp,
+  uniqueIndex,
+  varchar,
+} from "drizzle-orm/pg-core";
 
 /**
  * Core user table backing auth flow.
@@ -18,7 +27,9 @@ export const users = pgTable("users", {
   cpf: varchar("cpf", { length: 14 }).unique(),
   phone: varchar("phone", { length: 20 }),
   creci: varchar("creci", { length: 32 }),
-  creciStatus: varchar("creciStatus", { length: 20 }).$type<"pending" | "verified">(),
+  creciStatus: varchar("creciStatus", { length: 20 }).$type<
+    "pending" | "verified"
+  >(),
   creciVerifiedAt: timestamp("creciVerifiedAt", { mode: "date" }),
   creciVerifiedByUserId: integer("creciVerifiedByUserId"),
   birthDate: date("birthDate", { mode: "date" }),
@@ -38,7 +49,9 @@ export const users = pgTable("users", {
   loginMethod: varchar("loginMethod", { length: 64 }),
   passwordHash: varchar("passwordHash", { length: 255 }),
   registrationSource: varchar("registrationSource", { length: 32 })
-    .$type<"public_signup" | "admin_created" | "bootstrap" | "oauth" | "legacy">()
+    .$type<
+      "public_signup" | "admin_created" | "bootstrap" | "oauth" | "legacy"
+    >()
     .default("legacy")
     .notNull(),
   role: varchar("role", { length: 20 })
@@ -48,7 +61,9 @@ export const users = pgTable("users", {
   isActive: integer("isActive").default(1).notNull(),
   createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
-  lastSignedIn: timestamp("lastSignedIn", { mode: "date" }).defaultNow().notNull(),
+  lastSignedIn: timestamp("lastSignedIn", { mode: "date" })
+    .defaultNow()
+    .notNull(),
 });
 
 export type User = typeof users.$inferSelect;
@@ -62,7 +77,12 @@ export const adminUserViews = pgTable(
     viewedUserId: integer("viewedUserId").notNull(),
     viewedAt: timestamp("viewedAt", { mode: "date" }).defaultNow().notNull(),
   },
-  table => [uniqueIndex("adminUserViews_adminUserId_viewedUserId_idx").on(table.adminUserId, table.viewedUserId)]
+  table => [
+    uniqueIndex("adminUserViews_adminUserId_viewedUserId_idx").on(
+      table.adminUserId,
+      table.viewedUserId
+    ),
+  ]
 );
 
 export type AdminUserView = typeof adminUserViews.$inferSelect;
@@ -74,9 +94,22 @@ export const propertyOwners = pgTable(
     id: serial("id").primaryKey(),
     userId: integer("userId"),
     name: varchar("name", { length: 120 }).notNull(),
-    email: varchar("email", { length: 255 }).notNull(),
-    cpf: varchar("cpf", { length: 14 }).notNull(),
+    email: varchar("email", { length: 255 }),
+    cpf: varchar("cpf", { length: 14 }),
     phone: varchar("phone", { length: 20 }).notNull(),
+    birthDate: date("birthDate", { mode: "date" }),
+    profession: varchar("profession", { length: 120 }),
+    grossMonthlyIncome: integer("grossMonthlyIncome"),
+    maritalStatus: varchar("maritalStatus", { length: 40 }),
+    householdIncome: integer("householdIncome"),
+    rg: varchar("rg", { length: 32 }),
+    nationality: varchar("nationality", { length: 80 }),
+    address: varchar("address", { length: 255 }),
+    neighborhood: varchar("neighborhood", { length: 100 }),
+    addressNumber: varchar("addressNumber", { length: 20 }),
+    city: varchar("city", { length: 100 }),
+    state: varchar("state", { length: 2 }),
+    zipCode: varchar("zipCode", { length: 10 }),
     notes: text("notes"),
     createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
@@ -96,7 +129,9 @@ export const condominios = pgTable(
   {
     id: serial("id").primaryKey(),
     nome: varchar("nome", { length: 180 }).notNull(),
-    tipo: varchar("tipo", { length: 20 }).$type<"casa" | "apartamento">().notNull(),
+    tipo: varchar("tipo", { length: 20 })
+      .$type<"casa" | "apartamento">()
+      .notNull(),
     endereco: varchar("endereco", { length: 255 }).notNull(),
     numero: varchar("numero", { length: 20 }),
     complemento: varchar("complemento", { length: 120 }),
@@ -117,7 +152,9 @@ export const condominios = pgTable(
     createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
     updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
   },
-  table => [uniqueIndex("condominios_nome_cidade_idx").on(table.nome, table.cidade)]
+  table => [
+    uniqueIndex("condominios_nome_cidade_idx").on(table.nome, table.cidade),
+  ]
 );
 
 export type Condominium = typeof condominios.$inferSelect;
@@ -131,7 +168,13 @@ export const integrations = pgTable("integrations", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 140 }).notNull(),
   category: varchar("category", { length: 40 })
-    .$type<"portal_divulgacao" | "financeiro" | "assinaturas_eletronicas" | "automacao" | "outro">()
+    .$type<
+      | "portal_divulgacao"
+      | "financeiro"
+      | "assinaturas_eletronicas"
+      | "automacao"
+      | "outro"
+    >()
     .notNull(),
   provider: varchar("provider", { length: 120 }).notNull(),
   connectionType: varchar("connectionType", { length: 30 })
@@ -190,7 +233,9 @@ export const properties = pgTable("properties", {
     .default("Chaves disponíveis na imobiliária.")
     .notNull(),
   keyStatusUpdatedByUserId: integer("keyStatusUpdatedByUserId"),
-  keyStatusUpdatedAt: timestamp("keyStatusUpdatedAt", { mode: "date" }).defaultNow().notNull(),
+  keyStatusUpdatedAt: timestamp("keyStatusUpdatedAt", { mode: "date" })
+    .defaultNow()
+    .notNull(),
   lixeira: integer("lixeira").default(0).notNull(),
   motivoExclusao: text("motivoExclusao"),
   excluidoPorUserId: integer("excluidoPorUserId"),
@@ -202,8 +247,14 @@ export const properties = pgTable("properties", {
   informacoesLegais: text("informacoesLegais"),
   observacoesJuridicas: text("observacoesJuridicas"),
   emCondominio: integer("emCondominio").default(0).notNull(),
-  tipoCondominio: varchar("tipoCondominio", { length: 20 }).$type<"casa" | "apartamento">(),
+  tipoCondominio: varchar("tipoCondominio", { length: 20 }).$type<
+    "casa" | "apartamento"
+  >(),
   idCondominio: integer("idCondominio"),
+  parceria: integer("parceria").default(0).notNull(),
+  parceriaNome: varchar("parceriaNome", { length: 160 }),
+  parceriaTelefone: varchar("parceriaTelefone", { length: 20 }),
+  parceriaReferencia: varchar("parceriaReferencia", { length: 120 }),
   idCorretor: integer("idCorretor").notNull(), // ID do corretor responsavel
   idProprietario: integer("idProprietario"),
   createdByUserId: integer("createdByUserId").notNull(),
@@ -214,6 +265,44 @@ export const properties = pgTable("properties", {
 export type Property = typeof properties.$inferSelect;
 export type InsertProperty = typeof properties.$inferInsert;
 
+/**
+ * Tabela de lancamentos imobiliarios
+ * Armazena empreendimentos na planta e suas faixas de unidades.
+ */
+export const propertyLaunches = pgTable("propertyLaunches", {
+  id: serial("id").primaryKey(),
+  nome: varchar("nome", { length: 180 }).notNull(),
+  descricao: text("descricao"),
+  construtora: varchar("construtora", { length: 160 }),
+  tipo: varchar("tipo", { length: 50 }).notNull(),
+  status: varchar("status", { length: 30 }).default("lancamento").notNull(),
+  entregaPrevista: date("entregaPrevista", { mode: "date" }),
+  valorMin: integer("valorMin").notNull(),
+  valorMax: integer("valorMax"),
+  areaMin: integer("areaMin"),
+  areaMax: integer("areaMax"),
+  quartosMin: integer("quartosMin"),
+  quartosMax: integer("quartosMax"),
+  vagasMin: integer("vagasMin"),
+  vagasMax: integer("vagasMax"),
+  unidadesDisponiveis: integer("unidadesDisponiveis"),
+  endereco: varchar("endereco", { length: 255 }).notNull(),
+  numero: varchar("numero", { length: 20 }),
+  bairro: varchar("bairro", { length: 100 }),
+  cidade: varchar("cidade", { length: 100 }).notNull(),
+  estado: varchar("estado", { length: 2 }).notNull(),
+  cep: varchar("cep", { length: 10 }),
+  fotos: text("fotos"),
+  destaque: integer("destaque").default(0).notNull(),
+  isAtivo: integer("isAtivo").default(1).notNull(),
+  createdByUserId: integer("createdByUserId"),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export type PropertyLaunch = typeof propertyLaunches.$inferSelect;
+export type InsertPropertyLaunch = typeof propertyLaunches.$inferInsert;
+
 export const propertyOwnerLinks = pgTable(
   "propertyOwnerLinks",
   {
@@ -223,7 +312,12 @@ export const propertyOwnerLinks = pgTable(
     position: integer("position").default(1).notNull(),
     createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
   },
-  table => [uniqueIndex("propertyOwnerLinks_unique_idx").on(table.propertyId, table.ownerId)]
+  table => [
+    uniqueIndex("propertyOwnerLinks_unique_idx").on(
+      table.propertyId,
+      table.ownerId
+    ),
+  ]
 );
 
 export type PropertyOwnerLink = typeof propertyOwnerLinks.$inferSelect;
@@ -248,8 +342,10 @@ export const propertyKeyStatusRequests = pgTable("propertyKeyStatusRequests", {
   updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
 });
 
-export type PropertyKeyStatusRequest = typeof propertyKeyStatusRequests.$inferSelect;
-export type InsertPropertyKeyStatusRequest = typeof propertyKeyStatusRequests.$inferInsert;
+export type PropertyKeyStatusRequest =
+  typeof propertyKeyStatusRequests.$inferSelect;
+export type InsertPropertyKeyStatusRequest =
+  typeof propertyKeyStatusRequests.$inferInsert;
 
 /**
  * Tabela de leads do CRM
@@ -269,10 +365,16 @@ export const leads = pgTable("leads", {
   userId: integer("userId"), // conta vinculada por CPF quando existir
   idResponsavel: integer("idResponsavel"), // ID do corretor/admin responsavel
   idImovel: integer("idImovel"), // ID do imovel de interesse (opcional)
-  assignmentCycleStartedAt: timestamp("assignmentCycleStartedAt", { mode: "date" }).defaultNow().notNull(),
+  assignmentCycleStartedAt: timestamp("assignmentCycleStartedAt", {
+    mode: "date",
+  })
+    .defaultNow()
+    .notNull(),
   assignedAt: timestamp("assignedAt", { mode: "date" }),
   attendedAt: timestamp("attendedAt", { mode: "date" }),
-  assignmentSlaNotifiedAt: timestamp("assignmentSlaNotifiedAt", { mode: "date" }),
+  assignmentSlaNotifiedAt: timestamp("assignmentSlaNotifiedAt", {
+    mode: "date",
+  }),
   createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
 });
@@ -340,7 +442,9 @@ export const taskItems = pgTable("taskItems", {
     .default("tarefa")
     .notNull(),
   sector: varchar("sector", { length: 40 })
-    .$type<"administrativo" | "financeiro" | "atendimento" | "comercial" | "juridico">()
+    .$type<
+      "administrativo" | "financeiro" | "atendimento" | "comercial" | "juridico"
+    >()
     .default("administrativo")
     .notNull(),
   status: varchar("status", { length: 20 })
@@ -363,11 +467,11 @@ export type InsertTaskItem = typeof taskItems.$inferInsert;
 export const taskItemTemplates = pgTable("taskItemTemplates", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 120 }).notNull(),
-  kind: varchar("kind", { length: 20 })
-    .$type<"tarefa" | "evento">()
-    .notNull(),
+  kind: varchar("kind", { length: 20 }).$type<"tarefa" | "evento">().notNull(),
   sector: varchar("sector", { length: 40 })
-    .$type<"administrativo" | "financeiro" | "atendimento" | "comercial" | "juridico">()
+    .$type<
+      "administrativo" | "financeiro" | "atendimento" | "comercial" | "juridico"
+    >()
     .notNull(),
   defaultTitle: varchar("defaultTitle", { length: 180 }).notNull(),
   defaultDescription: text("defaultDescription"),
@@ -390,7 +494,12 @@ export const taskItemAssignments = pgTable(
     userId: integer("userId").notNull(),
     createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
   },
-  table => [uniqueIndex("taskItemAssignments_taskId_userId_idx").on(table.taskId, table.userId)]
+  table => [
+    uniqueIndex("taskItemAssignments_taskId_userId_idx").on(
+      table.taskId,
+      table.userId
+    ),
+  ]
 );
 
 export type TaskItemAssignment = typeof taskItemAssignments.$inferSelect;
@@ -475,7 +584,9 @@ export const rentalProposals = pgTable("rentalProposals", {
     >()
     .default("rascunho")
     .notNull(),
-  currentStep: varchar("currentStep", { length: 60 }).default("dados_iniciais").notNull(),
+  currentStep: varchar("currentStep", { length: 60 })
+    .default("dados_iniciais")
+    .notNull(),
   propertyId: integer("propertyId").notNull(),
   ownerId: integer("ownerId"),
   brokerUserId: integer("brokerUserId").notNull(),
@@ -507,11 +618,17 @@ export const rentalProposalTenants = pgTable(
     position: integer("position").default(1).notNull(),
     createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
   },
-  table => [uniqueIndex("rentalProposalTenants_unique_idx").on(table.rentalProposalId, table.tenantUserId)]
+  table => [
+    uniqueIndex("rentalProposalTenants_unique_idx").on(
+      table.rentalProposalId,
+      table.tenantUserId
+    ),
+  ]
 );
 
 export type RentalProposalTenant = typeof rentalProposalTenants.$inferSelect;
-export type InsertRentalProposalTenant = typeof rentalProposalTenants.$inferInsert;
+export type InsertRentalProposalTenant =
+  typeof rentalProposalTenants.$inferInsert;
 
 export const rentalProposalOwners = pgTable(
   "rentalProposalOwners",
@@ -522,11 +639,17 @@ export const rentalProposalOwners = pgTable(
     position: integer("position").default(1).notNull(),
     createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
   },
-  table => [uniqueIndex("rentalProposalOwners_unique_idx").on(table.rentalProposalId, table.ownerId)]
+  table => [
+    uniqueIndex("rentalProposalOwners_unique_idx").on(
+      table.rentalProposalId,
+      table.ownerId
+    ),
+  ]
 );
 
 export type RentalProposalOwner = typeof rentalProposalOwners.$inferSelect;
-export type InsertRentalProposalOwner = typeof rentalProposalOwners.$inferInsert;
+export type InsertRentalProposalOwner =
+  typeof rentalProposalOwners.$inferInsert;
 
 /**
  * Tabela de documentos de imoveis

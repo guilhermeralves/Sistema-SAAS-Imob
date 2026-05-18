@@ -18,6 +18,10 @@ export type NewPropertyDraftData = {
   cidade: string;
   estado: string;
   cep: string;
+  parceria: string;
+  parceriaNome: string;
+  parceriaTelefone: string;
+  parceriaReferencia: string;
   ownerName: string;
   ownerEmail: string;
   ownerCpf: string;
@@ -31,20 +35,25 @@ export type NewPropertyDraftData = {
 };
 
 const NEW_PROPERTY_DRAFT_STORAGE_KEY = "afg_new_property_draft_v1";
-const NEW_PROPERTY_DRAFT_PHOTOS_STORAGE_KEY = "afg_new_property_draft_photos_v1";
+const NEW_PROPERTY_DRAFT_PHOTOS_STORAGE_KEY =
+  "afg_new_property_draft_photos_v1";
 
 function isPropertyDraft(value: unknown): value is NewPropertyDraftData {
   if (!value || typeof value !== "object") return false;
   const record = value as Record<string, unknown>;
   return Object.entries(record).every(([key, item]) => {
     if (key === "owners") {
-      return Array.isArray(item) && item.every(owner =>
-        owner &&
-        typeof owner === "object" &&
-        typeof (owner as Record<string, unknown>).name === "string" &&
-        typeof (owner as Record<string, unknown>).email === "string" &&
-        typeof (owner as Record<string, unknown>).cpf === "string" &&
-        typeof (owner as Record<string, unknown>).phone === "string"
+      return (
+        Array.isArray(item) &&
+        item.every(
+          owner =>
+            owner &&
+            typeof owner === "object" &&
+            typeof (owner as Record<string, unknown>).name === "string" &&
+            typeof (owner as Record<string, unknown>).email === "string" &&
+            typeof (owner as Record<string, unknown>).cpf === "string" &&
+            typeof (owner as Record<string, unknown>).phone === "string"
+        )
       );
     }
     return typeof item === "string";
@@ -53,13 +62,18 @@ function isPropertyDraft(value: unknown): value is NewPropertyDraftData {
 
 export function saveNewPropertyDraft(data: NewPropertyDraftData) {
   if (typeof window === "undefined") return;
-  window.sessionStorage.setItem(NEW_PROPERTY_DRAFT_STORAGE_KEY, JSON.stringify(data));
+  window.sessionStorage.setItem(
+    NEW_PROPERTY_DRAFT_STORAGE_KEY,
+    JSON.stringify(data)
+  );
 }
 
 export function loadNewPropertyDraft() {
   if (typeof window === "undefined") return null;
 
-  const rawValue = window.sessionStorage.getItem(NEW_PROPERTY_DRAFT_STORAGE_KEY);
+  const rawValue = window.sessionStorage.getItem(
+    NEW_PROPERTY_DRAFT_STORAGE_KEY
+  );
   if (!rawValue) return null;
 
   try {
@@ -80,13 +94,18 @@ export function clearNewPropertyDraft() {
 
 export function saveNewPropertyDraftPhotos(photoUrls: string[]) {
   if (typeof window === "undefined") return;
-  window.sessionStorage.setItem(NEW_PROPERTY_DRAFT_PHOTOS_STORAGE_KEY, JSON.stringify(photoUrls));
+  window.sessionStorage.setItem(
+    NEW_PROPERTY_DRAFT_PHOTOS_STORAGE_KEY,
+    JSON.stringify(photoUrls)
+  );
 }
 
 export function loadNewPropertyDraftPhotos() {
   if (typeof window === "undefined") return [];
 
-  const rawValue = window.sessionStorage.getItem(NEW_PROPERTY_DRAFT_PHOTOS_STORAGE_KEY);
+  const rawValue = window.sessionStorage.getItem(
+    NEW_PROPERTY_DRAFT_PHOTOS_STORAGE_KEY
+  );
   if (!rawValue) return [];
 
   try {

@@ -28,8 +28,8 @@ import { formatMoneyFromCentsValue, parseMoneyCentsInput } from "@/lib/money";
 import { formatPhoneNumber } from "@/lib/phone";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
-import { Building2, Edit, MapPin, Search, Trash2, User } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Building2, Edit, ImagePlus, MapPin, Search, Trash2, Upload, User } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { toast } from "sonner";
 import { Link } from "wouter";
 
@@ -61,6 +61,22 @@ type PropertyFormState = {
 };
 
 const OWNER_EMAIL_CONFLICT_PREFIX = "OWNER_EMAIL_CONFLICT::";
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      if (!result) {
+        reject(new Error("Nao foi possivel ler o arquivo selecionado."));
+        return;
+      }
+      resolve(result);
+    };
+    reader.onerror = () => reject(new Error("Nao foi possivel ler o arquivo selecionado."));
+    reader.readAsDataURL(file);
+  });
+}
 
 function createEmptyForm(): PropertyFormState {
   return {
@@ -101,6 +117,8 @@ export default function MeusImoveis() {
   const utils = trpc.useUtils();
   const [editingImovel, setEditingImovel] = useState<any>(null);
   const [formData, setFormData] = useState<PropertyFormState>(createEmptyForm);
+  const [editingPhotoUrls, setEditingPhotoUrls] = useState<string[]>([]);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<PropertyFilter | null>(null);
   const [search, setSearch] = useState("");
   const [cepLoading, setCepLoading] = useState(false);
@@ -109,6 +127,11 @@ export default function MeusImoveis() {
   const highlightedPropertyId = useMemo(() => {
     if (typeof window === "undefined") return null;
     const rawValue = new URLSearchParams(window.location.search).get("highlightProperty");
+    return rawValue ? Number(rawValue) : null;
+  }, []);
+  const editPropertyId = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    const rawValue = new URLSearchParams(window.location.search).get("editProperty");
     return rawValue ? Number(rawValue) : null;
   }, []);
 
@@ -120,8 +143,16 @@ export default function MeusImoveis() {
     enabled: user?.role === "administrativo",
   });
 
-  const activeBrokers =
-    adminUsers?.filter((broker) => broker.role === "corretor" && broker.isActive === 1) || [];
+  const uploadPhotoMutation = trpc.properties.uploadPhoto.useMutation();
+  const deleteUploadedPhotoMutation = trpc.properties.deleteUploadedPhoto.useMutation();
+
+  const activeResponsibleUsers =
+    adminUsers?.filter(
+      candidate =>
+        (candidate.role === "corretor" || candidate.role === "administrativo") &&
+        candidate.isActive === 1 &&
+        !(candidate.role === "administrativo" && candidate.registrationSource === "bootstrap")
+    ) || [];
 
   const updateProperty = trpc.properties.update.useMutation({
     onSuccess: async () => {
@@ -176,15 +207,26 @@ export default function MeusImoveis() {
     }
   }, [highlightedPropertyId, imoveis]);
 
+  useEffect(() => {
+    if (!editPropertyId || !imoveis?.length || editingImovel) return;
+    const propertyToEdit = imoveis.find(imovel => imovel.id === editPropertyId);
+    if (propertyToEdit) {
+      handleEdit(propertyToEdit);
+    }
+  }, [editPropertyId, editingImovel, imoveis]);
+
   const closeEditDialog = () => {
     setEditingImovel(null);
     setFormData(createEmptyForm());
+    setEditingPhotoUrls([]);
     setCepLoading(false);
     setCepError("");
   };
 
   const handleEdit = (imovel: any) => {
+    const parsedPhotos = imovel.fotos ? JSON.parse(imovel.fotos) : [];
     setEditingImovel(imovel);
+    setEditingPhotoUrls(Array.isArray(parsedPhotos) ? parsedPhotos : []);
     setFormData({
       titulo: imovel.titulo || "",
       descricao: imovel.descricao || "",
@@ -262,16 +304,16 @@ export default function MeusImoveis() {
     }
 
     if (user?.role === "administrativo" && !formData.idCorretor) {
-      toast.error("Selecione o corretor responsável pelo imóvel.");
+      toast.error("Selecione o responsável pelo imóvel.");
       return;
     }
 
-    if (!formData.ownerName || !formData.ownerEmail || !formData.ownerCpf || !formData.ownerPhone) {
+    if (!formData.ownerName || !formData.ownerPhone) {
       toast.error("Preencha os dados obrigatórios do proprietário.");
       return;
     }
 
-    if (!isValidCpf(formData.ownerCpf)) {
+    if (formData.ownerCpf && !isValidCpf(formData.ownerCpf)) {
       toast.error("CPF do proprietário inválido. Confira os dígitos informados.");
       return;
     }
@@ -296,12 +338,12 @@ export default function MeusImoveis() {
       cep: formData.cep,
       destaque: parseInt(formData.destaque, 10),
       idCorretor: formData.idCorretor ? parseInt(formData.idCorretor, 10) : undefined,
-      fotos: editingImovel.fotos || "[]",
+      fotos: JSON.stringify(editingPhotoUrls),
       confirmedOwnerEmailConflict,
       owner: {
         name: formData.ownerName,
-        email: formData.ownerEmail.trim().toLowerCase(),
-        cpf: normalizeCpf(formData.ownerCpf),
+        email: formData.ownerEmail.trim().toLowerCase() || undefined,
+        cpf: formData.ownerCpf ? normalizeCpf(formData.ownerCpf) : undefined,
         phone: formData.ownerPhone,
       },
     });
@@ -329,6 +371,49 @@ export default function MeusImoveis() {
       confirmationText: confirmationText.trim(),
       motivoExclusao: motivoExclusao.trim(),
     });
+  };
+
+  const handleUploadEditPhotos = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = "";
+
+    if (!files.length) return;
+
+    const validFiles = files.filter(file => file.type.startsWith("image/"));
+    if (!validFiles.length) {
+      toast.error("Selecione ao menos uma imagem valida.");
+      return;
+    }
+
+    setUploadingPhoto(true);
+    try {
+      for (const file of validFiles) {
+        const dataUrl = await readFileAsDataUrl(file);
+        const uploaded = await uploadPhotoMutation.mutateAsync({
+          fileName: file.name,
+          dataUrl,
+        });
+        setEditingPhotoUrls(current => [...current, uploaded.url]);
+      }
+      toast.success("Foto adicionada.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Nao foi possivel enviar a imagem.");
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
+
+  const handleRemoveEditPhoto = async (index: number) => {
+    const currentUrl = editingPhotoUrls[index];
+    setEditingPhotoUrls(current => current.filter((_, currentIndex) => currentIndex !== index));
+
+    try {
+      if (currentUrl) {
+        await deleteUploadedPhotoMutation.mutateAsync({ url: currentUrl });
+      }
+    } catch {
+      // A foto pode ser antiga/remota; a atualização do imóvel ainda remove a referência.
+    }
   };
 
   const totalImoveis = imoveis?.length ?? 0;
@@ -600,15 +685,15 @@ export default function MeusImoveis() {
               </div>
 
               <div className="space-y-1 sm:space-y-2">
-                <Label htmlFor="idCorretor" className="text-sm sm:text-base">Corretor responsável *</Label>
+                <Label htmlFor="idCorretor" className="text-sm sm:text-base">Responsável pelo imóvel *</Label>
                 {user?.role === "administrativo" ? (
                   <Select value={formData.idCorretor || "empty"} onValueChange={value => setFormData({ ...formData, idCorretor: value === "empty" ? "" : value })}>
                     <SelectTrigger id="idCorretor">
-                      <SelectValue placeholder="Selecione o corretor responsável" />
+                      <SelectValue placeholder="Selecione o responsável pelo imóvel" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="empty">Selecione</SelectItem>
-                      {activeBrokers.map(broker => (
+                      {activeResponsibleUsers.map(broker => (
                         <SelectItem key={broker.id} value={String(broker.id)}>
                           {broker.name || broker.email}
                         </SelectItem>
@@ -690,7 +775,7 @@ export default function MeusImoveis() {
                 <div className="mb-3">
                   <h3 className="text-base font-semibold">Proprietário do imóvel</h3>
                   <p className="text-sm text-muted-foreground">
-                    O CPF do proprietário é obrigatório e será reaproveitado se já existir cadastro para a mesma pessoa.
+                    Nome e telefone são obrigatórios. CPF e e-mail ajudam a reaproveitar cadastros existentes.
                   </p>
                 </div>
 
@@ -705,7 +790,7 @@ export default function MeusImoveis() {
                     />
                   </div>
                   <div className="space-y-1 sm:space-y-2">
-                    <Label htmlFor="ownerEmail" className="text-sm sm:text-base">E-mail *</Label>
+                    <Label htmlFor="ownerEmail" className="text-sm sm:text-base">E-mail</Label>
                     <Input
                       id="ownerEmail"
                       type="email"
@@ -724,7 +809,7 @@ export default function MeusImoveis() {
                     />
                   </div>
                   <div className="space-y-1 sm:space-y-2">
-                    <Label htmlFor="ownerCpf" className="text-sm sm:text-base">CPF *</Label>
+                    <Label htmlFor="ownerCpf" className="text-sm sm:text-base">CPF</Label>
                     <Input
                       id="ownerCpf"
                       inputMode="numeric"
@@ -814,6 +899,60 @@ export default function MeusImoveis() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              <div className="rounded-xl border border-border/70 bg-muted/20 p-4">
+                <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h3 className="text-base font-semibold">Fotos do imóvel</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Adicione novas fotos ou remova imagens que não devem mais aparecer no anúncio.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="relative overflow-hidden"
+                    disabled={uploadingPhoto || uploadPhotoMutation.isPending}
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    {uploadingPhoto || uploadPhotoMutation.isPending ? "Enviando..." : "Adicionar fotos"}
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="absolute inset-0 cursor-pointer opacity-0"
+                      onChange={handleUploadEditPhotos}
+                      disabled={uploadingPhoto || uploadPhotoMutation.isPending}
+                    />
+                  </Button>
+                </div>
+
+                {editingPhotoUrls.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    {editingPhotoUrls.map((url, index) => (
+                      <div key={`${url}-${index}`} className="relative overflow-hidden rounded-xl border bg-white">
+                        <img src={url} alt={`Foto ${index + 1}`} className="h-28 w-full object-cover" />
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="secondary"
+                          className="absolute right-2 top-2 h-8 w-8 rounded-full border border-white bg-white text-destructive shadow-sm hover:bg-rose-50"
+                          onClick={() => handleRemoveEditPhoto(index)}
+                          disabled={deleteUploadedPhotoMutation.isPending}
+                          aria-label={`Remover foto ${index + 1}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex min-h-28 items-center justify-center rounded-xl border border-dashed bg-white/70 text-sm text-muted-foreground">
+                    <ImagePlus className="mr-2 h-4 w-4" />
+                    Nenhuma foto cadastrada.
+                  </div>
+                )}
               </div>
 
               <Button
