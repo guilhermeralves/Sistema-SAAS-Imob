@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCpf, isValidCpf, normalizeCpf } from "@/lib/cpf";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeftRight, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowLeftRight, CheckCircle2, FileSignature, FileText, Pencil, Plus, Save, Trash2, WandSparkles } from "lucide-react";
 import { toast } from "sonner";
 
 const FIELD_CLASS =
@@ -36,14 +36,27 @@ function formatDateInput(value: Date | string | null | undefined) {
   return value.toISOString().slice(0, 10);
 }
 
+function parseUnresolvedVariables(value: string | null | undefined) {
+  try {
+    const parsed = JSON.parse(value || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 type InitialRentalProposal = {
   id: number;
+  status: string;
+  currentStep: string;
   propertyId: number;
   brokerUserId: number;
   tenantUserId: number;
   ownerId?: number | null;
   tenants?: UserOption[];
   owners?: UserOption[];
+  contractTemplates?: ContractTemplateOption[];
+  generatedContracts?: GeneratedContractOption[];
   ownerConfirmedAt: Date | string | null;
   tenantConfirmedAt: Date | string | null;
   leaseTermMonths: number;
@@ -60,6 +73,22 @@ type UserOption = {
   name: string | null;
   email: string | null;
   cpf?: string | null;
+};
+
+type ContractTemplateOption = {
+  id: number;
+  name: string;
+  notes: string | null;
+  originalFileName: string;
+};
+
+type GeneratedContractOption = {
+  id: number;
+  title: string;
+  status: string;
+  reviewedText: string;
+  unresolvedVariables: string;
+  approvedAt?: Date | string | null;
 };
 
 type RentalProposalFormProps = {
@@ -372,11 +401,15 @@ export default function RentalProposalForm({
     typeof window !== "undefined" ? window.location.search : location.split("?")[1] ?? ""
   ).get("propertyId");
   const isEditing = Boolean(initialProposal);
+  const isContractTemplateStep = initialProposal?.currentStep === "modelos_contrato";
+  const isContractReviewStep = initialProposal?.currentStep === "contratos_em_revisao";
   const [isDirty, setIsDirty] = useState(false);
+  const [templateSelectionDirty, setTemplateSelectionDirty] = useState(false);
   const [propertyId, setPropertyId] = useState("");
   const [brokerUserId, setBrokerUserId] = useState("");
   const [tenantUserIds, setTenantUserIds] = useState<string[]>([]);
   const [ownerIds, setOwnerIds] = useState<string[]>([]);
+  const [selectedContractTemplateIds, setSelectedContractTemplateIds] = useState<string[]>([]);
   const [ownerConfirmed, setOwnerConfirmed] = useState(false);
   const [tenantConfirmed, setTenantConfirmed] = useState(false);
   const [leaseTermMonths, setLeaseTermMonths] = useState("30");
@@ -395,6 +428,9 @@ export default function RentalProposalForm({
   const [tenantPickerOpen, setTenantPickerOpen] = useState(false);
   const [ownerPickerOpen, setOwnerPickerOpen] = useState(false);
   const [propertyRequiredDialogOpen, setPropertyRequiredDialogOpen] = useState(false);
+  const [editingGeneratedContract, setEditingGeneratedContract] = useState<GeneratedContractOption | null>(null);
+  const [contractReviewText, setContractReviewText] = useState("");
+  const [contractReviewDirty, setContractReviewDirty] = useState(false);
 
   useEffect(() => {
     if (!initialProposal) return;
@@ -422,17 +458,25 @@ export default function RentalProposalForm({
     setStartDate(formatDateInput(initialProposal.startDate));
     setDueDay(String(initialProposal.dueDay));
     setNotes(initialProposal.notes ?? "");
+    setSelectedContractTemplateIds(
+      initialProposal.contractTemplates?.map(template => String(template.id)) ?? []
+    );
+    setTemplateSelectionDirty(false);
     setIsDirty(false);
   }, [initialProposal]);
 
   useEffect(() => {
-    onDirtyChange?.(isDirty);
-  }, [isDirty, onDirtyChange]);
+    onDirtyChange?.(isDirty || templateSelectionDirty || contractReviewDirty);
+  }, [contractReviewDirty, isDirty, onDirtyChange, templateSelectionDirty]);
 
 
   const { data: properties, isLoading: loadingProperties } = trpc.properties.myProperties.useQuery();
   const { data: users } = trpc.admin.users.useQuery();
   const { data: propertyOwners } = trpc.propertyOwners.list.useQuery();
+  const { data: contractTemplates, isLoading: loadingContractTemplates } = trpc.contractTemplates.list.useQuery(
+    { contractKind: "locacao" },
+    { enabled: Boolean(initialProposal) }
+  );
 
   const brokers = useMemo(
     () => (users ?? []).filter(user => user.role === "corretor" || user.role === "administrativo"),
@@ -571,6 +615,62 @@ export default function RentalProposalForm({
     },
   });
 
+  const selectContractTemplates = trpc.rentalProposals.selectContractTemplates.useMutation({
+    onSuccess: async () => {
+      toast.success("Modelos de contrato vinculados a proposta.");
+      setTemplateSelectionDirty(false);
+      await utils.rentalProposals.list.invalidate();
+      if (initialProposal) {
+        await utils.rentalProposals.getById.invalidate({ id: initialProposal.id });
+      }
+    },
+    onError: error => {
+      toast.error(error.message || "Nao foi possivel salvar os modelos de contrato.");
+    },
+  });
+
+  const generateContracts = trpc.rentalProposals.generateContracts.useMutation({
+    onSuccess: async () => {
+      toast.success("Contratos gerados para revisão.");
+      await utils.rentalProposals.list.invalidate();
+      if (initialProposal) {
+        await utils.rentalProposals.getById.invalidate({ id: initialProposal.id });
+      }
+    },
+    onError: error => {
+      toast.error(error.message || "Nao foi possivel gerar os contratos.");
+    },
+  });
+
+  const updateGeneratedContractText = trpc.rentalProposals.updateGeneratedContractText.useMutation({
+    onSuccess: async () => {
+      toast.success("Texto do contrato salvo.");
+      setContractReviewDirty(false);
+      setEditingGeneratedContract(null);
+      setContractReviewText("");
+      await utils.rentalProposals.list.invalidate();
+      if (initialProposal) {
+        await utils.rentalProposals.getById.invalidate({ id: initialProposal.id });
+      }
+    },
+    onError: error => {
+      toast.error(error.message || "Nao foi possivel salvar o texto do contrato.");
+    },
+  });
+
+  const approveGeneratedContract = trpc.rentalProposals.approveGeneratedContract.useMutation({
+    onSuccess: async data => {
+      toast.success(data.allApproved ? "Todos os contratos foram aprovados." : "Contrato aprovado.");
+      await utils.rentalProposals.list.invalidate();
+      if (initialProposal) {
+        await utils.rentalProposals.getById.invalidate({ id: initialProposal.id });
+      }
+    },
+    onError: error => {
+      toast.error(error.message || "Nao foi possivel aprovar o contrato.");
+    },
+  });
+
   const createQuickOwner = trpc.propertyOwners.createQuick.useMutation({
     onSuccess: async owner => {
       toast.success("Proprietario cadastrado e vinculado.");
@@ -660,6 +760,77 @@ export default function RentalProposalForm({
 
     createProposal.mutate(payload);
   };
+
+  const toggleContractTemplateSelection = (templateId: number) => {
+    const value = String(templateId);
+    setSelectedContractTemplateIds(current => {
+      const next = current.includes(value)
+        ? current.filter(id => id !== value)
+        : [...current, value];
+      return next;
+    });
+    setTemplateSelectionDirty(true);
+  };
+
+  const saveContractTemplateSelection = () => {
+    if (!initialProposal) return;
+    if (selectedContractTemplateIds.length === 0) {
+      toast.error("Selecione ao menos um modelo de contrato.");
+      return;
+    }
+
+    selectContractTemplates.mutate({
+      id: initialProposal.id,
+      contractTemplateIds: selectedContractTemplateIds.map(Number),
+    });
+  };
+
+  const generateContractsForReview = () => {
+    if (!initialProposal) return;
+    if (templateSelectionDirty) {
+      toast.error("Salve a selecao de modelos antes de gerar os contratos.");
+      return;
+    }
+    if (selectedContractTemplateIds.length === 0) {
+      toast.error("Selecione ao menos um modelo de contrato.");
+      return;
+    }
+
+    generateContracts.mutate({ id: initialProposal.id });
+  };
+
+  const openGeneratedContractEditor = (contract: GeneratedContractOption) => {
+    setEditingGeneratedContract(contract);
+    setContractReviewText(contract.reviewedText);
+    setContractReviewDirty(false);
+  };
+
+  const saveGeneratedContractText = () => {
+    if (!editingGeneratedContract) return;
+    if (!contractReviewText.trim()) {
+      toast.error("O texto revisado nao pode ficar vazio.");
+      return;
+    }
+
+    updateGeneratedContractText.mutate({
+      contractId: editingGeneratedContract.id,
+      reviewedText: contractReviewText,
+    });
+  };
+
+  const approveContract = (contract: GeneratedContractOption) => {
+    if (!contract.reviewedText.trim()) {
+      toast.error("Revise o texto do contrato antes de aprovar.");
+      return;
+    }
+
+    approveGeneratedContract.mutate({ contractId: contract.id });
+  };
+
+  const generatedContracts = initialProposal?.generatedContracts ?? [];
+  const allGeneratedContractsApproved =
+    generatedContracts.length > 0 &&
+    generatedContracts.every(contract => contract.status === "aprovado");
 
   return (
     <div className="space-y-5">
@@ -964,6 +1135,180 @@ export default function RentalProposalForm({
           </div>
         </div>
       </div>
+      {initialProposal && isContractTemplateStep ? (
+        <div className="rounded-[32px] border border-white/70 bg-white/90 p-5 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+                  <FileSignature className="h-5 w-5" />
+                </span>
+                <h2 className="text-xl font-semibold text-slate-950">Modelos de contrato</h2>
+              </div>
+              <p className="mt-2 text-sm text-slate-600">
+                Escolha os modelos que serão cruzados com os dados desta proposta na próxima etapa.
+              </p>
+            </div>
+            {templateSelectionDirty ? (
+              <span className="w-fit rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                Seleção não salva
+              </span>
+            ) : null}
+          </div>
+
+          {loadingContractTemplates ? (
+            <div className="space-y-3">
+              {[1, 2].map(item => (
+                <div key={item} className="h-16 animate-pulse rounded-2xl bg-slate-100" />
+              ))}
+            </div>
+          ) : contractTemplates?.length ? (
+            <div className="space-y-3">
+              {contractTemplates.map(template => {
+                const checked = selectedContractTemplateIds.includes(String(template.id));
+
+                return (
+                  <label
+                    key={template.id}
+                    className={`flex cursor-pointer flex-col gap-3 rounded-2xl border p-4 transition sm:flex-row sm:items-start ${
+                      checked
+                        ? "border-emerald-200 bg-emerald-50/80"
+                        : "border-slate-200 bg-white/80 hover:border-emerald-200"
+                    }`}
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={() => toggleContractTemplateSelection(template.id)}
+                      className="mt-1"
+                    />
+                    <span className="min-w-0">
+                      <span className="block font-semibold text-slate-950">{template.name}</span>
+                      <span className="mt-1 block text-sm text-slate-600">
+                        {template.notes || "Sem observacoes internas."}
+                      </span>
+                      <span className="mt-2 block truncate text-xs text-slate-500">
+                        Arquivo base: {template.originalFileName}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  variant="outline"
+                  className="rounded-full bg-white"
+                  disabled={!templateSelectionDirty || selectContractTemplates.isPending}
+                  onClick={saveContractTemplateSelection}
+                >
+                  {selectContractTemplates.isPending ? "Salvando..." : "Salvar modelos escolhidos"}
+                </Button>
+                <Button
+                  className="gap-2 rounded-full bg-emerald-700 text-white hover:bg-emerald-800"
+                  disabled={templateSelectionDirty || generateContracts.isPending}
+                  onClick={generateContractsForReview}
+                >
+                  <WandSparkles className="h-4 w-4" />
+                  {generateContracts.isPending ? "Gerando..." : "Gerar contratos para revisão"}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              Nenhum modelo de contrato cadastrado. Cadastre os modelos na aba Contratos antes de continuar.
+            </div>
+          )}
+        </div>
+      ) : null}
+      {initialProposal && isContractReviewStep ? (
+        <div className="rounded-[32px] border border-white/70 bg-white/90 p-5 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
+          <div className="mb-5 flex items-center gap-2">
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+              <FileText className="h-5 w-5" />
+            </span>
+            <div>
+              <h2 className="text-xl font-semibold text-slate-950">Contratos em revisão</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Textos gerados com os dados da proposta e prontos para validação manual.
+              </p>
+            </div>
+          </div>
+
+          {generatedContracts.length ? (
+            <div className="space-y-3">
+              {generatedContracts.map(contract => {
+                const unresolvedCount = parseUnresolvedVariables(contract.unresolvedVariables).length;
+                const isApproved = contract.status === "aprovado";
+
+                return (
+                  <div key={contract.id} className="rounded-2xl border border-slate-200 bg-white/85 p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-semibold text-slate-950">{contract.title}</p>
+                          <span
+                            className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                              isApproved
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-slate-100 text-slate-600"
+                            }`}
+                          >
+                            {isApproved ? "Aprovado" : "Em revisao"}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-sm text-slate-600">
+                          {contract.reviewedText.length.toLocaleString("pt-BR")} caracteres gerados para revisão.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2 sm:justify-end">
+                        <span
+                          className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${
+                            unresolvedCount > 0
+                              ? "bg-amber-100 text-amber-800"
+                              : "bg-emerald-100 text-emerald-700"
+                          }`}
+                        >
+                          {unresolvedCount > 0
+                            ? `${unresolvedCount} variavel(is) pendente(s)`
+                            : "Variaveis preenchidas"}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 rounded-full bg-white px-3 text-xs font-semibold"
+                          onClick={() => openGeneratedContractEditor(contract)}
+                        >
+                          <Pencil className="mr-1 h-3.5 w-3.5" />
+                          Editar texto
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-8 rounded-full bg-emerald-700 px-3 text-xs font-semibold text-white hover:bg-emerald-800"
+                          disabled={isApproved || approveGeneratedContract.isPending}
+                          onClick={() => approveContract(contract)}
+                        >
+                          <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+                          {isApproved ? "Aprovado" : "Aprovar"}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {allGeneratedContractsApproved ? (
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                  Todos os contratos foram aprovados. A próxima etapa será gerar o código de referência da proposta.
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              Nenhum contrato gerado foi encontrado para esta proposta.
+            </div>
+          )}
+        </div>
+      ) : null}
       <UserChangeDialog
         open={brokerPickerOpen}
         title="Trocar corretor responsável"
@@ -1011,6 +1356,60 @@ export default function RentalProposalForm({
         onNewOwnerCpfChange={setNewOwnerCpf}
         onCreateOwner={submitQuickOwner}
       />
+      <Dialog
+        open={editingGeneratedContract !== null}
+        onOpenChange={open => {
+          if (open) return;
+          setEditingGeneratedContract(null);
+          setContractReviewText("");
+          setContractReviewDirty(false);
+        }}
+      >
+        <DialogContent
+          className="max-h-[92vh] w-full max-w-[calc(100%-2rem)] overflow-y-auto rounded-[32px] border-white/80 bg-[#f7f6f2] p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)] sm:max-w-4xl sm:p-6"
+          onOpenAutoFocus={event => event.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>{editingGeneratedContract?.title || "Revisar contrato"}</DialogTitle>
+            <DialogDescription>
+              Edite o texto gerado antes de aprovar este contrato para a próxima etapa.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Textarea
+              value={contractReviewText}
+              onChange={event => {
+                setContractReviewText(event.target.value);
+                setContractReviewDirty(true);
+              }}
+              className="min-h-[56vh] rounded-2xl border-slate-200 bg-white font-mono text-sm leading-6 shadow-sm"
+            />
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full bg-white"
+                onClick={() => {
+                  setEditingGeneratedContract(null);
+                  setContractReviewText("");
+                  setContractReviewDirty(false);
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="gap-2 rounded-full bg-slate-950 text-white hover:bg-slate-800"
+                disabled={!contractReviewDirty || updateGeneratedContractText.isPending}
+                onClick={saveGeneratedContractText}
+              >
+                <Save className="h-4 w-4" />
+                {updateGeneratedContractText.isPending ? "Salvando..." : "Salvar texto revisado"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={propertyRequiredDialogOpen} onOpenChange={setPropertyRequiredDialogOpen}>
         <DialogContent className="!w-[420px] !max-w-[calc(100%-2rem)] rounded-[24px] border-white/80 bg-[#f7f6f2] p-4 sm:!max-w-[420px] sm:p-5">
           <DialogHeader>

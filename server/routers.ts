@@ -1,6 +1,12 @@
 ﻿import { APP_ROLES } from "@shared/auth";
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import {
+  CONTRACT_PARTICIPANT_ROLES,
+  CONTRACT_TEMPLATE_KINDS,
+  CONTRACT_VARIABLE_FIELD_MAP,
+  normalizeContractVariableLabel,
+} from "@shared/contract-variables";
+import {
   CONTRACT_REQUIRED_USER_FIELDS,
   USER_PROFILE_MARITAL_STATUSES,
 } from "@shared/user-profile";
@@ -161,9 +167,20 @@ const contractTemplateDocxSchema = z.object({
   dataUrl: z.string().trim().min(1).max(20_000_000),
 });
 
+const listContractTemplatesSchema = z
+  .object({
+    contractKind: z.enum(CONTRACT_TEMPLATE_KINDS).optional(),
+  })
+  .optional();
+
 const createContractTemplateSchema = z.object({
   name: z.string().trim().min(2).max(180),
   notes: z.string().trim().max(3000).optional(),
+  contractKind: z.enum(CONTRACT_TEMPLATE_KINDS).default("locacao"),
+  participantRoles: z
+    .array(z.enum(CONTRACT_PARTICIPANT_ROLES))
+    .min(1)
+    .max(CONTRACT_PARTICIPANT_ROLES.length),
   originalFileName: z.string().trim().min(1).max(255),
   originalMimeType: z.string().trim().min(1).max(160),
   originalFileData: z.string().trim().min(1).max(20_000_000),
@@ -176,6 +193,12 @@ const updateContractTemplateSchema = z.object({
   id: z.number().int().positive(),
   name: z.string().trim().min(2).max(180),
   notes: z.string().trim().max(3000).optional(),
+  contractKind: z.enum(CONTRACT_TEMPLATE_KINDS).optional(),
+  participantRoles: z
+    .array(z.enum(CONTRACT_PARTICIPANT_ROLES))
+    .min(1)
+    .max(CONTRACT_PARTICIPANT_ROLES.length)
+    .optional(),
   reviewedText: z.string().trim().min(1),
   variableHighlights: z.array(contractTemplateTextVariableSchema).max(200),
 });
@@ -199,6 +222,24 @@ const createRentalProposalSchema = z.object({
 
 const updateRentalProposalSchema = createRentalProposalSchema.extend({
   id: z.number().int().positive(),
+});
+
+const selectRentalProposalContractTemplatesSchema = z.object({
+  id: z.number().int().positive(),
+  contractTemplateIds: z.array(z.number().int().positive()).min(1).max(10),
+});
+
+const generateRentalProposalContractsSchema = z.object({
+  id: z.number().int().positive(),
+});
+
+const updateRentalProposalGeneratedContractTextSchema = z.object({
+  contractId: z.number().int().positive(),
+  reviewedText: z.string().trim().min(1).max(1_000_000),
+});
+
+const approveRentalProposalGeneratedContractSchema = z.object({
+  contractId: z.number().int().positive(),
 });
 
 function uniquePositiveIds(ids: number[]) {
@@ -880,38 +921,6 @@ async function extractDocxTextFromDataUrl(dataUrl: string) {
   return text;
 }
 
-function normalizeContractVariableLabel(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9]+/g, " ")
-    .trim()
-    .toLowerCase();
-}
-
-const CONTRACT_VARIABLE_FIELD_MAP: Record<string, string> = {
-  "nome do locatario": "locatario.nome",
-  "cpf do locatario": "locatario.cpf",
-  "rg do locatario": "locatario.rg",
-  "email do locatario": "locatario.email",
-  "telefone do locatario": "locatario.telefone",
-  "nome do proprietario": "proprietario.nome",
-  "cpf do proprietario": "proprietario.cpf",
-  "email do proprietario": "proprietario.email",
-  "telefone do proprietario": "proprietario.telefone",
-  "endereco do imovel": "imovel.enderecoCompleto",
-  "bairro do imovel": "imovel.bairro",
-  "cidade do imovel": "imovel.cidade",
-  "estado do imovel": "imovel.estado",
-  "cep do imovel": "imovel.cep",
-  "valor do aluguel": "locacao.valorAluguel",
-  "valor da locacao": "locacao.valorAluguel",
-  "data de inicio": "locacao.dataInicio",
-  "data de termino": "locacao.dataFim",
-  "prazo de locacao": "locacao.prazo",
-  "dia de vencimento": "locacao.diaVencimento",
-};
-
 function detectContractTemplateVariables(text: string) {
   const variables: Array<{
     id: string;
@@ -940,6 +949,216 @@ function detectContractTemplateVariables(text: string) {
   }
 
   return variables.slice(0, 200);
+}
+
+type ContractTemplateVariable = {
+  placeholder: string;
+  label: string;
+  key?: string | null;
+};
+
+function parseContractTemplateVariables(value: string | null | undefined) {
+  try {
+    const parsed = JSON.parse(value || "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (item): item is ContractTemplateVariable =>
+        typeof item === "object" &&
+        item !== null &&
+        typeof item.placeholder === "string" &&
+        typeof item.label === "string"
+    );
+  } catch {
+    return [];
+  }
+}
+
+function parseRecord(value: string | null | undefined): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(value || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function getNestedValue(source: Record<string, unknown>, path: string) {
+  return path.split(".").reduce<unknown>((current, segment) => {
+    const record = asRecord(current);
+    return record ? record[segment] : undefined;
+  }, source);
+}
+
+function formatCurrencyFromCents(value: unknown) {
+  const amount = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(amount)) return "";
+  return (amount / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
+
+function formatDatePtBr(value: unknown) {
+  if (!value) return "";
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("pt-BR", { timeZone: "UTC" });
+}
+
+function addMonthsToDate(value: unknown, months: unknown) {
+  if (!value) return "";
+  const date = new Date(String(value));
+  const term = typeof months === "number" ? months : Number(months);
+  if (Number.isNaN(date.getTime()) || !Number.isFinite(term)) return "";
+  date.setUTCMonth(date.getUTCMonth() + term);
+  return date.toISOString().slice(0, 10);
+}
+
+function joinAddress(parts: Array<unknown>) {
+  return parts
+    .map(part => (part === null || part === undefined ? "" : String(part).trim()))
+    .filter(Boolean)
+    .join(", ");
+}
+
+function formatPersonVariableSource(person: Record<string, unknown>) {
+  const address = joinAddress([
+    person.address,
+    person.addressNumber,
+    person.neighborhood,
+    person.city,
+    person.state,
+    person.zipCode,
+  ]);
+
+  return {
+    nome: person.name,
+    cpf: person.cpf,
+    rg: person.rg,
+    email: person.email,
+    telefone: person.phone,
+    birthDate: formatDatePtBr(person.birthDate),
+    profession: person.profession,
+    maritalStatus: person.maritalStatus,
+    nacionalidade: person.nationality,
+    grossMonthlyIncome: formatCurrencyFromCents(person.grossMonthlyIncome),
+    householdIncome: formatCurrencyFromCents(person.householdIncome),
+    endereco: address || person.address,
+    addressNumber: person.addressNumber,
+    bairro: person.neighborhood,
+    cidade: person.city,
+    estado: person.state,
+    zipCode: person.zipCode,
+    observacoes: person.notes,
+  };
+}
+
+function buildRentalProposalVariableSource(
+  contextSnapshot: Record<string, unknown>
+) {
+  const property = asRecord(contextSnapshot.property) ?? {};
+  const broker = asRecord(contextSnapshot.broker) ?? {};
+  const tenant = asRecord(contextSnapshot.tenant) ?? {};
+  const owner = asRecord(contextSnapshot.owner) ?? {};
+  const lease = asRecord(contextSnapshot.lease) ?? {};
+  const startDate = lease.startDate;
+  const endDate = addMonthsToDate(startDate, lease.leaseTermMonths);
+
+  const address = joinAddress([
+    property.endereco,
+    property.address,
+    property.numero,
+    property.addressNumber,
+    property.bairro,
+    property.cidade,
+    property.estado,
+  ]);
+  const tenantSource = formatPersonVariableSource(tenant);
+  const ownerSource = formatPersonVariableSource(owner);
+
+  return {
+    locatario: tenantSource,
+    comprador: tenantSource,
+    proprietario: ownerSource,
+    vendedor: ownerSource,
+    corretor: {
+      nome: broker.name,
+      email: broker.email,
+      telefone: broker.phone,
+      creci: broker.creci,
+    },
+    imovel: {
+      titulo: property.titulo,
+      enderecoCompleto: address,
+      endereco: property.endereco ?? property.address,
+      numero: property.numero ?? property.addressNumber,
+      bairro: property.bairro,
+      cidade: property.cidade,
+      estado: property.estado,
+      cep: property.cep,
+      valorVenda: formatCurrencyFromCents(property.valor),
+      valorLocacao: formatCurrencyFromCents(property.valorLocacao),
+      valorCondominio: formatCurrencyFromCents(
+        asRecord(property.condominio)?.valorCondominio
+      ),
+      valorIptu: formatCurrencyFromCents(asRecord(property.condominio)?.valorIptu),
+    },
+    locacao: {
+      valorAluguel: formatCurrencyFromCents(lease.rentAmount),
+      valorCondominio: lease.condominiumAmount
+        ? formatCurrencyFromCents(lease.condominiumAmount)
+        : "",
+      dataInicio: formatDatePtBr(startDate),
+      dataFim: formatDatePtBr(endDate),
+      prazo: lease.leaseTermMonths ? `${lease.leaseTermMonths} meses` : "",
+      diaVencimento: lease.dueDay,
+      indiceReajuste: lease.adjustmentIndex,
+      observacoes: lease.notes,
+    },
+  };
+}
+
+function applyRentalProposalVariables(
+  text: string,
+  variables: ContractTemplateVariable[],
+  variableSource: Record<string, unknown>
+) {
+  let generatedText = text;
+  const variableValues: Record<string, string> = {};
+  const unresolvedVariables: Array<{
+    placeholder: string;
+    label: string;
+    key: string | null;
+  }> = [];
+
+  for (const variable of variables) {
+    const key = variable.key || null;
+    const value = key ? getNestedValue(variableSource, key) : undefined;
+    const stringValue =
+      value === null || value === undefined ? "" : String(value).trim();
+
+    if (!key || !stringValue) {
+      unresolvedVariables.push({
+        placeholder: variable.placeholder,
+        label: variable.label,
+        key,
+      });
+      continue;
+    }
+
+    variableValues[variable.placeholder] = stringValue;
+    generatedText = generatedText.split(variable.placeholder).join(stringValue);
+  }
+
+  return { generatedText, variableValues, unresolvedVariables };
 }
 
 function getComputedTaskStatus(task: {
@@ -2921,9 +3140,9 @@ export const appRouter = router({
   }),
 
   contractTemplates: router({
-    list: adminProcedure.query(async () => {
+    list: adminProcedure.input(listContractTemplatesSchema).query(async ({ input }) => {
       const { getContractTemplates } = await import("./db");
-      return await getContractTemplates();
+      return await getContractTemplates(input?.contractKind);
     }),
     extractDocxText: adminProcedure
       .input(contractTemplateDocxSchema)
@@ -2943,6 +3162,8 @@ export const appRouter = router({
         return await createContractTemplate({
           name: input.name,
           notes: input.notes?.trim() || null,
+          contractKind: input.contractKind,
+          participantRoles: JSON.stringify(input.participantRoles),
           originalFileName: input.originalFileName,
           originalMimeType: input.originalMimeType,
           originalFileData: input.originalFileData,
@@ -2959,6 +3180,10 @@ export const appRouter = router({
         return await updateContractTemplate(input.id, {
           name: input.name,
           notes: input.notes?.trim() || null,
+          contractKind: input.contractKind,
+          participantRoles: input.participantRoles
+            ? JSON.stringify(input.participantRoles)
+            : undefined,
           reviewedText: input.reviewedText,
           variableHighlights: JSON.stringify(input.variableHighlights),
         });
@@ -3089,6 +3314,7 @@ export const appRouter = router({
             condominiumAmount: input.condominiumAmount ?? null,
             startDate: input.startDate,
             dueDay: input.dueDay,
+            notes: input.notes?.trim() || null,
           },
         };
 
@@ -3228,6 +3454,7 @@ export const appRouter = router({
             condominiumAmount: input.condominiumAmount ?? null,
             startDate: input.startDate,
             dueDay: input.dueDay,
+            notes: input.notes?.trim() || null,
           },
         };
 
@@ -3251,6 +3478,223 @@ export const appRouter = router({
           },
           { tenantUserIds, ownerIds }
         );
+      }),
+    selectContractTemplates: adminProcedure
+      .input(selectRentalProposalContractTemplatesSchema)
+      .mutation(async ({ input }) => {
+        const {
+          getContractTemplates,
+          getRentalProposalById,
+          updateRentalProposalContractTemplates,
+        } = await import("./db");
+        const proposal = await getRentalProposalById(input.id);
+        if (!proposal) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Proposta de locacao nao encontrada.",
+          });
+        }
+
+        if (proposal.currentStep !== "modelos_contrato") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "A selecao de modelos esta disponivel apenas na etapa Modelos de contrato.",
+          });
+        }
+
+        const contractTemplateIds = uniquePositiveIds(
+          input.contractTemplateIds
+        );
+        const templates = await getContractTemplates("locacao");
+        const validTemplateIds = new Set(templates.map(template => template.id));
+        const invalidTemplateIds = contractTemplateIds.filter(
+          id => !validTemplateIds.has(id)
+        );
+        if (invalidTemplateIds.length > 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Selecione modelos de contrato validos.",
+          });
+        }
+
+        const selectedTemplates = await updateRentalProposalContractTemplates(
+          input.id,
+          contractTemplateIds
+        );
+        return {
+          success: true,
+          contractTemplates: selectedTemplates,
+        } as const;
+      }),
+    generateContracts: adminProcedure
+      .input(generateRentalProposalContractsSchema)
+      .mutation(async ({ input }) => {
+        const {
+          getRentalProposalById,
+          replaceRentalProposalGeneratedContracts,
+          updateRentalProposal,
+        } = await import("./db");
+        const proposal = await getRentalProposalById(input.id);
+        if (!proposal) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Proposta de locacao nao encontrada.",
+          });
+        }
+
+        if (proposal.currentStep !== "modelos_contrato") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "Os contratos so podem ser gerados apos a escolha dos modelos.",
+          });
+        }
+
+        if (!proposal.contractTemplates?.length) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Selecione ao menos um modelo de contrato.",
+          });
+        }
+
+        const contextSnapshot = parseRecord(proposal.contextSnapshot);
+        const variableSource =
+          buildRentalProposalVariableSource(contextSnapshot);
+
+        const generatedContracts = proposal.contractTemplates.map(template => {
+          const variables = parseContractTemplateVariables(
+            template.variableHighlights
+          );
+          const { generatedText, variableValues, unresolvedVariables } =
+            applyRentalProposalVariables(
+              template.reviewedText || template.extractedText,
+              variables,
+              variableSource
+            );
+
+          return {
+            rentalProposalId: proposal.id,
+            contractTemplateId: template.id,
+            status: "em_revisao" as const,
+            title: template.name,
+            generatedText,
+            reviewedText: generatedText,
+            variableValues: JSON.stringify(variableValues),
+            unresolvedVariables: JSON.stringify(unresolvedVariables),
+          };
+        });
+
+        const createdContracts =
+          await replaceRentalProposalGeneratedContracts(
+            proposal.id,
+            generatedContracts
+          );
+        await updateRentalProposal(proposal.id, {
+          status: "contratos_em_revisao",
+          currentStep: "contratos_em_revisao",
+        });
+
+        return {
+          success: true,
+          generatedContracts: createdContracts,
+        } as const;
+      }),
+    updateGeneratedContractText: adminProcedure
+      .input(updateRentalProposalGeneratedContractTextSchema)
+      .mutation(async ({ input }) => {
+        const {
+          getRentalProposalById,
+          getRentalProposalGeneratedContractById,
+          updateRentalProposalGeneratedContractText,
+        } = await import("./db");
+        const contract = await getRentalProposalGeneratedContractById(
+          input.contractId
+        );
+        if (!contract) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Contrato gerado nao encontrado.",
+          });
+        }
+
+        const proposal = await getRentalProposalById(contract.rentalProposalId);
+        if (!proposal) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Proposta de locacao nao encontrada.",
+          });
+        }
+
+        if (proposal.currentStep !== "contratos_em_revisao") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "A edicao manual esta disponivel apenas na etapa Contratos em revisao.",
+          });
+        }
+
+        const updated = await updateRentalProposalGeneratedContractText(
+          input.contractId,
+          input.reviewedText
+        );
+        return { success: true, contract: updated } as const;
+      }),
+    approveGeneratedContract: adminProcedure
+      .input(approveRentalProposalGeneratedContractSchema)
+      .mutation(async ({ ctx, input }) => {
+        const {
+          approveRentalProposalGeneratedContract,
+          getRentalProposalById,
+          getRentalProposalGeneratedContractById,
+        } = await import("./db");
+        const contract = await getRentalProposalGeneratedContractById(
+          input.contractId
+        );
+        if (!contract) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Contrato gerado nao encontrado.",
+          });
+        }
+
+        const proposal = await getRentalProposalById(contract.rentalProposalId);
+        if (!proposal) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Proposta de locacao nao encontrada.",
+          });
+        }
+
+        if (proposal.currentStep !== "contratos_em_revisao") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "A aprovacao esta disponivel apenas na etapa Contratos em revisao.",
+          });
+        }
+
+        if (!contract.reviewedText.trim()) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Revise o texto do contrato antes de aprovar.",
+          });
+        }
+
+        const updated = await approveRentalProposalGeneratedContract(
+          input.contractId,
+          ctx.user.id
+        );
+        const refreshedProposal = await getRentalProposalById(
+          contract.rentalProposalId
+        );
+        const refreshedGeneratedContracts =
+          refreshedProposal?.generatedContracts ?? [];
+        const allApproved =
+          refreshedGeneratedContracts.length > 0 &&
+          refreshedGeneratedContracts.every(item => item.status === "aprovado");
+
+        return { success: true, contract: updated, allApproved } as const;
       }),
     delete: adminProcedure.input(idSchema).mutation(async ({ input }) => {
       const { deleteRentalProposal, getRentalProposalById } = await import(

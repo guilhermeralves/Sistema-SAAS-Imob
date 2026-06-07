@@ -19,6 +19,11 @@ docs/
   modules/           # Documentação por módulo funcional
 ```
 
+## Modulos documentados
+
+- `docs/modules/crm.md`: leads, corretores, clientes e acompanhamento comercial.
+- `docs/modules/locacoes.md`: propostas de locacao, escolha de modelos e caminho ate locacao ativa.
+
 ## Como usar com Codex
 
 Antes de pedir uma alteração grande, diga ao Codex para ler:

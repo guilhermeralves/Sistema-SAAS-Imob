@@ -549,6 +549,13 @@ export const contractTemplates = pgTable("contractTemplates", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 180 }).notNull(),
   notes: text("notes"),
+  contractKind: varchar("contractKind", { length: 30 })
+    .$type<"locacao" | "venda" | "outro">()
+    .default("locacao")
+    .notNull(),
+  participantRoles: text("participantRoles")
+    .default('["locatario","proprietario","corretor","imovel","locacao"]')
+    .notNull(),
   originalFileName: varchar("originalFileName", { length: 255 }).notNull(),
   originalMimeType: varchar("originalMimeType", { length: 120 }).notNull(),
   originalFileData: text("originalFileData").notNull(),
@@ -650,6 +657,64 @@ export const rentalProposalOwners = pgTable(
 export type RentalProposalOwner = typeof rentalProposalOwners.$inferSelect;
 export type InsertRentalProposalOwner =
   typeof rentalProposalOwners.$inferInsert;
+
+export const rentalProposalContractTemplates = pgTable(
+  "rentalProposalContractTemplates",
+  {
+    id: serial("id").primaryKey(),
+    rentalProposalId: integer("rentalProposalId").notNull(),
+    contractTemplateId: integer("contractTemplateId").notNull(),
+    position: integer("position").default(1).notNull(),
+    createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  },
+  table => [
+    uniqueIndex("rentalProposalContractTemplates_unique_idx").on(
+      table.rentalProposalId,
+      table.contractTemplateId
+    ),
+  ]
+);
+
+export type RentalProposalContractTemplate =
+  typeof rentalProposalContractTemplates.$inferSelect;
+export type InsertRentalProposalContractTemplate =
+  typeof rentalProposalContractTemplates.$inferInsert;
+
+export const rentalProposalGeneratedContracts = pgTable(
+  "rentalProposalGeneratedContracts",
+  {
+    id: serial("id").primaryKey(),
+    rentalProposalId: integer("rentalProposalId").notNull(),
+    contractTemplateId: integer("contractTemplateId").notNull(),
+    status: varchar("status", { length: 40 })
+      .$type<"em_revisao" | "aprovado">()
+      .default("em_revisao")
+      .notNull(),
+    title: varchar("title", { length: 180 }).notNull(),
+    generatedText: text("generatedText").notNull(),
+    reviewedText: text("reviewedText").notNull(),
+    variableValues: text("variableValues").default("{}").notNull(),
+    unresolvedVariables: text("unresolvedVariables").default("[]").notNull(),
+    generatedAt: timestamp("generatedAt", { mode: "date" })
+      .defaultNow()
+      .notNull(),
+    approvedAt: timestamp("approvedAt", { mode: "date" }),
+    approvedByUserId: integer("approvedByUserId"),
+    createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+  },
+  table => [
+    uniqueIndex("rentalProposalGeneratedContracts_unique_idx").on(
+      table.rentalProposalId,
+      table.contractTemplateId
+    ),
+  ]
+);
+
+export type RentalProposalGeneratedContract =
+  typeof rentalProposalGeneratedContracts.$inferSelect;
+export type InsertRentalProposalGeneratedContract =
+  typeof rentalProposalGeneratedContracts.$inferInsert;
 
 /**
  * Tabela de documentos de imoveis

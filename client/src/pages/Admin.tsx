@@ -221,7 +221,7 @@ function buildSearchText(
 }
 
 function getAdminModuleActionLabel(moduleValue: string, activeTopic: string) {
-  if (moduleValue !== "locacoes") return null;
+  if (moduleValue !== "locacoes" && moduleValue !== "vendas") return null;
 
   const actionLabels: Record<string, string> = {
     "Propostas de Locação": "Nova Locação",
@@ -545,7 +545,7 @@ export function AdminModule() {
       return;
     }
 
-    if (selectedModule.value === "locacoes" && activeTab === "Contratos") {
+    if ((selectedModule.value === "locacoes" || selectedModule.value === "vendas") && activeTab === "Contratos") {
       setContractCreateRequestKey(current => current + 1);
       return;
     }
@@ -754,7 +754,7 @@ export function AdminModule() {
               >
                 <AdminRentalProposalsPanel />
               </Suspense>
-            ) : selectedModule.value === "locacoes" && topic === "Contratos" ? (
+            ) : (selectedModule.value === "locacoes" || selectedModule.value === "vendas") && topic === "Contratos" ? (
               <Suspense
                 fallback={
                   <div className="grid gap-4 xl:grid-cols-[minmax(520px,1.35fr)_minmax(360px,0.85fr)]">
@@ -763,7 +763,10 @@ export function AdminModule() {
                   </div>
                 }
               >
-                <AdminContractsPanel createRequestKey={contractCreateRequestKey} />
+                <AdminContractsPanel
+                  createRequestKey={contractCreateRequestKey}
+                  contractKind={selectedModule.value === "vendas" ? "venda" : "locacao"}
+                />
               </Suspense>
             ) : (
               <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-5 text-sm text-slate-600">

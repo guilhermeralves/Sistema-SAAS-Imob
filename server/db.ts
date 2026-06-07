@@ -23,6 +23,7 @@ import {
   InsertTaskItemTemplate,
   InsertUser,
   InsertRentalProposal,
+  InsertRentalProposalGeneratedContract,
   TaskItem,
   TaskItemTemplate,
   User,
@@ -35,6 +36,8 @@ import {
   leadInteractions,
   leadNotes,
   leads,
+  rentalProposalContractTemplates,
+  rentalProposalGeneratedContracts,
   rentalProposalOwners,
   rentalProposalTenants,
   rentalProposals,
@@ -1801,12 +1804,20 @@ export async function createContract(data: InsertContract) {
   return await db.insert(contracts).values(data);
 }
 
-export async function getContractTemplates() {
+export async function getContractTemplates(contractKind?: "locacao" | "venda" | "outro") {
   const db = await getDb();
   if (!db) return [];
+  const query = db
+    .select()
+    .from(contractTemplates)
+    .orderBy(desc(contractTemplates.createdAt));
+
+  if (!contractKind) return await query;
+
   return await db
     .select()
     .from(contractTemplates)
+    .where(eq(contractTemplates.contractKind, contractKind))
     .orderBy(desc(contractTemplates.createdAt));
 }
 
@@ -1834,6 +1845,12 @@ export async function updateContractTemplate(
 export async function deleteContractTemplate(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  await db
+    .delete(rentalProposalContractTemplates)
+    .where(eq(rentalProposalContractTemplates.contractTemplateId, id));
+  await db
+    .delete(rentalProposalGeneratedContracts)
+    .where(eq(rentalProposalGeneratedContracts.contractTemplateId, id));
   await db.delete(contractTemplates).where(eq(contractTemplates.id, id));
 }
 
@@ -2027,7 +2044,160 @@ export async function getRentalProposalById(id: number) {
       const linkedOwner = ownersById.get(id);
       return linkedOwner ? [linkedOwner] : [];
     }),
+    contractTemplates: await getRentalProposalContractTemplates(id),
+    generatedContracts: await getRentalProposalGeneratedContracts(id),
   };
+}
+
+export async function getRentalProposalContractTemplates(
+  rentalProposalId: number
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const links = await db
+    .select()
+    .from(rentalProposalContractTemplates)
+    .where(
+      eq(rentalProposalContractTemplates.rentalProposalId, rentalProposalId)
+    );
+  const templateIds = links
+    .sort((a, b) => a.position - b.position)
+    .map(link => link.contractTemplateId);
+
+  if (templateIds.length === 0) return [];
+
+  const templates = await db
+    .select()
+    .from(contractTemplates)
+    .where(inArray(contractTemplates.id, templateIds));
+  const templatesById = new Map(templates.map(template => [template.id, template]));
+
+  return templateIds.flatMap(id => {
+    const template = templatesById.get(id);
+    return template ? [template] : [];
+  });
+}
+
+async function replaceRentalProposalContractTemplates(
+  rentalProposalId: number,
+  contractTemplateIds: number[]
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .delete(rentalProposalContractTemplates)
+    .where(
+      eq(rentalProposalContractTemplates.rentalProposalId, rentalProposalId)
+    );
+
+  if (contractTemplateIds.length === 0) return;
+
+  await db.insert(rentalProposalContractTemplates).values(
+    contractTemplateIds.map((contractTemplateId, index) => ({
+      rentalProposalId,
+      contractTemplateId,
+      position: index + 1,
+    }))
+  );
+}
+
+export async function updateRentalProposalContractTemplates(
+  rentalProposalId: number,
+  contractTemplateIds: number[]
+) {
+  await replaceRentalProposalContractTemplates(
+    rentalProposalId,
+    contractTemplateIds
+  );
+  return await getRentalProposalContractTemplates(rentalProposalId);
+}
+
+export async function getRentalProposalGeneratedContracts(
+  rentalProposalId: number
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(rentalProposalGeneratedContracts)
+    .where(
+      eq(rentalProposalGeneratedContracts.rentalProposalId, rentalProposalId)
+    )
+    .orderBy(rentalProposalGeneratedContracts.createdAt);
+}
+
+export async function getRentalProposalGeneratedContractById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const [contract] = await db
+    .select()
+    .from(rentalProposalGeneratedContracts)
+    .where(eq(rentalProposalGeneratedContracts.id, id))
+    .limit(1);
+
+  return contract;
+}
+
+export async function updateRentalProposalGeneratedContractText(
+  id: number,
+  reviewedText: string
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [updated] = await db
+    .update(rentalProposalGeneratedContracts)
+    .set({ reviewedText, status: "em_revisao", updatedAt: new Date() })
+    .where(eq(rentalProposalGeneratedContracts.id, id))
+    .returning();
+
+  return updated;
+}
+
+export async function approveRentalProposalGeneratedContract(
+  id: number,
+  approvedByUserId: number
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [updated] = await db
+    .update(rentalProposalGeneratedContracts)
+    .set({
+      status: "aprovado",
+      approvedAt: new Date(),
+      approvedByUserId,
+      updatedAt: new Date(),
+    })
+    .where(eq(rentalProposalGeneratedContracts.id, id))
+    .returning();
+
+  return updated;
+}
+
+export async function replaceRentalProposalGeneratedContracts(
+  rentalProposalId: number,
+  generatedContracts: InsertRentalProposalGeneratedContract[]
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .delete(rentalProposalGeneratedContracts)
+    .where(
+      eq(rentalProposalGeneratedContracts.rentalProposalId, rentalProposalId)
+    );
+
+  if (generatedContracts.length === 0) return [];
+
+  return await db
+    .insert(rentalProposalGeneratedContracts)
+    .values(generatedContracts)
+    .returning();
 }
 
 async function replaceRentalProposalTenants(
@@ -2122,6 +2292,12 @@ export async function deleteRentalProposal(id: number) {
   await db
     .delete(rentalProposalOwners)
     .where(eq(rentalProposalOwners.rentalProposalId, id));
+  await db
+    .delete(rentalProposalContractTemplates)
+    .where(eq(rentalProposalContractTemplates.rentalProposalId, id));
+  await db
+    .delete(rentalProposalGeneratedContracts)
+    .where(eq(rentalProposalGeneratedContracts.rentalProposalId, id));
   await db.delete(rentalProposals).where(eq(rentalProposals.id, id));
 }
 

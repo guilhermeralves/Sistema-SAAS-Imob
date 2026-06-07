@@ -22,6 +22,16 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
+import {
+  CONTRACT_PARTICIPANT_ROLE_LABELS,
+  CONTRACT_TEMPLATE_KIND_LABELS,
+  CONTRACT_VARIABLE_FIELD_MAP,
+  DEFAULT_CONTRACT_TEMPLATE_PARTICIPANT_ROLES,
+  type ContractParticipantRole,
+  type ContractTemplateKind,
+  getContractVariableOptionsForRoles,
+  normalizeContractVariableLabel,
+} from "@shared/contract-variables";
 import { ChevronDown, FileUp, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -41,6 +51,8 @@ type ContractTemplateListItem = {
   id: number;
   name: string;
   notes: string | null;
+  contractKind: ContractTemplateKind;
+  participantRoles: string;
   originalFileName: string;
   originalFileData: string;
   extractedText: string;
@@ -50,52 +62,8 @@ type ContractTemplateListItem = {
 
 type AdminContractsPanelProps = {
   createRequestKey: number;
+  contractKind: ContractTemplateKind;
 };
-
-const CONTRACT_VARIABLE_FIELD_MAP: Record<string, string> = {
-  "nome do locatario": "locatario.nome",
-  "cpf do locatario": "locatario.cpf",
-  "rg do locatario": "locatario.rg",
-  "email do locatario": "locatario.email",
-  "telefone do locatario": "locatario.telefone",
-  "nome do proprietario": "proprietario.nome",
-  "cpf do proprietario": "proprietario.cpf",
-  "email do proprietario": "proprietario.email",
-  "telefone do proprietario": "proprietario.telefone",
-  "endereco do imovel": "imovel.enderecoCompleto",
-  "bairro do imovel": "imovel.bairro",
-  "cidade do imovel": "imovel.cidade",
-  "estado do imovel": "imovel.estado",
-  "cep do imovel": "imovel.cep",
-  "valor do aluguel": "locacao.valorAluguel",
-  "valor da locacao": "locacao.valorAluguel",
-  "data de inicio": "locacao.dataInicio",
-  "data de termino": "locacao.dataFim",
-  "prazo de locacao": "locacao.prazo",
-  "dia de vencimento": "locacao.diaVencimento",
-};
-
-const CONTRACT_VARIABLE_FIELD_OPTIONS = [
-  { key: "locatario.nome", label: "Locatário > Nome" },
-  { key: "locatario.cpf", label: "Locatário > CPF" },
-  { key: "locatario.rg", label: "Locatário > RG" },
-  { key: "locatario.email", label: "Locatário > E-mail" },
-  { key: "locatario.telefone", label: "Locatário > Telefone" },
-  { key: "proprietario.nome", label: "Proprietário > Nome" },
-  { key: "proprietario.cpf", label: "Proprietário > CPF" },
-  { key: "proprietario.email", label: "Proprietário > E-mail" },
-  { key: "proprietario.telefone", label: "Proprietário > Telefone" },
-  { key: "imovel.enderecoCompleto", label: "Imóvel > Endereço completo" },
-  { key: "imovel.bairro", label: "Imóvel > Bairro" },
-  { key: "imovel.cidade", label: "Imóvel > Cidade" },
-  { key: "imovel.estado", label: "Imóvel > Estado" },
-  { key: "imovel.cep", label: "Imóvel > CEP" },
-  { key: "locacao.valorAluguel", label: "Locação > Valor do aluguel" },
-  { key: "locacao.dataInicio", label: "Locação > Data de início" },
-  { key: "locacao.dataFim", label: "Locação > Data de término" },
-  { key: "locacao.prazo", label: "Locação > Prazo" },
-  { key: "locacao.diaVencimento", label: "Locação > Dia de vencimento" },
-];
 
 function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -135,8 +103,9 @@ function getHighlightedTextSegments(text: string, highlights: ContractTemplateHi
   return segments;
 }
 
-export default function AdminContractsPanel({ createRequestKey }: AdminContractsPanelProps) {
+export default function AdminContractsPanel({ createRequestKey, contractKind }: AdminContractsPanelProps) {
   const utils = trpc.useUtils();
+  const fixedParticipantRoles = DEFAULT_CONTRACT_TEMPLATE_PARTICIPANT_ROLES[contractKind];
   const contractsWorkspaceRef = useRef<HTMLDivElement | null>(null);
   const contractTemplateModalScrollRef = useRef<HTMLDivElement | null>(null);
   const contractTemplateTextSectionRef = useRef<HTMLDivElement | null>(null);
@@ -155,7 +124,9 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
   const [selectedContractTemplateId, setSelectedContractTemplateId] = useState<number | null>(null);
   const [contractTemplatePendingDelete, setContractTemplatePendingDelete] = useState<ContractTemplateListItem | null>(null);
 
-  const { data: contractTemplates, isLoading: loadingContractTemplates } = trpc.contractTemplates.list.useQuery();
+  const { data: contractTemplates, isLoading: loadingContractTemplates } = trpc.contractTemplates.list.useQuery({
+    contractKind,
+  });
 
   const extractContractTemplateDocx = trpc.contractTemplates.extractDocxText.useMutation({
     onSuccess: data => {
@@ -217,14 +188,6 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
     resetContractTemplateModal();
     setContractTemplateModalOpen(true);
   }, [createRequestKey]);
-
-  const normalizeContractVariableLabel = (value: string) =>
-    value
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-zA-Z0-9]+/g, " ")
-      .trim()
-      .toLowerCase();
 
   const detectContractTemplateVariables = (text: string): ContractTemplateHighlight[] => {
     const variables: ContractTemplateHighlight[] = [];
@@ -423,6 +386,8 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
         id: editingContractTemplateId,
         name: contractTemplateName.trim(),
         notes: contractTemplateNotes.trim() || undefined,
+        contractKind,
+        participantRoles: fixedParticipantRoles,
         reviewedText: currentReviewedText,
         variableHighlights: detectedVariables,
       }, {
@@ -438,6 +403,8 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
     createContractTemplate.mutate({
       name: contractTemplateName.trim(),
       notes: contractTemplateNotes.trim() || undefined,
+      contractKind,
+      participantRoles: fixedParticipantRoles,
       originalFileName: contractTemplateFileName,
       originalMimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       originalFileData: contractTemplateFileData,
@@ -450,6 +417,16 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
   const selectedContractTemplate = useMemo(
     () => (contractTemplates ?? []).find(template => template.id === selectedContractTemplateId) ?? null,
     [contractTemplates, selectedContractTemplateId]
+  );
+
+  const selectedContractTemplateRoles = useMemo(
+    () => (selectedContractTemplate ? fixedParticipantRoles : [] as ContractParticipantRole[]),
+    [fixedParticipantRoles, selectedContractTemplate]
+  );
+
+  const selectedContractVariableOptions = useMemo(
+    () => getContractVariableOptionsForRoles(selectedContractTemplateRoles),
+    [selectedContractTemplateRoles]
   );
 
   const contractVariableDictionary = useMemo(() => {
@@ -576,6 +553,18 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
                     ) : null}
                   </div>
                   <p className="mt-1 text-sm text-slate-600">{template.notes || "Sem observacoes."}</p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
+                      {CONTRACT_TEMPLATE_KIND_LABELS[contractKind]}
+                    </span>
+                    {fixedParticipantRoles
+                      .slice(0, 4)
+                      .map(role => (
+                        <span key={role} className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                          {CONTRACT_PARTICIPANT_ROLE_LABELS[role]}
+                        </span>
+                      ))}
+                  </div>
                   <p className="mt-2 text-xs text-slate-500">
                     Arquivo base: {template.originalFileName}
                   </p>
@@ -655,6 +644,19 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
           ) : null}
         </div>
 
+        {selectedContractTemplate ? (
+          <div className="mb-4 flex flex-wrap gap-2">
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+              {CONTRACT_TEMPLATE_KIND_LABELS[selectedContractTemplate.contractKind || "locacao"]}
+            </span>
+            {selectedContractTemplateRoles.map(role => (
+              <span key={role} className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                {CONTRACT_PARTICIPANT_ROLE_LABELS[role]}
+              </span>
+            ))}
+          </div>
+        ) : null}
+
         {!selectedContractTemplate ? (
           <div className="rounded-2xl border border-slate-200 bg-white/70 px-4 py-5 text-sm text-slate-600">
             Selecione um modelo cadastrado na lista ao lado para revisar e vincular suas variáveis.
@@ -685,7 +687,7 @@ export default function AdminContractsPanel({ createRequestKey }: AdminContracts
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="unmapped">Nao reconhecida</SelectItem>
-                      {CONTRACT_VARIABLE_FIELD_OPTIONS.map(option => (
+                      {selectedContractVariableOptions.map(option => (
                         <SelectItem key={option.key} value={option.key}>
                           {option.label}
                         </SelectItem>
