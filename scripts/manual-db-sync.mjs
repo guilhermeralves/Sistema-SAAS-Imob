@@ -128,6 +128,24 @@ const patches = [
        );`,
     ],
   },
+  {
+    id: "2026-06-07_rental_proposal_reference_code",
+    description: "Adiciona referenceCode na proposta de locacao para o codigo de referencia gerado na aprovacao dos contratos",
+    statements: [
+      `ALTER TABLE "rentalProposals" ADD COLUMN IF NOT EXISTS "referenceCode" varchar(40);`,
+    ],
+  },
+  {
+    id: "2026-06-07_rental_proposal_lease_terms",
+    description: "Adiciona periodo de reajuste, taxa de administracao, dias uteis de repasse e multa rescisoria na proposta de locacao",
+    statements: [
+      `ALTER TABLE "rentalProposals" ADD COLUMN IF NOT EXISTS "adjustmentPeriod" varchar(20);`,
+      `ALTER TABLE "rentalProposals" ADD COLUMN IF NOT EXISTS "administrationFeePercent" integer;`,
+      `ALTER TABLE "rentalProposals" ADD COLUMN IF NOT EXISTS "transferBusinessDays" integer;`,
+      `ALTER TABLE "rentalProposals" ADD COLUMN IF NOT EXISTS "terminationPenaltyType" varchar(20);`,
+      `ALTER TABLE "rentalProposals" ADD COLUMN IF NOT EXISTS "terminationPenaltyAmount" integer;`,
+    ],
+  },
 ];
 
 async function ensureManualMigrationsTable(client) {

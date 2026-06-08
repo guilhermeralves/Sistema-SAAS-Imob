@@ -6,6 +6,7 @@ import {
   CONTRACT_VARIABLE_FIELD_MAP,
   normalizeContractVariableLabel,
 } from "@shared/contract-variables";
+import { buildRentalProposalReferenceCode } from "@shared/contract-reference";
 import {
   CONTRACT_REQUIRED_USER_FIELDS,
   USER_PROFILE_MARITAL_STATUSES,
@@ -213,6 +214,11 @@ const createRentalProposalSchema = z.object({
   tenantConfirmed: z.boolean(),
   leaseTermMonths: z.number().int().min(1).max(120),
   adjustmentIndex: z.string().trim().min(2).max(40),
+  adjustmentPeriod: z.enum(["anual", "mensal"]),
+  administrationFeePercent: z.number().int().min(0).max(10000),
+  transferBusinessDays: z.number().int().min(0).max(60),
+  terminationPenaltyType: z.enum(["valor", "alugueis"]),
+  terminationPenaltyAmount: z.number().int().min(1),
   rentAmount: z.number().int().min(1),
   condominiumAmount: z.number().int().min(0).nullable().optional(),
   startDate: z.string().trim().min(10).max(10),
@@ -229,16 +235,16 @@ const selectRentalProposalContractTemplatesSchema = z.object({
   contractTemplateIds: z.array(z.number().int().positive()).min(1).max(10),
 });
 
-const generateRentalProposalContractsSchema = z.object({
-  id: z.number().int().positive(),
-});
-
 const updateRentalProposalGeneratedContractTextSchema = z.object({
   contractId: z.number().int().positive(),
   reviewedText: z.string().trim().min(1).max(1_000_000),
 });
 
 const approveRentalProposalGeneratedContractSchema = z.object({
+  contractId: z.number().int().positive(),
+});
+
+const regenerateRentalProposalGeneratedContractSchema = z.object({
   contractId: z.number().int().positive(),
 });
 
@@ -1006,6 +1012,29 @@ function formatCurrencyFromCents(value: unknown) {
   });
 }
 
+// administrationFeePercent guarda pontos-base de 2 casas (10,00% = 1000).
+function formatPercentFromBasisPoints(value: unknown) {
+  if (value === null || value === undefined || value === "") return "";
+  const amount = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(amount)) return "";
+  return `${(amount / 100).toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}%`;
+}
+
+function formatTerminationPenalty(type: unknown, amount: unknown) {
+  const value = typeof amount === "number" ? amount : Number(amount);
+  if (!Number.isFinite(value)) return "";
+  if (type === "alugueis") {
+    return `${value} ${value === 1 ? "aluguel" : "aluguéis"}`;
+  }
+  if (type === "valor") {
+    return formatCurrencyFromCents(value);
+  }
+  return "";
+}
+
 function formatDatePtBr(value: unknown) {
   if (!value) return "";
   const date = new Date(String(value));
@@ -1121,6 +1150,24 @@ function buildRentalProposalVariableSource(
       prazo: lease.leaseTermMonths ? `${lease.leaseTermMonths} meses` : "",
       diaVencimento: lease.dueDay,
       indiceReajuste: lease.adjustmentIndex,
+      tempoReajuste:
+        lease.adjustmentPeriod === "mensal"
+          ? "Mensal"
+          : lease.adjustmentPeriod === "anual"
+            ? "Anual"
+            : "",
+      taxaAdministracao: formatPercentFromBasisPoints(
+        lease.administrationFeePercent
+      ),
+      diasUteisRepasse:
+        lease.transferBusinessDays === null ||
+        lease.transferBusinessDays === undefined
+          ? ""
+          : String(lease.transferBusinessDays),
+      multaRescisoria: formatTerminationPenalty(
+        lease.terminationPenaltyType,
+        lease.terminationPenaltyAmount
+      ),
       observacoes: lease.notes,
     },
   };
@@ -1159,6 +1206,54 @@ function applyRentalProposalVariables(
   }
 
   return { generatedText, variableValues, unresolvedVariables };
+}
+
+// Reconciliacao da etapa de contratos: se todos os contratos estiverem
+// aprovados, garante o codigo de referencia e avanca para boletos; caso
+// contrario (ex.: novo modelo adicionado), reabre a revisao.
+async function reconcileRentalProposalContractStage(proposalId: number) {
+  const {
+    getRentalProposalById,
+    setRentalProposalReferenceCode,
+    updateRentalProposal,
+  } = await import("./db");
+
+  const proposal = await getRentalProposalById(proposalId);
+  if (!proposal) return { referenceCode: null, allApproved: false } as const;
+
+  const contracts = proposal.generatedContracts ?? [];
+
+  // Sem contratos: volta para a etapa de escolha de modelos.
+  if (contracts.length === 0) {
+    if (proposal.currentStep !== "modelos_contrato") {
+      await updateRentalProposal(proposal.id, {
+        status: "rascunho",
+        currentStep: "modelos_contrato",
+      });
+    }
+    return {
+      referenceCode: proposal.referenceCode ?? null,
+      allApproved: false,
+    } as const;
+  }
+
+  const allApproved = contracts.every(item => item.status === "aprovado");
+
+  if (allApproved) {
+    const referenceCode =
+      proposal.referenceCode ?? buildRentalProposalReferenceCode(proposal.id);
+    await setRentalProposalReferenceCode(proposal.id, referenceCode);
+    return { referenceCode, allApproved } as const;
+  }
+
+  if (proposal.currentStep !== "contratos_em_revisao") {
+    await updateRentalProposal(proposal.id, {
+      status: "contratos_em_revisao",
+      currentStep: "contratos_em_revisao",
+    });
+  }
+
+  return { referenceCode: proposal.referenceCode ?? null, allApproved } as const;
 }
 
 function getComputedTaskStatus(task: {
@@ -3211,6 +3306,15 @@ export const appRouter = router({
       }
       return proposal;
     }),
+    pendingForProperty: adminProcedure
+      .input(z.object({ propertyId: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const { getPendingRentalProposalByProperty } = await import("./db");
+        const pending = await getPendingRentalProposalByProperty(
+          input.propertyId
+        );
+        return pending ?? null;
+      }),
     create: adminProcedure
       .input(createRentalProposalSchema)
       .mutation(async ({ ctx, input }) => {
@@ -3310,6 +3414,11 @@ export const appRouter = router({
           lease: {
             leaseTermMonths: input.leaseTermMonths,
             adjustmentIndex: input.adjustmentIndex,
+            adjustmentPeriod: input.adjustmentPeriod,
+            administrationFeePercent: input.administrationFeePercent,
+            transferBusinessDays: input.transferBusinessDays,
+            terminationPenaltyType: input.terminationPenaltyType,
+            terminationPenaltyAmount: input.terminationPenaltyAmount,
             rentAmount: input.rentAmount,
             condominiumAmount: input.condominiumAmount ?? null,
             startDate: input.startDate,
@@ -3330,6 +3439,11 @@ export const appRouter = router({
             tenantConfirmedAt: new Date(),
             leaseTermMonths: input.leaseTermMonths,
             adjustmentIndex: input.adjustmentIndex,
+            adjustmentPeriod: input.adjustmentPeriod,
+            administrationFeePercent: input.administrationFeePercent,
+            transferBusinessDays: input.transferBusinessDays,
+            terminationPenaltyType: input.terminationPenaltyType,
+            terminationPenaltyAmount: input.terminationPenaltyAmount,
             rentAmount: input.rentAmount,
             condominiumAmount: input.condominiumAmount ?? null,
             startDate: new Date(`${input.startDate}T00:00:00`),
@@ -3450,6 +3564,11 @@ export const appRouter = router({
           lease: {
             leaseTermMonths: input.leaseTermMonths,
             adjustmentIndex: input.adjustmentIndex,
+            adjustmentPeriod: input.adjustmentPeriod,
+            administrationFeePercent: input.administrationFeePercent,
+            transferBusinessDays: input.transferBusinessDays,
+            terminationPenaltyType: input.terminationPenaltyType,
+            terminationPenaltyAmount: input.terminationPenaltyAmount,
             rentAmount: input.rentAmount,
             condominiumAmount: input.condominiumAmount ?? null,
             startDate: input.startDate,
@@ -3469,6 +3588,11 @@ export const appRouter = router({
             tenantConfirmedAt: new Date(),
             leaseTermMonths: input.leaseTermMonths,
             adjustmentIndex: input.adjustmentIndex,
+            adjustmentPeriod: input.adjustmentPeriod,
+            administrationFeePercent: input.administrationFeePercent,
+            transferBusinessDays: input.transferBusinessDays,
+            terminationPenaltyType: input.terminationPenaltyType,
+            terminationPenaltyAmount: input.terminationPenaltyAmount,
             rentAmount: input.rentAmount,
             condominiumAmount: input.condominiumAmount ?? null,
             startDate: new Date(`${input.startDate}T00:00:00`),
@@ -3479,14 +3603,18 @@ export const appRouter = router({
           { tenantUserIds, ownerIds }
         );
       }),
-    selectContractTemplates: adminProcedure
+    updateContractTemplatesInReview: adminProcedure
       .input(selectRentalProposalContractTemplatesSchema)
       .mutation(async ({ input }) => {
         const {
           getContractTemplates,
           getRentalProposalById,
+          getRentalProposalGeneratedContracts,
           updateRentalProposalContractTemplates,
+          addRentalProposalGeneratedContracts,
+          deleteRentalProposalGeneratedContractsByTemplates,
         } = await import("./db");
+
         const proposal = await getRentalProposalById(input.id);
         if (!proposal) {
           throw new TRPCError({
@@ -3495,21 +3623,32 @@ export const appRouter = router({
           });
         }
 
-        if (proposal.currentStep !== "modelos_contrato") {
+        if (
+          proposal.currentStep !== "modelos_contrato" &&
+          proposal.currentStep !== "contratos_em_revisao" &&
+          proposal.currentStep !== "boletos_pendentes"
+        ) {
           throw new TRPCError({
             code: "BAD_REQUEST",
             message:
-              "A selecao de modelos esta disponivel apenas na etapa Modelos de contrato.",
+              "A edicao dos modelos nao esta disponivel nesta etapa da proposta.",
           });
         }
 
-        const contractTemplateIds = uniquePositiveIds(
-          input.contractTemplateIds
-        );
+        const contractTemplateIds = uniquePositiveIds(input.contractTemplateIds);
+        if (contractTemplateIds.length === 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Selecione ao menos um modelo de contrato.",
+          });
+        }
+
         const templates = await getContractTemplates("locacao");
-        const validTemplateIds = new Set(templates.map(template => template.id));
+        const templatesById = new Map(
+          templates.map(template => [template.id, template])
+        );
         const invalidTemplateIds = contractTemplateIds.filter(
-          id => !validTemplateIds.has(id)
+          id => !templatesById.has(id)
         );
         if (invalidTemplateIds.length > 0) {
           throw new TRPCError({
@@ -3518,86 +3657,74 @@ export const appRouter = router({
           });
         }
 
-        const selectedTemplates = await updateRentalProposalContractTemplates(
-          input.id,
+        const existingContracts = await getRentalProposalGeneratedContracts(
+          proposal.id
+        );
+        const existingTemplateIds = new Set(
+          existingContracts.map(contract => contract.contractTemplateId)
+        );
+        const selectedSet = new Set(contractTemplateIds);
+        const toAdd = contractTemplateIds.filter(
+          id => !existingTemplateIds.has(id)
+        );
+        const toRemove = Array.from(existingTemplateIds).filter(
+          id => !selectedSet.has(id)
+        );
+
+        await updateRentalProposalContractTemplates(
+          proposal.id,
           contractTemplateIds
         );
-        return {
-          success: true,
-          contractTemplates: selectedTemplates,
-        } as const;
-      }),
-    generateContracts: adminProcedure
-      .input(generateRentalProposalContractsSchema)
-      .mutation(async ({ input }) => {
-        const {
-          getRentalProposalById,
-          replaceRentalProposalGeneratedContracts,
-          updateRentalProposal,
-        } = await import("./db");
-        const proposal = await getRentalProposalById(input.id);
-        if (!proposal) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Proposta de locacao nao encontrada.",
-          });
-        }
 
-        if (proposal.currentStep !== "modelos_contrato") {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message:
-              "Os contratos so podem ser gerados apos a escolha dos modelos.",
-          });
-        }
-
-        if (!proposal.contractTemplates?.length) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Selecione ao menos um modelo de contrato.",
-          });
-        }
-
-        const contextSnapshot = parseRecord(proposal.contextSnapshot);
-        const variableSource =
-          buildRentalProposalVariableSource(contextSnapshot);
-
-        const generatedContracts = proposal.contractTemplates.map(template => {
-          const variables = parseContractTemplateVariables(
-            template.variableHighlights
-          );
-          const { generatedText, variableValues, unresolvedVariables } =
-            applyRentalProposalVariables(
-              template.reviewedText || template.extractedText,
-              variables,
-              variableSource
-            );
-
-          return {
-            rentalProposalId: proposal.id,
-            contractTemplateId: template.id,
-            status: "em_revisao" as const,
-            title: template.name,
-            generatedText,
-            reviewedText: generatedText,
-            variableValues: JSON.stringify(variableValues),
-            unresolvedVariables: JSON.stringify(unresolvedVariables),
-          };
-        });
-
-        const createdContracts =
-          await replaceRentalProposalGeneratedContracts(
+        if (toRemove.length > 0) {
+          await deleteRentalProposalGeneratedContractsByTemplates(
             proposal.id,
-            generatedContracts
+            toRemove
           );
-        await updateRentalProposal(proposal.id, {
-          status: "contratos_em_revisao",
-          currentStep: "contratos_em_revisao",
-        });
+        }
+
+        if (toAdd.length > 0) {
+          const contextSnapshot = parseRecord(proposal.contextSnapshot);
+          const variableSource =
+            buildRentalProposalVariableSource(contextSnapshot);
+          const newContracts = toAdd.map(id => {
+            const template = templatesById.get(id)!;
+            const variables = parseContractTemplateVariables(
+              template.variableHighlights
+            );
+            const { generatedText, variableValues, unresolvedVariables } =
+              applyRentalProposalVariables(
+                template.reviewedText || template.extractedText,
+                variables,
+                variableSource
+              );
+
+            return {
+              rentalProposalId: proposal.id,
+              contractTemplateId: template.id,
+              status: "em_revisao" as const,
+              title: template.name,
+              generatedText,
+              reviewedText: generatedText,
+              variableValues: JSON.stringify(variableValues),
+              unresolvedVariables: JSON.stringify(unresolvedVariables),
+            };
+          });
+          await addRentalProposalGeneratedContracts(newContracts);
+        }
+
+        // Reconcilia a etapa: adicionar reabre a revisao; remover deixando
+        // tudo aprovado finaliza e gera/mantem o codigo de referencia.
+        const reconciled = await reconcileRentalProposalContractStage(
+          proposal.id
+        );
 
         return {
           success: true,
-          generatedContracts: createdContracts,
+          added: toAdd.length,
+          removed: toRemove.length,
+          referenceCode: reconciled.referenceCode,
+          allApproved: reconciled.allApproved,
         } as const;
       }),
     updateGeneratedContractText: adminProcedure
@@ -3626,11 +3753,14 @@ export const appRouter = router({
           });
         }
 
-        if (proposal.currentStep !== "contratos_em_revisao") {
+        if (
+          proposal.currentStep !== "contratos_em_revisao" &&
+          proposal.currentStep !== "boletos_pendentes"
+        ) {
           throw new TRPCError({
             code: "BAD_REQUEST",
             message:
-              "A edicao manual esta disponivel apenas na etapa Contratos em revisao.",
+              "A edicao manual nao esta disponivel nesta etapa da proposta.",
           });
         }
 
@@ -3638,6 +3768,8 @@ export const appRouter = router({
           input.contractId,
           input.reviewedText
         );
+        // Editar reabre a revisao quando a proposta ja havia avancado.
+        await reconcileRentalProposalContractStage(contract.rentalProposalId);
         return { success: true, contract: updated } as const;
       }),
     approveGeneratedContract: adminProcedure
@@ -3685,16 +3817,155 @@ export const appRouter = router({
           input.contractId,
           ctx.user.id
         );
-        const refreshedProposal = await getRentalProposalById(
+        const reconciled = await reconcileRentalProposalContractStage(
           contract.rentalProposalId
         );
-        const refreshedGeneratedContracts =
-          refreshedProposal?.generatedContracts ?? [];
-        const allApproved =
-          refreshedGeneratedContracts.length > 0 &&
-          refreshedGeneratedContracts.every(item => item.status === "aprovado");
 
-        return { success: true, contract: updated, allApproved } as const;
+        return {
+          success: true,
+          contract: updated,
+          allApproved: reconciled.allApproved,
+          referenceCode: reconciled.referenceCode,
+        } as const;
+      }),
+    regenerateGeneratedContract: adminProcedure
+      .input(regenerateRentalProposalGeneratedContractSchema)
+      .mutation(async ({ input }) => {
+        const {
+          getRentalProposalById,
+          getRentalProposalGeneratedContractById,
+          getContractTemplateById,
+          regenerateRentalProposalGeneratedContract,
+        } = await import("./db");
+        const contract = await getRentalProposalGeneratedContractById(
+          input.contractId
+        );
+        if (!contract) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Contrato gerado nao encontrado.",
+          });
+        }
+
+        const proposal = await getRentalProposalById(contract.rentalProposalId);
+        if (!proposal) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Proposta de locacao nao encontrada.",
+          });
+        }
+
+        if (
+          proposal.currentStep !== "contratos_em_revisao" &&
+          proposal.currentStep !== "boletos_pendentes"
+        ) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "A geracao novamente nao esta disponivel nesta etapa da proposta.",
+          });
+        }
+
+        const template = await getContractTemplateById(
+          contract.contractTemplateId
+        );
+        if (!template) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "O modelo deste contrato nao existe mais. Selecione os modelos da proposta novamente.",
+          });
+        }
+
+        const contextSnapshot = parseRecord(proposal.contextSnapshot);
+        const variableSource =
+          buildRentalProposalVariableSource(contextSnapshot);
+        const variables = parseContractTemplateVariables(
+          template.variableHighlights
+        );
+        const { generatedText, variableValues, unresolvedVariables } =
+          applyRentalProposalVariables(
+            template.reviewedText || template.extractedText,
+            variables,
+            variableSource
+          );
+
+        const updated = await regenerateRentalProposalGeneratedContract(
+          input.contractId,
+          {
+            title: template.name,
+            generatedText,
+            reviewedText: generatedText,
+            variableValues: JSON.stringify(variableValues),
+            unresolvedVariables: JSON.stringify(unresolvedVariables),
+          }
+        );
+
+        // Regerar reabre a revisao quando a proposta ja havia avancado.
+        await reconcileRentalProposalContractStage(contract.rentalProposalId);
+        return { success: true, contract: updated } as const;
+      }),
+    deleteGeneratedContract: adminProcedure
+      .input(z.object({ contractId: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        const {
+          getRentalProposalById,
+          getRentalProposalGeneratedContractById,
+          getRentalProposalContractTemplates,
+          updateRentalProposalContractTemplates,
+          deleteRentalProposalGeneratedContractById,
+        } = await import("./db");
+
+        const contract = await getRentalProposalGeneratedContractById(
+          input.contractId
+        );
+        if (!contract) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Contrato gerado nao encontrado.",
+          });
+        }
+
+        const proposal = await getRentalProposalById(contract.rentalProposalId);
+        if (!proposal) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Proposta de locacao nao encontrada.",
+          });
+        }
+
+        if (
+          proposal.currentStep !== "contratos_em_revisao" &&
+          proposal.currentStep !== "boletos_pendentes"
+        ) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "A exclusao de contratos nao esta disponivel nesta etapa da proposta.",
+          });
+        }
+
+        await deleteRentalProposalGeneratedContractById(contract.id);
+
+        const currentTemplates = await getRentalProposalContractTemplates(
+          proposal.id
+        );
+        const remainingTemplateIds = currentTemplates
+          .map(template => template.id)
+          .filter(id => id !== contract.contractTemplateId);
+        await updateRentalProposalContractTemplates(
+          proposal.id,
+          remainingTemplateIds
+        );
+
+        const reconciled = await reconcileRentalProposalContractStage(
+          proposal.id
+        );
+
+        return {
+          success: true,
+          referenceCode: reconciled.referenceCode,
+        } as const;
       }),
     delete: adminProcedure.input(idSchema).mutation(async ({ input }) => {
       const { deleteRentalProposal, getRentalProposalById } = await import(

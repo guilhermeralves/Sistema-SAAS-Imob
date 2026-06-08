@@ -350,6 +350,7 @@ export function AdminModule() {
   const [deleteConfirmationText, setDeleteConfirmationText] = useState("");
   const [deleteReason, setDeleteReason] = useState("");
   const [contractCreateRequestKey, setContractCreateRequestKey] = useState(0);
+  const [newRentalNoticeOpen, setNewRentalNoticeOpen] = useState(false);
   const moduleActionLabel = getAdminModuleActionLabel(selectedModule.value, activeTab);
 
   const highlightedPropertyId = useMemo(() => {
@@ -541,7 +542,7 @@ export function AdminModule() {
 
   const handleModuleActionClick = () => {
     if (selectedModule.value === "locacoes" && activeTab === "Propostas de Locação") {
-      setLocation("/admin/modulos/locacoes/nova");
+      setNewRentalNoticeOpen(true);
       return;
     }
 
@@ -958,6 +959,37 @@ export function AdminModule() {
                 </div>
               </div>
             ) : null}
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={newRentalNoticeOpen} onOpenChange={setNewRentalNoticeOpen}>
+          <DialogContent className="!w-[440px] !max-w-[calc(100%-2rem)] rounded-[24px] border-white/80 bg-[#f7f6f2] p-4 sm:!max-w-[440px] sm:p-5">
+            <DialogHeader>
+              <DialogTitle>Escolha o imóvel primeiro</DialogTitle>
+              <DialogDescription>
+                Para iniciar uma nova proposta de locação é necessário escolher o imóvel que será locado. Ao continuar, você será levado à página de imóveis para selecionar o imóvel; depois disso o cadastro da proposta será aberto.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full bg-white"
+                onClick={() => setNewRentalNoticeOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="rounded-full bg-slate-950 text-white hover:bg-slate-800"
+                onClick={() => {
+                  setNewRentalNoticeOpen(false);
+                  setLocation("/imoveis?selecionarLocacao=1");
+                }}
+              >
+                Entendi, escolher imóvel
+              </Button>
+            </div>
           </DialogContent>
         </Dialog>
 

@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, lt, ne, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, ne, notInArray, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import {
   adminUserViews,
@@ -1821,6 +1821,17 @@ export async function getContractTemplates(contractKind?: "locacao" | "venda" | 
     .orderBy(desc(contractTemplates.createdAt));
 }
 
+export async function getContractTemplateById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [template] = await db
+    .select()
+    .from(contractTemplates)
+    .where(eq(contractTemplates.id, id))
+    .limit(1);
+  return template;
+}
+
 export async function createContractTemplate(data: InsertContractTemplate) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -1966,6 +1977,29 @@ export async function getRentalProposals() {
           : [],
     };
   });
+}
+
+export async function getPendingRentalProposalByProperty(propertyId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const [proposal] = await db
+    .select({
+      id: rentalProposals.id,
+      status: rentalProposals.status,
+      referenceCode: rentalProposals.referenceCode,
+    })
+    .from(rentalProposals)
+    .where(
+      and(
+        eq(rentalProposals.propertyId, propertyId),
+        notInArray(rentalProposals.status, ["ativo", "cancelado"])
+      )
+    )
+    .orderBy(desc(rentalProposals.createdAt))
+    .limit(1);
+
+  return proposal;
 }
 
 export async function getRentalProposalById(id: number) {
@@ -2158,6 +2192,34 @@ export async function updateRentalProposalGeneratedContractText(
   return updated;
 }
 
+export async function regenerateRentalProposalGeneratedContract(
+  id: number,
+  fields: {
+    title: string;
+    generatedText: string;
+    reviewedText: string;
+    variableValues: string;
+    unresolvedVariables: string;
+  }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [updated] = await db
+    .update(rentalProposalGeneratedContracts)
+    .set({
+      ...fields,
+      status: "em_revisao",
+      approvedAt: null,
+      approvedByUserId: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(rentalProposalGeneratedContracts.id, id))
+    .returning();
+
+  return updated;
+}
+
 export async function approveRentalProposalGeneratedContract(
   id: number,
   approvedByUserId: number
@@ -2179,25 +2241,68 @@ export async function approveRentalProposalGeneratedContract(
   return updated;
 }
 
-export async function replaceRentalProposalGeneratedContracts(
-  rentalProposalId: number,
-  generatedContracts: InsertRentalProposalGeneratedContract[]
+export async function setRentalProposalReferenceCode(
+  proposalId: number,
+  referenceCode: string
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db
-    .delete(rentalProposalGeneratedContracts)
-    .where(
-      eq(rentalProposalGeneratedContracts.rentalProposalId, rentalProposalId)
-    );
+  const [updated] = await db
+    .update(rentalProposals)
+    .set({
+      referenceCode,
+      status: "boletos_pendentes",
+      currentStep: "boletos_pendentes",
+      updatedAt: new Date(),
+    })
+    .where(eq(rentalProposals.id, proposalId))
+    .returning();
 
+  return updated;
+}
+
+export async function addRentalProposalGeneratedContracts(
+  generatedContracts: InsertRentalProposalGeneratedContract[]
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
   if (generatedContracts.length === 0) return [];
 
   return await db
     .insert(rentalProposalGeneratedContracts)
     .values(generatedContracts)
     .returning();
+}
+
+export async function deleteRentalProposalGeneratedContractsByTemplates(
+  rentalProposalId: number,
+  contractTemplateIds: number[]
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (contractTemplateIds.length === 0) return;
+
+  await db
+    .delete(rentalProposalGeneratedContracts)
+    .where(
+      and(
+        eq(rentalProposalGeneratedContracts.rentalProposalId, rentalProposalId),
+        inArray(
+          rentalProposalGeneratedContracts.contractTemplateId,
+          contractTemplateIds
+        )
+      )
+    );
+}
+
+export async function deleteRentalProposalGeneratedContractById(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .delete(rentalProposalGeneratedContracts)
+    .where(eq(rentalProposalGeneratedContracts.id, id));
 }
 
 async function replaceRentalProposalTenants(

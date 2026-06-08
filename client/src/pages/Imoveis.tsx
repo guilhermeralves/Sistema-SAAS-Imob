@@ -553,6 +553,13 @@ export default function Imoveis() {
   const [selectedRentalProperty, setSelectedRentalProperty] = useState<
     NonNullable<typeof imoveis>[number] | null
   >(null);
+  const {
+    data: pendingProposalForSelected,
+    isFetching: checkingPendingProposal,
+  } = trpc.rentalProposals.pendingForProperty.useQuery(
+    { propertyId: selectedRentalProperty?.id ?? 0 },
+    { enabled: selectedRentalProperty !== null }
+  );
   const [filters, setFilters] = useState({
     tipo: "todos",
     finalidade: isRentalProposalSelectionMode ? "locacao" : "todos",
@@ -1916,37 +1923,78 @@ export default function Imoveis() {
             open={selectedRentalProperty !== null}
             onOpenChange={open => !open && setSelectedRentalProperty(null)}
           >
-            <DialogContent className="!w-[420px] !max-w-[calc(100%-2rem)] rounded-[24px] border-white/80 bg-[#f7f6f2] p-4 sm:!max-w-[420px] sm:p-5">
-              <DialogHeader>
-                <DialogTitle>Selecionar imóvel para locação?</DialogTitle>
-                <DialogDescription>
-                  {selectedRentalProperty
-                    ? `Deseja selecionar o imóvel "${selectedRentalProperty.titulo}" para iniciar a proposta de locação?`
-                    : "Confirme o imóvel selecionado para iniciar a proposta de locação."}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="rounded-full bg-white"
-                  onClick={() => setSelectedRentalProperty(null)}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  type="button"
-                  className="rounded-full bg-emerald-700 text-white hover:bg-emerald-800"
-                  onClick={() => {
-                    if (!selectedRentalProperty) return;
-                    setLocation(
-                      `/admin/modulos/locacoes/nova?propertyId=${selectedRentalProperty.id}`
-                    );
-                  }}
-                >
-                  Confirmar seleção
-                </Button>
-              </div>
+            <DialogContent className="!w-[460px] !max-w-[calc(100%-2rem)] rounded-[24px] border-white/80 bg-[#f7f6f2] p-4 sm:!max-w-[460px] sm:p-5">
+              {pendingProposalForSelected ? (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Imóvel já possui proposta de locação</DialogTitle>
+                    <DialogDescription>
+                      O imóvel
+                      {selectedRentalProperty ? ` "${selectedRentalProperty.titulo}"` : ""} já
+                      está vinculado a uma proposta de locação ou rascunho pendente
+                      {pendingProposalForSelected.referenceCode
+                        ? ` (${pendingProposalForSelected.referenceCode})`
+                        : ""}
+                      . Não é possível iniciar outra proposta para o mesmo imóvel enquanto ela não for finalizada ou cancelada.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-full bg-white"
+                      onClick={() => setSelectedRentalProperty(null)}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      type="button"
+                      className="rounded-full bg-slate-950 text-white hover:bg-slate-800"
+                      onClick={() => {
+                        setLocation(
+                          `/admin/modulos/locacoes/propostas/${pendingProposalForSelected.id}`
+                        );
+                      }}
+                    >
+                      Visualizar proposta
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Selecionar imóvel para locação?</DialogTitle>
+                    <DialogDescription>
+                      {selectedRentalProperty
+                        ? `Deseja selecionar o imóvel "${selectedRentalProperty.titulo}" para iniciar a proposta de locação?`
+                        : "Confirme o imóvel selecionado para iniciar a proposta de locação."}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-full bg-white"
+                      onClick={() => setSelectedRentalProperty(null)}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      type="button"
+                      className="rounded-full bg-emerald-700 text-white hover:bg-emerald-800"
+                      disabled={checkingPendingProposal}
+                      onClick={() => {
+                        if (!selectedRentalProperty) return;
+                        setLocation(
+                          `/admin/modulos/locacoes/nova?propertyId=${selectedRentalProperty.id}`
+                        );
+                      }}
+                    >
+                      {checkingPendingProposal ? "Verificando..." : "Confirmar seleção"}
+                    </Button>
+                  </div>
+                </>
+              )}
             </DialogContent>
           </Dialog>
         </div>

@@ -1,14 +1,23 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCpf, isValidCpf, normalizeCpf } from "@/lib/cpf";
+import { buildContractReferenceFooter } from "@shared/contract-reference";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeftRight, CheckCircle2, FileSignature, FileText, Pencil, Plus, Save, Trash2, WandSparkles } from "lucide-react";
+import { ArrowLeftRight, CheckCircle2, ChevronDown, ChevronUp, FileSignature, Home, Pencil, Plus, RotateCw, Save, Trash2, WandSparkles } from "lucide-react";
+import type { ReactNode } from "react";
 import { toast } from "sonner";
 
 const FIELD_CLASS =
@@ -29,6 +38,23 @@ function parseCurrencyToCents(value: string) {
   return Math.round(parsed * 100);
 }
 
+// Taxa de administracao: a UI usa % e o backend guarda pontos-base de 2 casas
+// (10,00% = 1000).
+function parsePercentToBasisPoints(value: string) {
+  const normalized = value.replace(/[^\d,.]/g, "").replace(",", ".");
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.round(parsed * 100);
+}
+
+function formatBasisPointsToPercent(value: number | null | undefined) {
+  if (value === null || value === undefined) return "";
+  return (value / 100).toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 function formatDateInput(value: Date | string | null | undefined) {
   if (!value) return "";
   if (typeof value === "string") return value.slice(0, 10);
@@ -45,6 +71,70 @@ function parseUnresolvedVariables(value: string | null | undefined) {
   }
 }
 
+function parseVariableValues(
+  value: string | null | undefined
+): Record<string, string> {
+  try {
+    const parsed = JSON.parse(value || "{}");
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, string>;
+    }
+  } catch {
+    // ignore
+  }
+  return {};
+}
+
+// Termos a grifar no texto do contrato: valores ja substituidos (variableValues)
+// e placeholders que ficaram pendentes (unresolvedVariables). Ordenados do maior
+// para o menor para que o casamento prefira o termo mais longo.
+function buildHighlightNeedles(contract: {
+  variableValues: string;
+  unresolvedVariables: string;
+}): string[] {
+  const values = Object.values(parseVariableValues(contract.variableValues));
+  const placeholders = parseUnresolvedVariables(contract.unresolvedVariables).map(
+    (item: { placeholder?: string }) => item.placeholder ?? ""
+  );
+  const needles = new Set<string>();
+  for (const raw of [...values, ...placeholders]) {
+    const term = (raw ?? "").trim();
+    if (term) needles.add(term);
+  }
+  return Array.from(needles).sort((a, b) => b.length - a.length);
+}
+
+type HighlightSegment = { text: string; highlight: boolean };
+
+// Quebra o texto em segmentos, marcando trechos que casam com algum termo de
+// variavel. Mescla segmentos nao destacados consecutivos.
+function buildHighlightSegments(
+  text: string,
+  needles: string[]
+): HighlightSegment[] {
+  if (!text) return [];
+  if (needles.length === 0) return [{ text, highlight: false }];
+
+  const segments: HighlightSegment[] = [];
+  let index = 0;
+  while (index < text.length) {
+    const matched = needles.find(needle => text.startsWith(needle, index));
+    if (matched) {
+      segments.push({ text: matched, highlight: true });
+      index += matched.length;
+    } else {
+      const last = segments[segments.length - 1];
+      if (last && !last.highlight) {
+        last.text += text[index];
+      } else {
+        segments.push({ text: text[index], highlight: false });
+      }
+      index += 1;
+    }
+  }
+  return segments;
+}
+
 type InitialRentalProposal = {
   id: number;
   status: string;
@@ -57,10 +147,16 @@ type InitialRentalProposal = {
   owners?: UserOption[];
   contractTemplates?: ContractTemplateOption[];
   generatedContracts?: GeneratedContractOption[];
+  referenceCode?: string | null;
   ownerConfirmedAt: Date | string | null;
   tenantConfirmedAt: Date | string | null;
   leaseTermMonths: number;
   adjustmentIndex: string;
+  adjustmentPeriod?: "anual" | "mensal" | null;
+  administrationFeePercent?: number | null;
+  transferBusinessDays?: number | null;
+  terminationPenaltyType?: "valor" | "alugueis" | null;
+  terminationPenaltyAmount?: number | null;
   rentAmount: number;
   condominiumAmount?: number | null;
   startDate: Date | string;
@@ -87,6 +183,7 @@ type GeneratedContractOption = {
   title: string;
   status: string;
   reviewedText: string;
+  variableValues: string;
   unresolvedVariables: string;
   approvedAt?: Date | string | null;
 };
@@ -100,6 +197,134 @@ type RentalProposalFormProps = {
 function getUserOptionLabel(user: UserOption | null | undefined) {
   if (!user) return "";
   return user.name || user.email || `ID ${user.id}`;
+}
+
+// Ordem das etapas do formulario derivada de currentStep. Etapas posteriores a
+// "contratos_em_revisao" (boletos, seguros, ... ativo) ficam todas como indice 3.
+const RENTAL_STEP_ORDER = [
+  "dados_iniciais",
+  "modelos_contrato",
+  "contratos_em_revisao",
+] as const;
+
+function getRentalStepIndex(currentStep: string | undefined | null) {
+  if (!currentStep) return 0;
+  const index = RENTAL_STEP_ORDER.indexOf(
+    currentStep as (typeof RENTAL_STEP_ORDER)[number]
+  );
+  return index === -1 ? RENTAL_STEP_ORDER.length : index;
+}
+
+// Scroll suave da janela ate um elemento (mesma animacao do painel de Contratos:
+// rAF + easeOutCubic). O alvo alinha a borda superior do elemento com a borda
+// inferior do cabecalho fixo (medido dinamicamente).
+function smoothScrollWindowToElement(
+  element: HTMLElement | null,
+  duration = 720
+) {
+  if (!element) return;
+  const header = document.querySelector("header");
+  // Pequena folga entre a borda inferior do cabecalho e o topo do card.
+  const gap = 16;
+  const headerOffset = (header ? header.getBoundingClientRect().height : 0) + gap;
+  const startTop = window.scrollY;
+  const targetTop = Math.max(
+    element.getBoundingClientRect().top + window.scrollY - headerOffset,
+    0
+  );
+  const distance = targetTop - startTop;
+  if (Math.abs(distance) < 1) return;
+
+  const startTime = performance.now();
+  const easeOutCubic = (progress: number) => 1 - Math.pow(1 - progress, 3);
+
+  const animateScroll = (currentTime: number) => {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    window.scrollTo(0, startTop + distance * easeOutCubic(progress));
+    if (progress < 1) {
+      requestAnimationFrame(animateScroll);
+    }
+  };
+
+  requestAnimationFrame(animateScroll);
+}
+
+function StepCard({
+  icon,
+  title,
+  subtitle,
+  completed,
+  open,
+  onToggleOpen,
+  headerAccessory,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  subtitle?: string;
+  completed: boolean;
+  open: boolean;
+  onToggleOpen: () => void;
+  headerAccessory?: ReactNode;
+  children: ReactNode;
+}) {
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  const handleToggle = () => {
+    const willOpen = !open;
+    onToggleOpen();
+    if (willOpen) {
+      // Aguarda o corpo expandir antes de ajustar a posicao da tela.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => smoothScrollWindowToElement(cardRef.current));
+      });
+    }
+  };
+
+  return (
+    <div
+      ref={cardRef}
+      className="rounded-[32px] border border-white/70 bg-white/90 p-5 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]"
+    >
+      <button
+        type="button"
+        onClick={handleToggle}
+        className="flex w-full items-start justify-between gap-3 text-left"
+      >
+        <div className="flex min-w-0 items-start gap-2">
+          <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+            {icon}
+          </span>
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-xl font-semibold text-slate-950">{title}</h2>
+              {completed ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Concluído
+                </span>
+              ) : null}
+            </div>
+            {subtitle ? (
+              <p className="mt-1 text-sm text-slate-600">{subtitle}</p>
+            ) : null}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {headerAccessory}
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+            {open ? (
+              <ChevronUp className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4" />
+            )}
+          </span>
+        </div>
+      </button>
+      {open ? <div className="mt-5">{children}</div> : null}
+    </div>
+  );
 }
 
 function normalizeSearchValue(value: string) {
@@ -401,8 +626,21 @@ export default function RentalProposalForm({
     typeof window !== "undefined" ? window.location.search : location.split("?")[1] ?? ""
   ).get("propertyId");
   const isEditing = Boolean(initialProposal);
-  const isContractTemplateStep = initialProposal?.currentStep === "modelos_contrato";
-  const isContractReviewStep = initialProposal?.currentStep === "contratos_em_revisao";
+  const canEditTemplates =
+    initialProposal?.currentStep === "modelos_contrato" ||
+    initialProposal?.currentStep === "contratos_em_revisao" ||
+    initialProposal?.currentStep === "boletos_pendentes";
+  // Gestao dos contratos ja gerados (editar texto, regerar, aprovar, excluir).
+  const canManageContracts =
+    initialProposal?.currentStep === "contratos_em_revisao" ||
+    initialProposal?.currentStep === "boletos_pendentes";
+  const stepIndex = isEditing ? getRentalStepIndex(initialProposal?.currentStep) : 0;
+  const dadosCompleted = stepIndex >= 1;
+  const modelosReached = stepIndex >= 1;
+  const contratosReached = stepIndex >= 2;
+  const contratosCompleted = stepIndex >= 3;
+  const [openDados, setOpenDados] = useState(true);
+  const [openModelos, setOpenModelos] = useState(true);
   const [isDirty, setIsDirty] = useState(false);
   const [templateSelectionDirty, setTemplateSelectionDirty] = useState(false);
   const [propertyId, setPropertyId] = useState("");
@@ -414,6 +652,11 @@ export default function RentalProposalForm({
   const [tenantConfirmed, setTenantConfirmed] = useState(false);
   const [leaseTermMonths, setLeaseTermMonths] = useState("30");
   const [adjustmentIndex, setAdjustmentIndex] = useState("IGP-M");
+  const [adjustmentPeriod, setAdjustmentPeriod] = useState<"anual" | "mensal">("anual");
+  const [administrationFeePercent, setAdministrationFeePercent] = useState("");
+  const [transferBusinessDays, setTransferBusinessDays] = useState("");
+  const [terminationPenaltyType, setTerminationPenaltyType] = useState<"valor" | "alugueis">("valor");
+  const [terminationPenaltyAmount, setTerminationPenaltyAmount] = useState("");
   const [rentAmount, setRentAmount] = useState("");
   const [condominiumAmount, setCondominiumAmount] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -431,6 +674,16 @@ export default function RentalProposalForm({
   const [editingGeneratedContract, setEditingGeneratedContract] = useState<GeneratedContractOption | null>(null);
   const [contractReviewText, setContractReviewText] = useState("");
   const [contractReviewDirty, setContractReviewDirty] = useState(false);
+  const [contractToRegenerate, setContractToRegenerate] = useState<GeneratedContractOption | null>(null);
+  const [contractToDelete, setContractToDelete] = useState<GeneratedContractOption | null>(null);
+  const contractHighlightNeedles = useMemo(
+    () => (editingGeneratedContract ? buildHighlightNeedles(editingGeneratedContract) : []),
+    [editingGeneratedContract]
+  );
+  const contractHighlightSegments = useMemo(
+    () => buildHighlightSegments(contractReviewText, contractHighlightNeedles),
+    [contractReviewText, contractHighlightNeedles]
+  );
 
   useEffect(() => {
     if (!initialProposal) return;
@@ -453,6 +706,21 @@ export default function RentalProposalForm({
     setTenantConfirmed(Boolean(initialProposal.tenantConfirmedAt));
     setLeaseTermMonths(String(initialProposal.leaseTermMonths));
     setAdjustmentIndex(initialProposal.adjustmentIndex);
+    setAdjustmentPeriod(initialProposal.adjustmentPeriod === "mensal" ? "mensal" : "anual");
+    setAdministrationFeePercent(formatBasisPointsToPercent(initialProposal.administrationFeePercent));
+    setTransferBusinessDays(
+      initialProposal.transferBusinessDays === null || initialProposal.transferBusinessDays === undefined
+        ? ""
+        : String(initialProposal.transferBusinessDays)
+    );
+    setTerminationPenaltyType(initialProposal.terminationPenaltyType === "alugueis" ? "alugueis" : "valor");
+    setTerminationPenaltyAmount(
+      initialProposal.terminationPenaltyAmount === null || initialProposal.terminationPenaltyAmount === undefined
+        ? ""
+        : initialProposal.terminationPenaltyType === "alugueis"
+          ? String(initialProposal.terminationPenaltyAmount)
+          : formatCurrencyInput(initialProposal.terminationPenaltyAmount)
+    );
     setRentAmount(formatCurrencyInput(initialProposal.rentAmount));
     setCondominiumAmount(formatCurrencyInput(initialProposal.condominiumAmount));
     setStartDate(formatDateInput(initialProposal.startDate));
@@ -463,6 +731,12 @@ export default function RentalProposalForm({
     );
     setTemplateSelectionDirty(false);
     setIsDirty(false);
+
+    // Estado de colapso derivado da conclusao: etapa concluida abre minimizada,
+    // etapa atual abre expandida (escolha "derivar da conclusao").
+    const index = getRentalStepIndex(initialProposal.currentStep);
+    setOpenDados(index < 1);
+    setOpenModelos(index >= 1 && index < 3);
   }, [initialProposal]);
 
   useEffect(() => {
@@ -615,33 +889,6 @@ export default function RentalProposalForm({
     },
   });
 
-  const selectContractTemplates = trpc.rentalProposals.selectContractTemplates.useMutation({
-    onSuccess: async () => {
-      toast.success("Modelos de contrato vinculados a proposta.");
-      setTemplateSelectionDirty(false);
-      await utils.rentalProposals.list.invalidate();
-      if (initialProposal) {
-        await utils.rentalProposals.getById.invalidate({ id: initialProposal.id });
-      }
-    },
-    onError: error => {
-      toast.error(error.message || "Nao foi possivel salvar os modelos de contrato.");
-    },
-  });
-
-  const generateContracts = trpc.rentalProposals.generateContracts.useMutation({
-    onSuccess: async () => {
-      toast.success("Contratos gerados para revisão.");
-      await utils.rentalProposals.list.invalidate();
-      if (initialProposal) {
-        await utils.rentalProposals.getById.invalidate({ id: initialProposal.id });
-      }
-    },
-    onError: error => {
-      toast.error(error.message || "Nao foi possivel gerar os contratos.");
-    },
-  });
-
   const updateGeneratedContractText = trpc.rentalProposals.updateGeneratedContractText.useMutation({
     onSuccess: async () => {
       toast.success("Texto do contrato salvo.");
@@ -660,7 +907,11 @@ export default function RentalProposalForm({
 
   const approveGeneratedContract = trpc.rentalProposals.approveGeneratedContract.useMutation({
     onSuccess: async data => {
-      toast.success(data.allApproved ? "Todos os contratos foram aprovados." : "Contrato aprovado.");
+      if (data.referenceCode) {
+        toast.success(`Todos os contratos aprovados. Código de referência: ${data.referenceCode}`);
+      } else {
+        toast.success(data.allApproved ? "Todos os contratos foram aprovados." : "Contrato aprovado.");
+      }
       await utils.rentalProposals.list.invalidate();
       if (initialProposal) {
         await utils.rentalProposals.getById.invalidate({ id: initialProposal.id });
@@ -668,6 +919,52 @@ export default function RentalProposalForm({
     },
     onError: error => {
       toast.error(error.message || "Nao foi possivel aprovar o contrato.");
+    },
+  });
+
+  const regenerateGeneratedContract = trpc.rentalProposals.regenerateGeneratedContract.useMutation({
+    onSuccess: async () => {
+      toast.success("Contrato gerado novamente a partir do modelo atual.");
+      await utils.rentalProposals.list.invalidate();
+      if (initialProposal) {
+        await utils.rentalProposals.getById.invalidate({ id: initialProposal.id });
+      }
+    },
+    onError: error => {
+      toast.error(error.message || "Nao foi possivel gerar o contrato novamente.");
+    },
+  });
+
+  const deleteGeneratedContract = trpc.rentalProposals.deleteGeneratedContract.useMutation({
+    onSuccess: async () => {
+      toast.success("Contrato excluído.");
+      setContractToDelete(null);
+      await utils.rentalProposals.list.invalidate();
+      if (initialProposal) {
+        await utils.rentalProposals.getById.invalidate({ id: initialProposal.id });
+      }
+    },
+    onError: error => {
+      toast.error(error.message || "Nao foi possivel excluir o contrato.");
+    },
+  });
+
+  const updateContractTemplatesInReview = trpc.rentalProposals.updateContractTemplatesInReview.useMutation({
+    onSuccess: async data => {
+      const parts: string[] = [];
+      if (data.added) parts.push(`${data.added} adicionado(s)`);
+      if (data.removed) parts.push(`${data.removed} removido(s)`);
+      toast.success(
+        parts.length ? `Modelos atualizados (${parts.join(", ")}).` : "Modelos atualizados."
+      );
+      setTemplateSelectionDirty(false);
+      await utils.rentalProposals.list.invalidate();
+      if (initialProposal) {
+        await utils.rentalProposals.getById.invalidate({ id: initialProposal.id });
+      }
+    },
+    onError: error => {
+      toast.error(error.message || "Nao foi possivel atualizar os modelos.");
     },
   });
 
@@ -733,6 +1030,28 @@ export default function RentalProposalForm({
       return;
     }
 
+    const administrationFeeInBasisPoints = parsePercentToBasisPoints(administrationFeePercent);
+    if (!administrationFeePercent.trim()) {
+      toast.error("Informe a taxa de administracao do aluguel.");
+      return;
+    }
+    if (!transferBusinessDays.trim() || !Number.isFinite(Number(transferBusinessDays))) {
+      toast.error("Informe os dias uteis para repasse do aluguel.");
+      return;
+    }
+    const terminationPenaltyValue =
+      terminationPenaltyType === "alugueis"
+        ? Number(terminationPenaltyAmount.replace(/[^\d]/g, ""))
+        : parseCurrencyToCents(terminationPenaltyAmount);
+    if (!terminationPenaltyAmount.trim() || !Number.isFinite(terminationPenaltyValue) || terminationPenaltyValue <= 0) {
+      toast.error(
+        terminationPenaltyType === "alugueis"
+          ? "Informe a quantidade de alugueis da multa rescisoria."
+          : "Informe o valor da multa rescisoria."
+      );
+      return;
+    }
+
     const payload = {
       propertyId: Number(propertyId),
       brokerUserId: Number(brokerUserId),
@@ -743,6 +1062,11 @@ export default function RentalProposalForm({
       tenantConfirmed,
       leaseTermMonths: Number(leaseTermMonths),
       adjustmentIndex,
+      adjustmentPeriod,
+      administrationFeePercent: administrationFeeInBasisPoints,
+      transferBusinessDays: Number(transferBusinessDays),
+      terminationPenaltyType,
+      terminationPenaltyAmount: terminationPenaltyValue,
       rentAmount: rentAmountInCents,
       condominiumAmount: shouldShowCondominiumAmount ? condominiumAmountInCents : null,
       startDate,
@@ -772,31 +1096,17 @@ export default function RentalProposalForm({
     setTemplateSelectionDirty(true);
   };
 
-  const saveContractTemplateSelection = () => {
+  const saveTemplatesInReview = () => {
     if (!initialProposal) return;
     if (selectedContractTemplateIds.length === 0) {
       toast.error("Selecione ao menos um modelo de contrato.");
       return;
     }
 
-    selectContractTemplates.mutate({
+    updateContractTemplatesInReview.mutate({
       id: initialProposal.id,
       contractTemplateIds: selectedContractTemplateIds.map(Number),
     });
-  };
-
-  const generateContractsForReview = () => {
-    if (!initialProposal) return;
-    if (templateSelectionDirty) {
-      toast.error("Salve a selecao de modelos antes de gerar os contratos.");
-      return;
-    }
-    if (selectedContractTemplateIds.length === 0) {
-      toast.error("Selecione ao menos um modelo de contrato.");
-      return;
-    }
-
-    generateContracts.mutate({ id: initialProposal.id });
   };
 
   const openGeneratedContractEditor = (contract: GeneratedContractOption) => {
@@ -827,30 +1137,61 @@ export default function RentalProposalForm({
     approveGeneratedContract.mutate({ contractId: contract.id });
   };
 
+  const regenerateContract = (contract: GeneratedContractOption) => {
+    setContractToRegenerate(contract);
+  };
+
+  const confirmRegenerateContract = () => {
+    if (!contractToRegenerate) return;
+    regenerateGeneratedContract.mutate(
+      { contractId: contractToRegenerate.id },
+      { onSettled: () => setContractToRegenerate(null) }
+    );
+  };
+
+  const deleteContract = (contract: GeneratedContractOption) => {
+    setContractToDelete(contract);
+  };
+
+  const confirmDeleteContract = () => {
+    if (!contractToDelete) return;
+    deleteGeneratedContract.mutate({ contractId: contractToDelete.id });
+  };
+
   const generatedContracts = initialProposal?.generatedContracts ?? [];
   const allGeneratedContractsApproved =
     generatedContracts.length > 0 &&
     generatedContracts.every(contract => contract.status === "aprovado");
+  const proposalReferenceCode = initialProposal?.referenceCode ?? null;
+  const appliedTemplateIds = (initialProposal?.contractTemplates ?? [])
+    .map(template => String(template.id))
+    .slice()
+    .sort();
+  const templatesChanged =
+    appliedTemplateIds.join(",") !==
+    selectedContractTemplateIds.slice().sort().join(",");
 
   return (
     <div className="space-y-5">
-      <div className="rounded-[32px] border border-white/70 bg-white/90 p-5 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
-        <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-slate-950">Dados iniciais da locacao</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              {isEditing
-                ? "Revise e continue o rascunho deste processo de locacao."
-                : "Preencha as primeiras informações para salvar a proposta como rascunho."}
-            </p>
-          </div>
-          {isDirty ? (
+      <StepCard
+        icon={<Home className="h-5 w-5" />}
+        title="Informações sobre a Locação"
+        subtitle={
+          isEditing
+            ? "Revise e continue o rascunho deste processo de locacao."
+            : "Preencha as primeiras informações para salvar a proposta como rascunho."
+        }
+        completed={dadosCompleted}
+        open={openDados}
+        onToggleOpen={() => setOpenDados(prev => !prev)}
+        headerAccessory={
+          isDirty ? (
             <span className="w-fit rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
               Alterações não salvas
             </span>
-          ) : null}
-        </div>
-
+          ) : null
+        }
+      >
         <div className="space-y-5">
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="space-y-2">
@@ -1083,6 +1424,69 @@ export default function RentalProposalForm({
             </div>
           </div>
 
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-2">
+              <Label>Tempo de reajuste</Label>
+              <Select
+                value={adjustmentPeriod}
+                onValueChange={value => { markDirty(); setAdjustmentPeriod(value as "anual" | "mensal"); }}
+              >
+                <SelectTrigger className={FIELD_CLASS}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="anual">Anual</SelectItem>
+                  <SelectItem value="mensal">Mensal</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Taxa de administração (%)</Label>
+              <Input
+                className={FIELD_CLASS}
+                value={administrationFeePercent}
+                onChange={event => { markDirty(); setAdministrationFeePercent(event.target.value); }}
+                placeholder="Ex.: 10"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Dias úteis para repasse</Label>
+              <Input
+                className={FIELD_CLASS}
+                value={transferBusinessDays}
+                onChange={event => { markDirty(); setTransferBusinessDays(event.target.value.replace(/[^\d]/g, "")); }}
+                placeholder="Ex.: 5"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Multa rescisória</Label>
+              <div className="flex gap-2">
+                <Select
+                  value={terminationPenaltyType}
+                  onValueChange={value => {
+                    markDirty();
+                    setTerminationPenaltyType(value as "valor" | "alugueis");
+                    setTerminationPenaltyAmount("");
+                  }}
+                >
+                  <SelectTrigger className={`${FIELD_CLASS} w-[140px] shrink-0`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="valor">Valor (R$)</SelectItem>
+                    <SelectItem value="alugueis">Nº de aluguéis</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  className={FIELD_CLASS}
+                  value={terminationPenaltyAmount}
+                  onChange={event => { markDirty(); setTerminationPenaltyAmount(event.target.value); }}
+                  placeholder={terminationPenaltyType === "alugueis" ? "Ex.: 3" : "R$ 0,00"}
+                />
+              </div>
+            </div>
+          </div>
+
           <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
             <div className="space-y-2">
               <Label>Inicio da locacao</Label>
@@ -1134,109 +1538,113 @@ export default function RentalProposalForm({
             </Button>
           </div>
         </div>
-      </div>
-      {initialProposal && isContractTemplateStep ? (
-        <div className="rounded-[32px] border border-white/70 bg-white/90 p-5 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
-          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
-                  <FileSignature className="h-5 w-5" />
-                </span>
-                <h2 className="text-xl font-semibold text-slate-950">Modelos de contrato</h2>
+      </StepCard>
+      {initialProposal && modelosReached ? (
+        <StepCard
+          icon={<FileSignature className="h-5 w-5" />}
+          title="Modelos e contratos"
+          subtitle="Marque os modelos de locação desta proposta para gerar os contratos. Você pode gerar mais ou remover a qualquer momento."
+          completed={contratosCompleted}
+          open={openModelos}
+          onToggleOpen={() => setOpenModelos(prev => !prev)}
+        >
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+              Modelos de contrato
+            </h3>
+          {canEditTemplates ? (
+            loadingContractTemplates ? (
+              <div className="space-y-3">
+                {[1, 2].map(item => (
+                  <div key={item} className="h-16 animate-pulse rounded-2xl bg-slate-100" />
+                ))}
               </div>
-              <p className="mt-2 text-sm text-slate-600">
-                Escolha os modelos que serão cruzados com os dados desta proposta na próxima etapa.
-              </p>
-            </div>
-            {templateSelectionDirty ? (
-              <span className="w-fit rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
-                Seleção não salva
-              </span>
-            ) : null}
-          </div>
+            ) : contractTemplates?.length ? (
+              <div className="space-y-3">
+                <p className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-2 text-xs font-medium text-sky-800">
+                  Marque os modelos desta proposta. Ao aplicar: modelos novos geram contratos; modelos desmarcados removem os contratos correspondentes; os mantidos preservam edições e aprovação.
+                </p>
+                {contractTemplates.map(template => {
+                  const checked = selectedContractTemplateIds.includes(String(template.id));
 
-          {loadingContractTemplates ? (
-            <div className="space-y-3">
-              {[1, 2].map(item => (
-                <div key={item} className="h-16 animate-pulse rounded-2xl bg-slate-100" />
-              ))}
-            </div>
-          ) : contractTemplates?.length ? (
-            <div className="space-y-3">
-              {contractTemplates.map(template => {
-                const checked = selectedContractTemplateIds.includes(String(template.id));
-
-                return (
-                  <label
-                    key={template.id}
-                    className={`flex cursor-pointer flex-col gap-3 rounded-2xl border p-4 transition sm:flex-row sm:items-start ${
-                      checked
-                        ? "border-emerald-200 bg-emerald-50/80"
-                        : "border-slate-200 bg-white/80 hover:border-emerald-200"
-                    }`}
+                  return (
+                    <label
+                      key={template.id}
+                      className={`flex cursor-pointer flex-col gap-3 rounded-2xl border p-4 transition sm:flex-row sm:items-start ${
+                        checked
+                          ? "border-emerald-200 bg-emerald-50/80"
+                          : "border-slate-200 bg-white/80 hover:border-emerald-200"
+                      }`}
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={() => toggleContractTemplateSelection(template.id)}
+                        className="mt-1"
+                      />
+                      <span className="min-w-0">
+                        <span className="block font-semibold text-slate-950">{template.name}</span>
+                        <span className="mt-1 block text-sm text-slate-600">
+                          {template.notes || "Sem observacoes internas."}
+                        </span>
+                        <span className="mt-2 block truncate text-xs text-slate-500">
+                          Arquivo base: {template.originalFileName}
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
+                <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                  <Button
+                    type="button"
+                    className="gap-2 rounded-full bg-emerald-700 text-white hover:bg-emerald-800"
+                    disabled={
+                      updateContractTemplatesInReview.isPending ||
+                      selectedContractTemplateIds.length === 0 ||
+                      !templatesChanged
+                    }
+                    onClick={saveTemplatesInReview}
                   >
-                    <Checkbox
-                      checked={checked}
-                      onCheckedChange={() => toggleContractTemplateSelection(template.id)}
-                      className="mt-1"
-                    />
-                    <span className="min-w-0">
-                      <span className="block font-semibold text-slate-950">{template.name}</span>
-                      <span className="mt-1 block text-sm text-slate-600">
-                        {template.notes || "Sem observacoes internas."}
-                      </span>
-                      <span className="mt-2 block truncate text-xs text-slate-500">
-                        Arquivo base: {template.originalFileName}
-                      </span>
-                    </span>
-                  </label>
-                );
-              })}
-              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                <Button
-                  variant="outline"
-                  className="rounded-full bg-white"
-                  disabled={!templateSelectionDirty || selectContractTemplates.isPending}
-                  onClick={saveContractTemplateSelection}
-                >
-                  {selectContractTemplates.isPending ? "Salvando..." : "Salvar modelos escolhidos"}
-                </Button>
-                <Button
-                  className="gap-2 rounded-full bg-emerald-700 text-white hover:bg-emerald-800"
-                  disabled={templateSelectionDirty || generateContracts.isPending}
-                  onClick={generateContractsForReview}
-                >
-                  <WandSparkles className="h-4 w-4" />
-                  {generateContracts.isPending ? "Gerando..." : "Gerar contratos para revisão"}
-                </Button>
+                    <WandSparkles className="h-4 w-4" />
+                    {updateContractTemplatesInReview.isPending
+                      ? "Aplicando..."
+                      : generatedContracts.length
+                        ? "Atualizar contratos"
+                        : "Gerar contratos"}
+                  </Button>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                Nenhum modelo de contrato cadastrado. Cadastre os modelos na aba Contratos antes de continuar.
+              </div>
+            )
           ) : (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              Nenhum modelo de contrato cadastrado. Cadastre os modelos na aba Contratos antes de continuar.
+            <div className="space-y-2">
+              {(initialProposal?.contractTemplates ?? []).length ? (
+                (initialProposal?.contractTemplates ?? []).map(template => (
+                  <div key={template.id} className="rounded-2xl border border-slate-200 bg-white/80 p-4">
+                    <p className="font-semibold text-slate-950">{template.name}</p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      {template.notes || "Sem observacoes internas."}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-slate-600">Nenhum modelo vinculado a esta proposta.</p>
+              )}
             </div>
           )}
-        </div>
-      ) : null}
-      {initialProposal && isContractReviewStep ? (
-        <div className="rounded-[32px] border border-white/70 bg-white/90 p-5 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
-          <div className="mb-5 flex items-center gap-2">
-            <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
-              <FileText className="h-5 w-5" />
-            </span>
-            <div>
-              <h2 className="text-xl font-semibold text-slate-950">Contratos em revisão</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Textos gerados com os dados da proposta e prontos para validação manual.
-              </p>
-            </div>
           </div>
-
+          {contratosReached ? (
+            <div className="mt-6 space-y-3 border-t border-slate-200 pt-6">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                Contratos gerados
+              </h3>
           {generatedContracts.length ? (
             <div className="space-y-3">
               {generatedContracts.map(contract => {
                 const unresolvedCount = parseUnresolvedVariables(contract.unresolvedVariables).length;
+                const filledCount = Object.keys(parseVariableValues(contract.variableValues)).length;
                 const isApproved = contract.status === "aprovado";
 
                 return (
@@ -1258,39 +1666,71 @@ export default function RentalProposalForm({
                         <p className="mt-1 text-sm text-slate-600">
                           {contract.reviewedText.length.toLocaleString("pt-BR")} caracteres gerados para revisão.
                         </p>
+                        {proposalReferenceCode ? (
+                          <p className="mt-2 border-t border-dashed border-slate-200 pt-2 text-xs font-medium text-slate-500">
+                            {buildContractReferenceFooter(proposalReferenceCode)}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="flex flex-wrap gap-2 sm:justify-end">
-                        <span
-                          className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${
-                            unresolvedCount > 0
-                              ? "bg-amber-100 text-amber-800"
-                              : "bg-emerald-100 text-emerald-700"
-                          }`}
-                        >
-                          {unresolvedCount > 0
-                            ? `${unresolvedCount} variavel(is) pendente(s)`
-                            : "Variaveis preenchidas"}
+                        <span className="w-fit rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                          {filledCount} variável(is) preenchida(s)
                         </span>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-8 rounded-full bg-white px-3 text-xs font-semibold"
-                          onClick={() => openGeneratedContractEditor(contract)}
-                        >
-                          <Pencil className="mr-1 h-3.5 w-3.5" />
-                          Editar texto
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="h-8 rounded-full bg-emerald-700 px-3 text-xs font-semibold text-white hover:bg-emerald-800"
-                          disabled={isApproved || approveGeneratedContract.isPending}
-                          onClick={() => approveContract(contract)}
-                        >
-                          <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
-                          {isApproved ? "Aprovado" : "Aprovar"}
-                        </Button>
+                        {unresolvedCount > 0 ? (
+                          <span className="w-fit rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">
+                            {unresolvedCount} variável(is) pendente(s)
+                          </span>
+                        ) : null}
+                        {canManageContracts ? (
+                          <>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 rounded-full bg-white px-3 text-xs font-semibold"
+                              disabled={regenerateGeneratedContract.isPending}
+                              onClick={() => regenerateContract(contract)}
+                              title="Gera o contrato novamente a partir do modelo atual do sistema"
+                            >
+                              <RotateCw className="mr-1 h-3.5 w-3.5" />
+                              Gerar novamente
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 rounded-full bg-white px-3 text-xs font-semibold"
+                              onClick={() => openGeneratedContractEditor(contract)}
+                            >
+                              <Pencil className="mr-1 h-3.5 w-3.5" />
+                              Editar texto
+                            </Button>
+                            {isApproved ? null : (
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="h-8 rounded-full bg-emerald-700 px-3 text-xs font-semibold text-white hover:bg-emerald-800"
+                                disabled={approveGeneratedContract.isPending}
+                                onClick={() => approveContract(contract)}
+                              >
+                                <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+                                Aprovar
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 rounded-full border-rose-200 bg-white px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                              disabled={deleteGeneratedContract.isPending}
+                              onClick={() => deleteContract(contract)}
+                              title="Exclui este contrato gerado da proposta"
+                            >
+                              <Trash2 className="mr-1 h-3.5 w-3.5" />
+                              Excluir
+                            </Button>
+                          </>
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -1298,7 +1738,14 @@ export default function RentalProposalForm({
               })}
               {allGeneratedContractsApproved ? (
                 <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-                  Todos os contratos foram aprovados. A próxima etapa será gerar o código de referência da proposta.
+                  {proposalReferenceCode ? (
+                    <>
+                      Todos os contratos foram aprovados. Código de referência da proposta:{" "}
+                      <span className="font-semibold">{proposalReferenceCode}</span>. A próxima etapa será a geração dos boletos.
+                    </>
+                  ) : (
+                    "Todos os contratos foram aprovados. A próxima etapa será gerar o código de referência da proposta."
+                  )}
                 </div>
               ) : null}
             </div>
@@ -1307,7 +1754,9 @@ export default function RentalProposalForm({
               Nenhum contrato gerado foi encontrado para esta proposta.
             </div>
           )}
-        </div>
+            </div>
+          ) : null}
+        </StepCard>
       ) : null}
       <UserChangeDialog
         open={brokerPickerOpen}
@@ -1366,47 +1815,143 @@ export default function RentalProposalForm({
         }}
       >
         <DialogContent
-          className="max-h-[92vh] w-full max-w-[calc(100%-2rem)] overflow-y-auto rounded-[32px] border-white/80 bg-[#f7f6f2] p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)] sm:max-w-4xl sm:p-6"
+          className="flex max-h-[90vh] w-full max-w-[calc(100%-2rem)] flex-col overflow-hidden rounded-[32px] border-white/80 bg-[#f7f6f2] p-0 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)] sm:max-w-4xl"
           onOpenAutoFocus={event => event.preventDefault()}
         >
-          <DialogHeader>
-            <DialogTitle>{editingGeneratedContract?.title || "Revisar contrato"}</DialogTitle>
+          <DialogHeader className="shrink-0 border-b border-slate-200/80 px-4 py-4 pr-12 text-left sm:px-6 sm:pr-14">
+            <DialogTitle className="truncate">{editingGeneratedContract?.title || "Revisar contrato"}</DialogTitle>
             <DialogDescription>
-              Edite o texto gerado antes de aprovar este contrato para a próxima etapa.
+              Edite o texto gerado antes de aprovar este contrato. Os trechos{" "}
+              <mark className="rounded bg-yellow-200 px-1 text-slate-900">em amarelo</mark>{" "}
+              vieram de variáveis do modelo.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <Textarea
-              value={contractReviewText}
-              onChange={event => {
-                setContractReviewText(event.target.value);
-                setContractReviewDirty(true);
-              }}
-              className="min-h-[56vh] rounded-2xl border-slate-200 bg-white font-mono text-sm leading-6 shadow-sm"
-            />
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-full bg-white"
-                onClick={() => {
-                  setEditingGeneratedContract(null);
-                  setContractReviewText("");
-                  setContractReviewDirty(false);
+          <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+            <div className="relative rounded-2xl bg-white shadow-sm">
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words rounded-2xl border border-transparent px-3 py-2 font-mono text-sm leading-6 text-transparent"
+              >
+                {contractHighlightSegments.map((segment, index) =>
+                  segment.highlight ? (
+                    <mark key={index} className="rounded bg-yellow-200 text-transparent">
+                      {segment.text}
+                    </mark>
+                  ) : (
+                    <span key={index}>{segment.text}</span>
+                  )
+                )}
+                {"\n"}
+              </div>
+              <Textarea
+                value={contractReviewText}
+                onChange={event => {
+                  setContractReviewText(event.target.value);
+                  setContractReviewDirty(true);
                 }}
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="button"
-                className="gap-2 rounded-full bg-slate-950 text-white hover:bg-slate-800"
-                disabled={!contractReviewDirty || updateGeneratedContractText.isPending}
-                onClick={saveGeneratedContractText}
-              >
-                <Save className="h-4 w-4" />
-                {updateGeneratedContractText.isPending ? "Salvando..." : "Salvar texto revisado"}
-              </Button>
+                className="relative min-h-[48vh] w-full resize-none rounded-2xl border-slate-200 bg-transparent font-mono text-sm leading-6 shadow-none"
+              />
             </div>
+            {proposalReferenceCode ? (
+              <div className="mt-3 rounded-2xl border border-dashed border-slate-300 bg-white/70 px-4 py-2 text-xs font-medium text-slate-500">
+                Rodapé do contrato: {buildContractReferenceFooter(proposalReferenceCode)}
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter className="shrink-0 border-t border-slate-200/80 px-4 py-4 sm:px-6">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full bg-white"
+              onClick={() => {
+                setEditingGeneratedContract(null);
+                setContractReviewText("");
+                setContractReviewDirty(false);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              className="gap-2 rounded-full bg-slate-950 text-white hover:bg-slate-800"
+              disabled={!contractReviewDirty || updateGeneratedContractText.isPending}
+              onClick={saveGeneratedContractText}
+            >
+              <Save className="h-4 w-4" />
+              {updateGeneratedContractText.isPending ? "Salvando..." : "Salvar texto revisado"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={contractToRegenerate !== null}
+        onOpenChange={open => {
+          if (open || regenerateGeneratedContract.isPending) return;
+          setContractToRegenerate(null);
+        }}
+      >
+        <DialogContent className="!w-[420px] !max-w-[calc(100%-2rem)] rounded-[24px] border-white/80 bg-[#f7f6f2] p-4 sm:!max-w-[420px] sm:p-5">
+          <DialogHeader>
+            <DialogTitle>Gerar contrato novamente?</DialogTitle>
+            <DialogDescription>
+              O contrato será gerado de novo a partir do modelo atual do sistema. As edições manuais no texto e a aprovação deste contrato serão perdidas.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full bg-white"
+              disabled={regenerateGeneratedContract.isPending}
+              onClick={() => setContractToRegenerate(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              className="gap-2 rounded-full bg-slate-950 text-white hover:bg-slate-800"
+              disabled={regenerateGeneratedContract.isPending}
+              onClick={confirmRegenerateContract}
+            >
+              <RotateCw className="h-4 w-4" />
+              {regenerateGeneratedContract.isPending ? "Gerando..." : "Gerar novamente"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={contractToDelete !== null}
+        onOpenChange={open => {
+          if (open || deleteGeneratedContract.isPending) return;
+          setContractToDelete(null);
+        }}
+      >
+        <DialogContent className="!w-[440px] !max-w-[calc(100%-2rem)] rounded-[24px] border-white/80 bg-[#f7f6f2] p-4 sm:!max-w-[440px] sm:p-5">
+          <DialogHeader>
+            <DialogTitle>Excluir contrato gerado?</DialogTitle>
+            <DialogDescription>
+              O contrato{contractToDelete ? ` "${contractToDelete.title}"` : ""} será removido desta proposta, junto com o modelo correspondente. Edições e aprovação deste contrato serão perdidas. Esta ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full bg-white"
+              disabled={deleteGeneratedContract.isPending}
+              onClick={() => setContractToDelete(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              className="gap-2 rounded-full bg-rose-700 text-white hover:bg-rose-800"
+              disabled={deleteGeneratedContract.isPending}
+              onClick={confirmDeleteContract}
+            >
+              <Trash2 className="h-4 w-4" />
+              {deleteGeneratedContract.isPending ? "Excluindo..." : "Excluir contrato"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

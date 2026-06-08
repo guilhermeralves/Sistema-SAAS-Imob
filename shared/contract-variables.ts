@@ -118,6 +118,10 @@ export const CONTRACT_VARIABLE_FIELD_OPTIONS: ContractVariableOption[] = [
   { key: "locacao.prazo", label: "Locação > Prazo", aliases: ["prazo de locacao", "prazo de locação", "tempo de contrato"] },
   { key: "locacao.diaVencimento", label: "Locação > Dia de vencimento", aliases: ["dia de vencimento", "vencimento"] },
   { key: "locacao.indiceReajuste", label: "Locação > Índice de reajuste", aliases: ["indice de reajuste", "índice de reajuste", "reajuste"] },
+  { key: "locacao.tempoReajuste", label: "Locação > Tempo de reajuste", aliases: ["tempo de reajuste", "periodo de reajuste", "período de reajuste", "periodicidade do reajuste"] },
+  { key: "locacao.taxaAdministracao", label: "Locação > Taxa de administração", aliases: ["taxa de administracao", "taxa de administração", "taxa de adm", "taxa administrativa"] },
+  { key: "locacao.diasUteisRepasse", label: "Locação > Dias úteis para repasse", aliases: ["dias uteis para repasse", "dias úteis para repasse", "dias de repasse", "prazo de repasse"] },
+  { key: "locacao.multaRescisoria", label: "Locação > Multa rescisória", aliases: ["multa rescisoria", "multa rescisória", "multa por rescisao", "multa por rescisão", "multa contratual"] },
   { key: "locacao.observacoes", label: "Locação > Observações", aliases: ["observacoes da locacao", "observações da locação", "observacoes", "observações"] },
 ];
 

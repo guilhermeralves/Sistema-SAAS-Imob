@@ -602,11 +602,21 @@ export const rentalProposals = pgTable("rentalProposals", {
   tenantConfirmedAt: timestamp("tenantConfirmedAt", { mode: "date" }),
   leaseTermMonths: integer("leaseTermMonths").notNull(),
   adjustmentIndex: varchar("adjustmentIndex", { length: 40 }).notNull(),
+  adjustmentPeriod: varchar("adjustmentPeriod", { length: 20 }).$type<
+    "anual" | "mensal"
+  >(),
+  administrationFeePercent: integer("administrationFeePercent"),
+  transferBusinessDays: integer("transferBusinessDays"),
+  terminationPenaltyType: varchar("terminationPenaltyType", {
+    length: 20,
+  }).$type<"valor" | "alugueis">(),
+  terminationPenaltyAmount: integer("terminationPenaltyAmount"),
   rentAmount: integer("rentAmount").notNull(),
   condominiumAmount: integer("condominiumAmount"),
   startDate: date("startDate", { mode: "date" }).notNull(),
   dueDay: integer("dueDay").notNull(),
   contextSnapshot: text("contextSnapshot").default("{}").notNull(),
+  referenceCode: varchar("referenceCode", { length: 40 }),
   notes: text("notes"),
   createdByUserId: integer("createdByUserId").notNull(),
   createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),

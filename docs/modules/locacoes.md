@@ -64,6 +64,14 @@ Na etapa 16, o administrativo revisa manualmente cada registro de `rentalProposa
 - pode aprovar cada contrato individualmente;
 - ao aprovar, o contrato recebe `status = "aprovado"`, `approvedAt` e `approvedByUserId`.
 
+Nas etapas 17 e 18, quando todos os contratos da proposta sao aprovados:
+
+- o sistema gera o codigo de referencia e grava em `rentalProposals.referenceCode`;
+- o formato e `LOC-<ano de geracao>-<id da proposta com 4 digitos>` (ex.: `LOC-2026-0042`), derivado pelo helper compartilhado `shared/contract-reference.ts`;
+- a geracao e idempotente: se a proposta ja tem `referenceCode`, nao gera outro;
+- a proposta avanca para `status = "boletos_pendentes"` e `currentStep = "boletos_pendentes"`;
+- o codigo entra no rodape dos contratos de forma derivada na exibicao (cartao, banner e dialogo de edicao), sem alterar o `reviewedText` aprovado.
+
 ## Regras de negocio
 
 - A escolha de modelos de contrato e feita por proposta.
@@ -76,7 +84,9 @@ Na etapa 16, o administrativo revisa manualmente cada registro de `rentalProposa
 - Variaveis reconhecidas sao substituidas pelos dados do `contextSnapshot`; variaveis sem mapeamento ou sem valor permanecem pendentes para revisao manual.
 - A validacao manual ocorre contrato a contrato.
 - Contrato gerado com texto revisado vazio nao pode ser aprovado.
-- Aprovacao de todos os contratos prepara a proposta para a etapa seguinte, que gerara o codigo de referencia.
+- A aprovacao do ultimo contrato pendente gera o codigo de referencia da proposta e avanca para a etapa de boletos.
+- O codigo de referencia e unico por proposta e nao e regerado se ja existir.
+- O codigo de referencia compoe o rodape dos contratos, derivado na exibicao a partir de `rentalProposals.referenceCode`.
 - O dicionario de variaveis dos modelos usa o catalogo compartilhado `shared/contract-variables.ts`.
 - O catalogo deve expor campos cadastrais completos de envolvidos como locatario, comprador, proprietario, vendedor e corretor.
 - Labels do dicionario podem ser amigaveis em portugues, mas a `key` salva no modelo deve usar o mesmo nome tecnico do campo real do sistema, prefixado pelo papel no contrato. Exemplo: `Locatario > Profissao` salva `locatario.profession`, e nao `locatario.profissao`.
@@ -100,6 +110,7 @@ Na etapa 16, o administrativo revisa manualmente cada registro de `rentalProposa
 - `server/db.ts`: persistencia de propostas, participantes e modelos escolhidos.
 - `drizzle/schema.ts`: schema Drizzle das entidades de locacao.
 - `shared/contract-variables.ts`: catalogo compartilhado de variaveis reconhecidas em modelos de contrato.
+- `shared/contract-reference.ts`: geracao do codigo de referencia da proposta e do rodape derivado dos contratos.
 
 ## Impactos
 
@@ -107,6 +118,8 @@ Na etapa 16, o administrativo revisa manualmente cada registro de `rentalProposa
 - Banco de dados: nova tabela de vinculo `rentalProposalContractTemplates`.
 - Banco de dados: tabela `rentalProposalGeneratedContracts` armazena os textos gerados para revisao.
 - Banco de dados: `contractTemplates` guarda `contractKind` e `participantRoles` para classificar modelos e filtrar variaveis por nicho.
-- API: mutations `rentalProposals.selectContractTemplates`, `rentalProposals.generateContracts`, `rentalProposals.updateGeneratedContractText` e `rentalProposals.approveGeneratedContract`.
-- Frontend: tela de detalhes da proposta mostra a etapa de escolha de modelos de locacao, a lista de contratos em revisao, edicao manual de texto e aprovacao individual; as paginas de contratos em Locacoes e Vendas compartilham o painel, mas aplicam filtros e variaveis proprios.
-- Fluxo futuro: a proxima etapa e gerar o codigo de referencia da proposta apos todos os contratos serem aprovados.
+- API: mutations `rentalProposals.updateContractTemplatesInReview` (escolhe/atualiza modelos e sincroniza contratos por diff), `rentalProposals.updateGeneratedContractText`, `rentalProposals.regenerateGeneratedContract`, `rentalProposals.deleteGeneratedContract` e `rentalProposals.approveGeneratedContract`; query `rentalProposals.pendingForProperty` bloqueia nova proposta para imovel ja vinculado.
+- Frontend: a tela de detalhes usa cards de etapa colapsaveis (auto-minimizam ao concluir); a escolha de modelos e um checkbox unico de modelos de locacao que gera/atualiza/remove contratos, e cada contrato gerado pode ser editado, regerado, aprovado ou excluido enquanto a proposta nao estiver ativa.
+- Banco de dados: `rentalProposals` ganha `referenceCode` para o codigo de referencia gerado na aprovacao final.
+- API: `rentalProposals.approveGeneratedContract` passa a retornar `referenceCode` e, na ultima aprovacao, gera o codigo e avanca a proposta para `boletos_pendentes`.
+- Fluxo futuro: a proxima etapa (19) e gerar os boletos de todo o periodo de vigencia da proposta ja com codigo de referencia.
