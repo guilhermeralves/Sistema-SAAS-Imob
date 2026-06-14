@@ -21,6 +21,7 @@ import {
   Briefcase,
   Building2,
   Gift,
+  Target,
   Hammer,
   Home,
   KeyRound,
@@ -272,25 +273,37 @@ export default function Header() {
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild>
-                        <Link href="/condominios">
+                        <Link href="/roleta-atendimentos">
                           <a className="flex items-center gap-2">
-                            <Building2 className="h-4 w-4" />
-                            Condomínios
+                            <Target className="h-4 w-4" />
+                            Roleta de Atendimentos
                           </a>
                         </Link>
                       </DropdownMenuItem>
                     </>
                   ) : null}
                   {user.role === "administrativo" ? (
+                    <DropdownMenuItem asChild>
+                      <Link href="/controle-de-chaves">
+                        <a className="flex items-center gap-2">
+                          <KeyRound className="h-4 w-4" />
+                          Controle de Chaves
+                        </a>
+                      </Link>
+                    </DropdownMenuItem>
+                  ) : null}
+                  {isStaff ? (
+                    <DropdownMenuItem asChild>
+                      <Link href="/condominios">
+                        <a className="flex items-center gap-2">
+                          <Building2 className="h-4 w-4" />
+                          Condomínios
+                        </a>
+                      </Link>
+                    </DropdownMenuItem>
+                  ) : null}
+                  {user.role === "administrativo" ? (
                     <>
-                      <DropdownMenuItem asChild>
-                        <Link href="/controle-de-chaves">
-                          <a className="flex items-center gap-2">
-                            <KeyRound className="h-4 w-4" />
-                            Controle de Chaves
-                          </a>
-                        </Link>
-                      </DropdownMenuItem>
                       <DropdownMenuItem asChild>
                         <Link href="/bonificacoes">
                           <a className="flex items-center gap-2">

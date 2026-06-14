@@ -8,6 +8,11 @@ import {
 } from "@shared/contract-variables";
 import { buildRentalProposalReferenceCode } from "@shared/contract-reference";
 import {
+  buildBoletoDueDate,
+  buildRentalBoletoSchedule,
+  calculateBoletoTotal,
+} from "@shared/rental-boletos";
+import {
   CONTRACT_REQUIRED_USER_FIELDS,
   USER_PROFILE_MARITAL_STATUSES,
 } from "@shared/user-profile";
@@ -246,6 +251,42 @@ const approveRentalProposalGeneratedContractSchema = z.object({
 
 const regenerateRentalProposalGeneratedContractSchema = z.object({
   contractId: z.number().int().positive(),
+});
+
+const optionalDateStringSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Data invalida.");
+
+const updateRentalProposalBoletoSchema = z.object({
+  boletoId: z.number().int().positive(),
+  dueDate: optionalDateStringSchema.optional(),
+  rentAmount: z.number().int().min(0).max(1_000_000_000).optional(),
+  condominiumAmount: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
+  extraAmount: z.number().int().min(0).max(1_000_000_000).optional(),
+  extraDescription: z.string().trim().max(180).nullable().optional(),
+  notes: z.string().trim().max(2_000).nullable().optional(),
+});
+
+const updateRentalProposalBoletosBatchSchema = z.object({
+  id: z.number().int().positive(),
+  boletoIds: z.array(z.number().int().positive()).max(600).optional(),
+  patch: z
+    .object({
+      dueDay: z.number().int().min(1).max(31).optional(),
+      rentAmount: z.number().int().min(0).max(1_000_000_000).optional(),
+      condominiumAmount: z
+        .number()
+        .int()
+        .min(0)
+        .max(1_000_000_000)
+        .nullable()
+        .optional(),
+      extraAmount: z.number().int().min(0).max(1_000_000_000).optional(),
+      extraDescription: z.string().trim().max(180).nullable().optional(),
+    })
+    .refine(patch => Object.keys(patch).length > 0, {
+      message: "Informe ao menos um campo para atualizar em lote.",
+    }),
 });
 
 function uniquePositiveIds(ids: number[]) {
@@ -3828,6 +3869,100 @@ export const appRouter = router({
           referenceCode: reconciled.referenceCode,
         } as const;
       }),
+    generatedContractDocx: adminProcedure
+      .input(z.object({ contractId: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const {
+          getRentalProposalById,
+          getRentalProposalGeneratedContractById,
+          getContractTemplateById,
+        } = await import("./db");
+        const { renderContractDocx, ContractDocxFillError } = await import(
+          "./contract-docx"
+        );
+        const { buildContractReferenceFooter } = await import(
+          "@shared/contract-reference"
+        );
+
+        const contract = await getRentalProposalGeneratedContractById(
+          input.contractId
+        );
+        if (!contract) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Contrato gerado nao encontrado.",
+          });
+        }
+
+        if (contract.status !== "aprovado") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "O contrato precisa estar aprovado para baixar o documento.",
+          });
+        }
+
+        const template = await getContractTemplateById(
+          contract.contractTemplateId
+        );
+        if (!template) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "O modelo .docx deste contrato nao existe mais. Selecione os modelos da proposta novamente.",
+          });
+        }
+
+        const isDocx =
+          template.originalMimeType ===
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+          template.originalFileName.toLowerCase().endsWith(".docx");
+        if (!isDocx) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "O modelo deste contrato nao e um arquivo .docx, entao nao e possivel preservar o layout do Word.",
+          });
+        }
+
+        const proposal = await getRentalProposalById(contract.rentalProposalId);
+        const referenceCode = proposal?.referenceCode ?? null;
+        const templateBuffer = decodeDocxDataUrl(template.originalFileData);
+
+        let docxBuffer: Buffer;
+        try {
+          docxBuffer = renderContractDocx({
+            templateBuffer,
+            bodyText: contract.reviewedText,
+            footerText: referenceCode
+              ? buildContractReferenceFooter(referenceCode)
+              : null,
+          });
+        } catch (error) {
+          if (error instanceof ContractDocxFillError) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: error.message,
+            });
+          }
+          throw error;
+        }
+
+        const safeTitle =
+          contract.title
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/[^a-zA-Z0-9-_]+/g, "_")
+            .replace(/^_+|_+$/g, "")
+            .slice(0, 80) || "contrato";
+        const referenceSuffix = referenceCode ? `-${referenceCode}` : "";
+
+        return {
+          fileName: `${safeTitle}${referenceSuffix}.docx`,
+          contentType:
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          dataUrl: `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${docxBuffer.toString("base64")}`,
+        } as const;
+      }),
     regenerateGeneratedContract: adminProcedure
       .input(regenerateRentalProposalGeneratedContractSchema)
       .mutation(async ({ input }) => {
@@ -3967,6 +4102,436 @@ export const appRouter = router({
           referenceCode: reconciled.referenceCode,
         } as const;
       }),
+    generateBoletos: adminProcedure
+      .input(idSchema)
+      .mutation(async ({ input }) => {
+        const {
+          getRentalProposalById,
+          getRentalProposalBoletos,
+          insertRentalProposalBoletos,
+          updateRentalProposal,
+        } = await import("./db");
+
+        const proposal = await getRentalProposalById(input.id);
+        if (!proposal) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Proposta de locacao nao encontrada.",
+          });
+        }
+
+        if (proposal.currentStep !== "boletos_pendentes") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "A geracao de boletos so esta disponivel apos a aprovacao dos contratos.",
+          });
+        }
+
+        if (!proposal.referenceCode) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "Aprove todos os contratos para gerar o codigo de referencia antes dos boletos.",
+          });
+        }
+
+        const existing = await getRentalProposalBoletos(proposal.id);
+        if (existing.length > 0) {
+          return { success: true, created: 0, boletos: existing } as const;
+        }
+
+        const schedule = buildRentalBoletoSchedule({
+          startDate: proposal.startDate,
+          dueDay: proposal.dueDay,
+          leaseTermMonths: proposal.leaseTermMonths,
+          rentAmount: proposal.rentAmount,
+          condominiumAmount: proposal.condominiumAmount,
+        });
+
+        if (schedule.length === 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "Nao foi possivel montar o cronograma: verifique o tempo de vigencia da proposta.",
+          });
+        }
+
+        const created = await insertRentalProposalBoletos(
+          schedule.map(item => ({
+            rentalProposalId: proposal.id,
+            installmentNumber: item.installmentNumber,
+            referenceMonth: new Date(`${item.referenceMonth}T00:00:00.000Z`),
+            dueDate: new Date(`${item.dueDate}T00:00:00.000Z`),
+            rentAmount: item.rentAmount,
+            condominiumAmount: item.condominiumAmount,
+            extraAmount: item.extraAmount,
+            totalAmount: item.totalAmount,
+            status: "pendente" as const,
+          }))
+        );
+
+        // Gerar os boletos avanca o processo da proposta para a etapa de
+        // seguros. A validacao/aprovacao de cada boleto passa a ser um controle
+        // administrativo paralelo, feito na sub-pagina de Boletos.
+        await updateRentalProposal(proposal.id, {
+          status: "seguros_pendentes",
+          currentStep: "seguros_pendentes",
+        });
+
+        return {
+          success: true,
+          created: created.length,
+          boletos: created,
+        } as const;
+      }),
+    regenerateBoletos: adminProcedure
+      .input(idSchema)
+      .mutation(async ({ input }) => {
+        const {
+          getRentalProposalById,
+          getRentalProposalBoletos,
+          replaceRentalProposalBoletos,
+        } = await import("./db");
+
+        const proposal = await getRentalProposalById(input.id);
+        if (!proposal) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Proposta de locacao nao encontrada.",
+          });
+        }
+
+        if (!proposal.referenceCode) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Gere os boletos a partir de uma proposta com contratos aprovados.",
+          });
+        }
+
+        const existing = await getRentalProposalBoletos(proposal.id);
+        if (existing.some(boleto => boleto.status === "aprovado")) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "Ha boletos ja aprovados. Edite-os individualmente em vez de regerar todo o cronograma.",
+          });
+        }
+
+        const schedule = buildRentalBoletoSchedule({
+          startDate: proposal.startDate,
+          dueDay: proposal.dueDay,
+          leaseTermMonths: proposal.leaseTermMonths,
+          rentAmount: proposal.rentAmount,
+          condominiumAmount: proposal.condominiumAmount,
+        });
+
+        const created = await replaceRentalProposalBoletos(
+          proposal.id,
+          schedule.map(item => ({
+            rentalProposalId: proposal.id,
+            installmentNumber: item.installmentNumber,
+            referenceMonth: new Date(`${item.referenceMonth}T00:00:00.000Z`),
+            dueDate: new Date(`${item.dueDate}T00:00:00.000Z`),
+            rentAmount: item.rentAmount,
+            condominiumAmount: item.condominiumAmount,
+            extraAmount: item.extraAmount,
+            totalAmount: item.totalAmount,
+            status: "pendente" as const,
+          }))
+        );
+
+        return {
+          success: true,
+          created: created.length,
+          boletos: created,
+        } as const;
+      }),
+    updateBoleto: adminProcedure
+      .input(updateRentalProposalBoletoSchema)
+      .mutation(async ({ input }) => {
+        const {
+          getRentalProposalById,
+          getRentalProposalBoletoById,
+          updateRentalProposalBoleto,
+        } = await import("./db");
+
+        const boleto = await getRentalProposalBoletoById(input.boletoId);
+        if (!boleto) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Boleto nao encontrado.",
+          });
+        }
+
+        const proposal = await getRentalProposalById(boleto.rentalProposalId);
+        if (!proposal) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Proposta de locacao nao encontrada.",
+          });
+        }
+
+        if (!proposal.referenceCode) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "A edicao de boletos nao esta disponivel nesta etapa.",
+          });
+        }
+
+        const rentAmount = input.rentAmount ?? boleto.rentAmount;
+        const condominiumAmount =
+          input.condominiumAmount !== undefined
+            ? input.condominiumAmount
+            : boleto.condominiumAmount;
+        const extraAmount = input.extraAmount ?? boleto.extraAmount;
+        const totalAmount = calculateBoletoTotal({
+          rentAmount,
+          condominiumAmount,
+          extraAmount,
+        });
+
+        // Editar sempre devolve o boleto para revisao (pendente).
+        const updated = await updateRentalProposalBoleto(boleto.id, {
+          dueDate: input.dueDate
+            ? new Date(`${input.dueDate}T00:00:00.000Z`)
+            : boleto.dueDate,
+          rentAmount,
+          condominiumAmount,
+          extraAmount,
+          extraDescription:
+            input.extraDescription !== undefined
+              ? input.extraDescription
+              : boleto.extraDescription,
+          notes: input.notes !== undefined ? input.notes : boleto.notes,
+          totalAmount,
+          status: "pendente",
+          approvedAt: null,
+          approvedByUserId: null,
+        });
+
+        return {
+          success: true,
+          boleto: updated,
+        } as const;
+      }),
+    updateBoletosBatch: adminProcedure
+      .input(updateRentalProposalBoletosBatchSchema)
+      .mutation(async ({ input }) => {
+        const {
+          getRentalProposalById,
+          getRentalProposalBoletos,
+          updateRentalProposalBoleto,
+        } = await import("./db");
+
+        const proposal = await getRentalProposalById(input.id);
+        if (!proposal) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Proposta de locacao nao encontrada.",
+          });
+        }
+
+        if (!proposal.referenceCode) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "A edicao de boletos nao esta disponivel nesta etapa.",
+          });
+        }
+
+        const allBoletos = await getRentalProposalBoletos(proposal.id);
+        const targetIds = input.boletoIds?.length
+          ? new Set(input.boletoIds)
+          : null;
+        const targets = targetIds
+          ? allBoletos.filter(boleto => targetIds.has(boleto.id))
+          : allBoletos;
+
+        if (targets.length === 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Nenhum boleto selecionado para a edicao em lote.",
+          });
+        }
+
+        const { patch } = input;
+        for (const boleto of targets) {
+          const rentAmount = patch.rentAmount ?? boleto.rentAmount;
+          const condominiumAmount =
+            patch.condominiumAmount !== undefined
+              ? patch.condominiumAmount
+              : boleto.condominiumAmount;
+          const extraAmount = patch.extraAmount ?? boleto.extraAmount;
+          const referenceMonth = boleto.referenceMonth;
+          const dueDate =
+            patch.dueDay !== undefined
+              ? new Date(
+                  `${buildBoletoDueDate(
+                    referenceMonth.getUTCFullYear(),
+                    referenceMonth.getUTCMonth(),
+                    patch.dueDay
+                  )}T00:00:00.000Z`
+                )
+              : boleto.dueDate;
+
+          await updateRentalProposalBoleto(boleto.id, {
+            dueDate,
+            rentAmount,
+            condominiumAmount,
+            extraAmount,
+            extraDescription:
+              patch.extraDescription !== undefined
+                ? patch.extraDescription
+                : boleto.extraDescription,
+            totalAmount: calculateBoletoTotal({
+              rentAmount,
+              condominiumAmount,
+              extraAmount,
+            }),
+            status: "pendente",
+            approvedAt: null,
+            approvedByUserId: null,
+          });
+        }
+
+        return {
+          success: true,
+          updated: targets.length,
+        } as const;
+      }),
+    approveBoleto: adminProcedure
+      .input(z.object({ boletoId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        const {
+          getRentalProposalById,
+          getRentalProposalBoletoById,
+          approveRentalProposalBoleto,
+        } = await import("./db");
+
+        const boleto = await getRentalProposalBoletoById(input.boletoId);
+        if (!boleto) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Boleto nao encontrado.",
+          });
+        }
+
+        const proposal = await getRentalProposalById(boleto.rentalProposalId);
+        if (!proposal) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Proposta de locacao nao encontrada.",
+          });
+        }
+
+        if (!proposal.referenceCode) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "A aprovacao de boletos nao esta disponivel nesta etapa.",
+          });
+        }
+
+        if (boleto.totalAmount <= 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Revise o valor do boleto antes de aprovar.",
+          });
+        }
+
+        const updated = await approveRentalProposalBoleto(
+          boleto.id,
+          ctx.user.id
+        );
+
+        return {
+          success: true,
+          boleto: updated,
+        } as const;
+      }),
+    approveAllBoletos: adminProcedure
+      .input(idSchema)
+      .mutation(async ({ ctx, input }) => {
+        const {
+          getRentalProposalById,
+          getRentalProposalBoletos,
+          approveAllRentalProposalBoletos,
+        } = await import("./db");
+
+        const proposal = await getRentalProposalById(input.id);
+        if (!proposal) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Proposta de locacao nao encontrada.",
+          });
+        }
+
+        if (!proposal.referenceCode) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "A aprovacao de boletos nao esta disponivel nesta etapa.",
+          });
+        }
+
+        const boletos = await getRentalProposalBoletos(proposal.id);
+        if (boletos.length === 0) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Gere os boletos antes de aprova-los.",
+          });
+        }
+        if (boletos.some(boleto => boleto.totalAmount <= 0)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "Existe boleto com valor invalido. Revise antes de aprovar todos.",
+          });
+        }
+
+        await approveAllRentalProposalBoletos(proposal.id, ctx.user.id);
+
+        return { success: true } as const;
+      }),
+    setBoletoPaid: adminProcedure
+      .input(
+        z.object({
+          boletoId: z.number().int().positive(),
+          paid: z.boolean(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const {
+          getRentalProposalById,
+          getRentalProposalBoletoById,
+          markRentalProposalBoletoPaid,
+        } = await import("./db");
+
+        const boleto = await getRentalProposalBoletoById(input.boletoId);
+        if (!boleto) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Boleto nao encontrado.",
+          });
+        }
+
+        const proposal = await getRentalProposalById(boleto.rentalProposalId);
+        if (!proposal || !proposal.referenceCode) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "A baixa de pagamento nao esta disponivel nesta etapa.",
+          });
+        }
+
+        const updated = await markRentalProposalBoletoPaid(
+          boleto.id,
+          input.paid ? new Date() : null
+        );
+
+        return { success: true, boleto: updated } as const;
+      }),
+    boletoSets: adminProcedure.query(async () => {
+      const { getRentalProposalBoletoSets } = await import("./db");
+      return await getRentalProposalBoletoSets();
+    }),
     delete: adminProcedure.input(idSchema).mutation(async ({ input }) => {
       const { deleteRentalProposal, getRentalProposalById } = await import(
         "./db"

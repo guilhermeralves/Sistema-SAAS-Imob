@@ -726,6 +726,42 @@ export type RentalProposalGeneratedContract =
 export type InsertRentalProposalGeneratedContract =
   typeof rentalProposalGeneratedContracts.$inferInsert;
 
+export const rentalProposalBoletos = pgTable(
+  "rentalProposalBoletos",
+  {
+    id: serial("id").primaryKey(),
+    rentalProposalId: integer("rentalProposalId").notNull(),
+    installmentNumber: integer("installmentNumber").notNull(),
+    referenceMonth: date("referenceMonth", { mode: "date" }).notNull(),
+    dueDate: date("dueDate", { mode: "date" }).notNull(),
+    rentAmount: integer("rentAmount").notNull(),
+    condominiumAmount: integer("condominiumAmount"),
+    extraAmount: integer("extraAmount").default(0).notNull(),
+    extraDescription: varchar("extraDescription", { length: 180 }),
+    totalAmount: integer("totalAmount").notNull(),
+    status: varchar("status", { length: 20 })
+      .$type<"pendente" | "aprovado">()
+      .default("pendente")
+      .notNull(),
+    notes: text("notes"),
+    approvedAt: timestamp("approvedAt", { mode: "date" }),
+    approvedByUserId: integer("approvedByUserId"),
+    paidAt: timestamp("paidAt", { mode: "date" }),
+    createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+  },
+  table => [
+    uniqueIndex("rentalProposalBoletos_unique_idx").on(
+      table.rentalProposalId,
+      table.installmentNumber
+    ),
+  ]
+);
+
+export type RentalProposalBoleto = typeof rentalProposalBoletos.$inferSelect;
+export type InsertRentalProposalBoleto =
+  typeof rentalProposalBoletos.$inferInsert;
+
 /**
  * Tabela de documentos de imoveis
  * Armazena PDFs relacionados a cada imovel

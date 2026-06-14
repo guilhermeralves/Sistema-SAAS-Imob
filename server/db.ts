@@ -23,6 +23,7 @@ import {
   InsertTaskItemTemplate,
   InsertUser,
   InsertRentalProposal,
+  InsertRentalProposalBoleto,
   InsertRentalProposalGeneratedContract,
   TaskItem,
   TaskItemTemplate,
@@ -36,6 +37,7 @@ import {
   leadInteractions,
   leadNotes,
   leads,
+  rentalProposalBoletos,
   rentalProposalContractTemplates,
   rentalProposalGeneratedContracts,
   rentalProposalOwners,
@@ -2080,6 +2082,7 @@ export async function getRentalProposalById(id: number) {
     }),
     contractTemplates: await getRentalProposalContractTemplates(id),
     generatedContracts: await getRentalProposalGeneratedContracts(id),
+    boletos: await getRentalProposalBoletos(id),
   };
 }
 
@@ -2305,6 +2308,182 @@ export async function deleteRentalProposalGeneratedContractById(id: number) {
     .where(eq(rentalProposalGeneratedContracts.id, id));
 }
 
+export async function getRentalProposalBoletos(rentalProposalId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select()
+    .from(rentalProposalBoletos)
+    .where(eq(rentalProposalBoletos.rentalProposalId, rentalProposalId))
+    .orderBy(rentalProposalBoletos.installmentNumber);
+}
+
+export async function getRentalProposalBoletoById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const [boleto] = await db
+    .select()
+    .from(rentalProposalBoletos)
+    .where(eq(rentalProposalBoletos.id, id))
+    .limit(1);
+
+  return boleto;
+}
+
+export async function insertRentalProposalBoletos(
+  boletos: InsertRentalProposalBoleto[]
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (boletos.length === 0) return [];
+
+  return await db.insert(rentalProposalBoletos).values(boletos).returning();
+}
+
+// Regera o cronograma do zero (so deve ser chamado quando nenhum boleto foi
+// aprovado, validacao feita na camada de rota).
+export async function replaceRentalProposalBoletos(
+  rentalProposalId: number,
+  boletos: InsertRentalProposalBoleto[]
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .delete(rentalProposalBoletos)
+    .where(eq(rentalProposalBoletos.rentalProposalId, rentalProposalId));
+
+  if (boletos.length === 0) return [];
+
+  return await db.insert(rentalProposalBoletos).values(boletos).returning();
+}
+
+export async function updateRentalProposalBoleto(
+  id: number,
+  data: Partial<InsertRentalProposalBoleto>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [updated] = await db
+    .update(rentalProposalBoletos)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(rentalProposalBoletos.id, id))
+    .returning();
+
+  return updated;
+}
+
+export async function approveRentalProposalBoleto(id: number, userId: number) {
+  return await updateRentalProposalBoleto(id, {
+    status: "aprovado",
+    approvedAt: new Date(),
+    approvedByUserId: userId,
+  });
+}
+
+export async function approveAllRentalProposalBoletos(
+  rentalProposalId: number,
+  userId: number
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  await db
+    .update(rentalProposalBoletos)
+    .set({
+      status: "aprovado",
+      approvedAt: new Date(),
+      approvedByUserId: userId,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(rentalProposalBoletos.rentalProposalId, rentalProposalId),
+        eq(rentalProposalBoletos.status, "pendente")
+      )
+    );
+
+  return await getRentalProposalBoletos(rentalProposalId);
+}
+
+export async function markRentalProposalBoletoPaid(
+  id: number,
+  paidAt: Date | null
+) {
+  return await updateRentalProposalBoleto(id, { paidAt });
+}
+
+// Conjuntos de boletos (um por proposta que ja teve boletos gerados), com dados
+// do imovel/locatario/corretor e a lista completa de parcelas para a sub-pagina
+// de Boletos.
+export async function getRentalProposalBoletoSets() {
+  const db = await getDb();
+  if (!db) return [];
+
+  const boletos = await db
+    .select()
+    .from(rentalProposalBoletos)
+    .orderBy(rentalProposalBoletos.installmentNumber);
+
+  if (boletos.length === 0) return [];
+
+  const boletosByProposal = new Map<number, typeof boletos>();
+  for (const boleto of boletos) {
+    const current = boletosByProposal.get(boleto.rentalProposalId) ?? [];
+    current.push(boleto);
+    boletosByProposal.set(boleto.rentalProposalId, current);
+  }
+
+  const proposalIds = Array.from(boletosByProposal.keys());
+  const proposalRows = await db
+    .select()
+    .from(rentalProposals)
+    .where(inArray(rentalProposals.id, proposalIds));
+
+  const propertyIds = Array.from(
+    new Set(proposalRows.map(row => row.propertyId).filter(Boolean))
+  );
+  const userIds = Array.from(
+    new Set(
+      proposalRows
+        .flatMap(row => [row.brokerUserId, row.tenantUserId])
+        .filter(Boolean)
+    )
+  );
+
+  const [propertyRows, userRows] = await Promise.all([
+    propertyIds.length
+      ? db.select().from(properties).where(inArray(properties.id, propertyIds))
+      : Promise.resolve([]),
+    userIds.length
+      ? db.select().from(users).where(inArray(users.id, userIds))
+      : Promise.resolve([]),
+  ]);
+
+  const propertiesById = new Map(propertyRows.map(item => [item.id, item]));
+  const usersById = new Map(userRows.map(item => [item.id, item]));
+
+  return proposalRows
+    .map(proposal => ({
+      proposalId: proposal.id,
+      referenceCode: proposal.referenceCode,
+      status: proposal.status,
+      currentStep: proposal.currentStep,
+      createdAt: proposal.createdAt,
+      property: propertiesById.get(proposal.propertyId) ?? null,
+      broker: usersById.get(proposal.brokerUserId) ?? null,
+      tenant: usersById.get(proposal.tenantUserId) ?? null,
+      boletos: boletosByProposal.get(proposal.id) ?? [],
+    }))
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+}
+
 async function replaceRentalProposalTenants(
   rentalProposalId: number,
   tenantUserIds: number[]
@@ -2403,6 +2582,9 @@ export async function deleteRentalProposal(id: number) {
   await db
     .delete(rentalProposalGeneratedContracts)
     .where(eq(rentalProposalGeneratedContracts.rentalProposalId, id));
+  await db
+    .delete(rentalProposalBoletos)
+    .where(eq(rentalProposalBoletos.rentalProposalId, id));
   await db.delete(rentalProposals).where(eq(rentalProposals.id, id));
 }
 

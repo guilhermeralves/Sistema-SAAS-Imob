@@ -54,6 +54,7 @@ import { toast } from "sonner";
 
 const AdminContractsPanel = lazy(() => import("./admin/AdminContractsPanel"));
 const AdminRentalProposalsPanel = lazy(() => import("./admin/AdminRentalProposalsPanel"));
+const AdminRentalBoletosPanel = lazy(() => import("./admin/AdminRentalBoletosPanel"));
 
 const SURFACE_CARD_CLASS =
   "rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)] backdrop-blur";
@@ -340,7 +341,17 @@ export function AdminModule() {
     [selectedModuleValue]
   );
   const adminTabsViewportRef = useRef<HTMLDivElement | null>(null);
-  const [activeTab, setActiveTab] = useState(selectedModule.topics[0]);
+  const initialActiveTab = useMemo(() => {
+    if (typeof window === "undefined") return selectedModule.topics[0];
+    const requestedTab = new URLSearchParams(window.location.search).get("tab");
+    return requestedTab && selectedModule.topics.includes(requestedTab)
+      ? requestedTab
+      : selectedModule.topics[0];
+    // Apenas na montagem inicial; trocas de aba/modulo nao dependem da URL.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [activeTab, setActiveTab] = useState(initialActiveTab);
+  const previousModuleValueRef = useRef(selectedModule.value);
   const [searchTerm, setSearchTerm] = useState("");
   const [showDeletedProperties, setShowDeletedProperties] = useState(false);
   const [keyStatusDialogPropertyId, setKeyStatusDialogPropertyId] = useState<number | null>(null);
@@ -444,7 +455,12 @@ export function AdminModule() {
   );
 
   useEffect(() => {
-    setActiveTab(selectedModule.topics[0]);
+    // Reseta para a primeira aba apenas quando o modulo muda (preserva a aba
+    // vinda da URL na montagem inicial).
+    if (previousModuleValueRef.current !== selectedModule.value) {
+      previousModuleValueRef.current = selectedModule.value;
+      setActiveTab(selectedModule.topics[0]);
+    }
   }, [selectedModule]);
 
   useEffect(() => {
@@ -754,6 +770,17 @@ export function AdminModule() {
                 }
               >
                 <AdminRentalProposalsPanel />
+              </Suspense>
+            ) : selectedModule.value === "locacoes" && topic === "Boletos" ? (
+              <Suspense
+                fallback={
+                  <div className="space-y-3">
+                    <div className="h-24 animate-pulse rounded-2xl bg-muted" />
+                    <div className="h-24 animate-pulse rounded-2xl bg-muted" />
+                  </div>
+                }
+              >
+                <AdminRentalBoletosPanel />
               </Suspense>
             ) : (selectedModule.value === "locacoes" || selectedModule.value === "vendas") && topic === "Contratos" ? (
               <Suspense

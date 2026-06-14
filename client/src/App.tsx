@@ -34,6 +34,7 @@ import Bonificacoes from "./pages/Bonificacoes";
 import EvolucaoProfissional from "./pages/EvolucaoProfissional";
 import TarefasEventos from "./pages/TarefasEventos";
 import Condominios from "./pages/Condominios";
+import RoletaAtendimentos from "./pages/RoletaAtendimentos";
 
 function RootEntryRoute() {
   const { user, loading, isAuthenticated } = useAuth();
@@ -202,6 +203,12 @@ function Router() {
       <Route path={"/condominios"}>
         <ProtectedRoute
           component={Condominios}
+          roles={["corretor", "administrativo"]}
+        />
+      </Route>
+      <Route path={"/roleta-atendimentos"}>
+        <ProtectedRoute
+          component={RoletaAtendimentos}
           roles={["corretor", "administrativo"]}
         />
       </Route>

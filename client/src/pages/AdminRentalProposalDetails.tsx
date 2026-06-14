@@ -1,15 +1,5 @@
-import { useLocation, useRoute } from "wouter";
+import { useRoute } from "wouter";
 import Layout from "@/components/Layout";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
@@ -19,7 +9,6 @@ import { useUnsavedChangesNavigationGuard } from "@/hooks/useUnsavedChangesNavig
 import RentalProposalForm from "./admin/RentalProposalForm";
 import { ArrowLeft, Shield, User } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 
 const ADMIN_BACKGROUND_CLASS =
   "bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.88),rgba(244,240,232,0.82)_45%,rgba(248,248,246,1)_100%)]";
@@ -89,11 +78,9 @@ function AdminRentalProposalDetailsForbidden() {
 
 export default function AdminRentalProposalDetails() {
   const { user, loading, isAuthenticated } = useAuth();
-  const [, setLocation] = useLocation();
   const [, params] = useRoute("/admin/modulos/locacoes/propostas/:id");
   const proposalId = Number(params?.id);
   const hasValidProposalId = Number.isInteger(proposalId) && proposalId > 0;
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [formDirty, setFormDirty] = useState(false);
   const { requestNavigation, UnsavedChangesDialog } = useUnsavedChangesNavigationGuard({
     isDirty: formDirty,
@@ -111,18 +98,6 @@ export default function AdminRentalProposalDetails() {
     { id: proposalId },
     { enabled: isAuthenticated && user?.role === "administrativo" && hasValidProposalId }
   );
-  const utils = trpc.useUtils();
-  const deleteProposal = trpc.rentalProposals.delete.useMutation({
-    onSuccess: async () => {
-      toast.success("Proposta de locação excluída com sucesso.");
-      await utils.rentalProposals.list.invalidate();
-      setLocation("/admin/modulos/locacoes?tab=propostas");
-    },
-    onError: error => {
-      toast.error(error.message || "Não foi possível excluir a proposta de locação.");
-    },
-  });
-
   if (loading) return <AdminRentalProposalDetailsLoading />;
   if (!isAuthenticated) return <AdminRentalProposalDetailsUnauthenticated />;
   if (user?.role !== "administrativo") return <AdminRentalProposalDetailsForbidden />;
@@ -176,37 +151,12 @@ export default function AdminRentalProposalDetails() {
           ) : (
             <RentalProposalForm
               initialProposal={proposal}
-              onDeleteProposal={() => setDeleteDialogOpen(true)}
               onDirtyChange={setFormDirty}
             />
           )}
         </div>
       </div>
 
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent className="rounded-[28px] border-white/80 bg-[#f7f6f2]">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir proposta de locação?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta proposta será removida da lista de rascunhos e propostas pendentes.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-full bg-white">Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              className="rounded-full bg-rose-700 text-white hover:bg-rose-800"
-              disabled={deleteProposal.isPending}
-              onClick={event => {
-                event.preventDefault();
-                if (!hasValidProposalId) return;
-                deleteProposal.mutate({ id: proposalId });
-              }}
-            >
-              {deleteProposal.isPending ? "Excluindo..." : "Excluir proposta"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
       {UnsavedChangesDialog}
     </Layout>
   );

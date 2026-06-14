@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { formatStoredDate } from "@/lib/date";
 import { trpc } from "@/lib/trpc";
 import {
@@ -11,8 +21,10 @@ import {
   KeyRound,
   MailCheck,
   ShieldCheck,
+  Trash2,
   type LucideIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Link } from "wouter";
 import { getRentalProposalDetailsPath } from "./rentalProposalReference";
 
@@ -117,7 +129,22 @@ function getStatusLabel(value: string) {
 export default function AdminRentalProposalsPanel() {
   const proposalsWorkspaceRef = useRef<HTMLDivElement | null>(null);
   const [selectedProposalId, setSelectedProposalId] = useState<number | null>(null);
+  const [proposalToDelete, setProposalToDelete] = useState<RentalProposalListItem | null>(null);
+  const utils = trpc.useUtils();
   const { data: proposals, isLoading: loadingProposals } = trpc.rentalProposals.list.useQuery();
+  const deleteProposal = trpc.rentalProposals.delete.useMutation({
+    onSuccess: async (_data, variables) => {
+      toast.success("Proposta de locação excluída com sucesso.");
+      setProposalToDelete(null);
+      if (selectedProposalId === variables.id) {
+        setSelectedProposalId(null);
+      }
+      await utils.rentalProposals.list.invalidate();
+    },
+    onError: error => {
+      toast.error(error.message || "Não foi possível excluir a proposta de locação.");
+    },
+  });
 
   const selectedProposal = useMemo(
     () => (proposals ?? []).find(proposal => proposal.id === selectedProposalId) ?? null,
@@ -245,7 +272,7 @@ export default function AdminRentalProposalsPanel() {
                     </p>
                     <p className="mt-2 text-xs text-slate-500">Criada em {formatStoredDate(proposal.createdAt)}</p>
                   </div>
-                  <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
+                  <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
                     <Button
                       type="button"
                       variant="outline"
@@ -260,6 +287,20 @@ export default function AdminRentalProposalsPanel() {
                         <a>Detalhes</a>
                       </Link>
                     </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8 rounded-full border-rose-200 bg-white text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                      onClick={event => {
+                        event.stopPropagation();
+                        setProposalToDelete(proposal);
+                      }}
+                      aria-label="Excluir proposta de locação"
+                      title="Excluir proposta de locação"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -269,6 +310,40 @@ export default function AdminRentalProposalsPanel() {
 
         <RentalProposalProcessPanel selectedProposal={selectedProposal} currentStepIndex={currentStepIndex} />
       </div>
+
+      <AlertDialog
+        open={proposalToDelete !== null}
+        onOpenChange={open => {
+          if (!open && !deleteProposal.isPending) setProposalToDelete(null);
+        }}
+      >
+        <AlertDialogContent className="rounded-[28px] border-white/80 bg-[#f7f6f2]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir proposta de locação?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {proposalToDelete
+                ? `A proposta de "${proposalToDelete.property?.titulo || `imóvel ID ${proposalToDelete.propertyId}`}" será removida da lista de rascunhos e propostas pendentes. Esta ação não pode ser desfeita.`
+                : "Esta proposta será removida da lista de rascunhos e propostas pendentes."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-full bg-white" disabled={deleteProposal.isPending}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="rounded-full bg-rose-700 text-white hover:bg-rose-800"
+              disabled={deleteProposal.isPending}
+              onClick={event => {
+                event.preventDefault();
+                if (!proposalToDelete) return;
+                deleteProposal.mutate({ id: proposalToDelete.id });
+              }}
+            >
+              {deleteProposal.isPending ? "Excluindo..." : "Excluir proposta"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

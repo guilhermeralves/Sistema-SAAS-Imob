@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatCpf, isValidCpf, normalizeCpf } from "@/lib/cpf";
 import { buildContractReferenceFooter } from "@shared/contract-reference";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeftRight, CheckCircle2, ChevronDown, ChevronUp, FileSignature, Home, Pencil, Plus, RotateCw, Save, Trash2, WandSparkles } from "lucide-react";
+import { ArrowLeftRight, CheckCircle2, ChevronDown, ChevronUp, Download, FileSignature, Home, Pencil, Plus, Receipt, RotateCw, Save, Trash2, WandSparkles } from "lucide-react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 
@@ -60,6 +60,14 @@ function formatDateInput(value: Date | string | null | undefined) {
   if (typeof value === "string") return value.slice(0, 10);
   if (Number.isNaN(value.getTime())) return "";
   return value.toISOString().slice(0, 10);
+}
+
+// Exibe valores em centavos como moeda BRL, sempre com casas decimais (inclusive 0).
+function formatCentsBRL(value: number | null | undefined) {
+  return ((value ?? 0) / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
 }
 
 function parseUnresolvedVariables(value: string | null | undefined) {
@@ -147,6 +155,7 @@ type InitialRentalProposal = {
   owners?: UserOption[];
   contractTemplates?: ContractTemplateOption[];
   generatedContracts?: GeneratedContractOption[];
+  boletos?: BoletoOption[];
   referenceCode?: string | null;
   ownerConfirmedAt: Date | string | null;
   tenantConfirmedAt: Date | string | null;
@@ -188,9 +197,23 @@ type GeneratedContractOption = {
   approvedAt?: Date | string | null;
 };
 
+type BoletoOption = {
+  id: number;
+  installmentNumber: number;
+  referenceMonth: Date | string;
+  dueDate: Date | string;
+  rentAmount: number;
+  condominiumAmount: number | null;
+  extraAmount: number;
+  extraDescription: string | null;
+  totalAmount: number;
+  status: string;
+  notes: string | null;
+  approvedAt?: Date | string | null;
+};
+
 type RentalProposalFormProps = {
   initialProposal?: InitialRentalProposal | null;
-  onDeleteProposal?: () => void;
   onDirtyChange?: (isDirty: boolean) => void;
 };
 
@@ -617,7 +640,6 @@ function OwnerProposalDialog({
 
 export default function RentalProposalForm({
   initialProposal = null,
-  onDeleteProposal,
   onDirtyChange,
 }: RentalProposalFormProps) {
   const utils = trpc.useUtils();
@@ -676,6 +698,8 @@ export default function RentalProposalForm({
   const [contractReviewDirty, setContractReviewDirty] = useState(false);
   const [contractToRegenerate, setContractToRegenerate] = useState<GeneratedContractOption | null>(null);
   const [contractToDelete, setContractToDelete] = useState<GeneratedContractOption | null>(null);
+  const [downloadingContractId, setDownloadingContractId] = useState<number | null>(null);
+  const [openBoletos, setOpenBoletos] = useState(false);
   const contractHighlightNeedles = useMemo(
     () => (editingGeneratedContract ? buildHighlightNeedles(editingGeneratedContract) : []),
     [editingGeneratedContract]
@@ -737,6 +761,8 @@ export default function RentalProposalForm({
     const index = getRentalStepIndex(initialProposal.currentStep);
     setOpenDados(index < 1);
     setOpenModelos(index >= 1 && index < 3);
+    // Etapa de boletos (e seguintes) abre o card de boletos expandido.
+    setOpenBoletos(index >= 3);
   }, [initialProposal]);
 
   useEffect(() => {
@@ -968,6 +994,27 @@ export default function RentalProposalForm({
     },
   });
 
+  const invalidateProposal = async () => {
+    await utils.rentalProposals.list.invalidate();
+    if (initialProposal) {
+      await utils.rentalProposals.getById.invalidate({ id: initialProposal.id });
+    }
+  };
+
+  const generateBoletos = trpc.rentalProposals.generateBoletos.useMutation({
+    onSuccess: async data => {
+      toast.success(
+        data.created > 0
+          ? `${data.created} boleto(s) gerado(s). O processo avançou para a etapa de seguros. Gerencie-os na aba Boletos.`
+          : "Os boletos já haviam sido gerados."
+      );
+      await invalidateProposal();
+    },
+    onError: error => {
+      toast.error(error.message || "Não foi possível gerar os boletos.");
+    },
+  });
+
   const createQuickOwner = trpc.propertyOwners.createQuick.useMutation({
     onSuccess: async owner => {
       toast.success("Proprietario cadastrado e vinculado.");
@@ -1158,6 +1205,30 @@ export default function RentalProposalForm({
     deleteGeneratedContract.mutate({ contractId: contractToDelete.id });
   };
 
+  const downloadContractDocx = async (contract: GeneratedContractOption) => {
+    setDownloadingContractId(contract.id);
+    try {
+      const { fileName, dataUrl } =
+        await utils.rentalProposals.generatedContractDocx.fetch({
+          contractId: contract.id,
+        });
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível gerar o documento do contrato."
+      );
+    } finally {
+      setDownloadingContractId(null);
+    }
+  };
+
   const generatedContracts = initialProposal?.generatedContracts ?? [];
   const allGeneratedContractsApproved =
     generatedContracts.length > 0 &&
@@ -1170,6 +1241,21 @@ export default function RentalProposalForm({
   const templatesChanged =
     appliedTemplateIds.join(",") !==
     selectedContractTemplateIds.slice().sort().join(",");
+
+  const boletos = initialProposal?.boletos ?? [];
+  // Etapa de boletos disponivel a partir da geracao do codigo de referencia.
+  const boletosReached =
+    isEditing &&
+    (initialProposal?.currentStep === "boletos_pendentes" ||
+      getRentalStepIndex(initialProposal?.currentStep) >= 3);
+  // A geracao so ocorre na etapa boletos_pendentes; depois disso o processo ja
+  // avancou e o gerenciamento acontece na sub-pagina de Boletos.
+  const canGenerateBoletos =
+    initialProposal?.currentStep === "boletos_pendentes";
+  const boletosTotalAmount = boletos.reduce(
+    (sum, boleto) => sum + boleto.totalAmount,
+    0
+  );
 
   return (
     <div className="space-y-5">
@@ -1516,19 +1602,6 @@ export default function RentalProposalForm({
                 {createProposal.isPending || updateProposal.isPending ? "Salvando..." : "Salvar Rascunho"}
               </Button>
             ) : null}
-            {initialProposal && onDeleteProposal ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="h-10 w-10 rounded-full border-rose-200 bg-white text-rose-700 hover:bg-rose-50 hover:text-rose-800"
-                onClick={onDeleteProposal}
-                aria-label="Excluir proposta de locação"
-                title="Excluir proposta de locação"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            ) : null}
             <Button
               className="rounded-full bg-emerald-700 text-white hover:bg-emerald-800"
               disabled
@@ -1731,6 +1804,22 @@ export default function RentalProposalForm({
                             </Button>
                           </>
                         ) : null}
+                        {isApproved ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 rounded-full border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+                            disabled={downloadingContractId === contract.id}
+                            onClick={() => downloadContractDocx(contract)}
+                            title="Baixa o contrato em Word (.docx) com o layout do modelo, o texto editado/validado e o código de referência no rodapé"
+                          >
+                            <Download className="mr-1 h-3.5 w-3.5" />
+                            {downloadingContractId === contract.id
+                              ? "Gerando..."
+                              : "Baixar Word"}
+                          </Button>
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -1756,6 +1845,112 @@ export default function RentalProposalForm({
           )}
             </div>
           ) : null}
+        </StepCard>
+      ) : null}
+      {boletosReached ? (
+        <StepCard
+          icon={<Receipt className="h-5 w-5" />}
+          title="Boletos"
+          subtitle="Gere os boletos de todo o período de vigência. A validação, edição e acompanhamento ficam na aba Boletos."
+          completed={boletos.length > 0}
+          open={openBoletos}
+          onToggleOpen={() => setOpenBoletos(prev => !prev)}
+          headerAccessory={
+            boletos.length ? (
+              <span className="w-fit rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                {boletos.length} gerado(s)
+              </span>
+            ) : null
+          }
+        >
+          {boletos.length === 0 ? (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+                Será gerado um boleto por mês, do início ao fim da vigência. O
+                valor inicial replica o aluguel{" "}
+                {initialProposal?.condominiumAmount
+                  ? "e o condomínio "
+                  : ""}
+                da proposta; reajustes (ex.: {initialProposal?.adjustmentIndex})
+                podem ser aplicados depois em lote, na aba Boletos.
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-slate-200 bg-white/85 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Parcelas
+                  </p>
+                  <p className="mt-1 text-lg font-semibold text-slate-950">
+                    {initialProposal?.leaseTermMonths ?? 0} meses
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white/85 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Valor por boleto
+                  </p>
+                  <p className="mt-1 text-lg font-semibold text-slate-950">
+                    {formatCentsBRL(
+                      (initialProposal?.rentAmount ?? 0) +
+                        (initialProposal?.condominiumAmount ?? 0)
+                    )}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white/85 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Vencimento
+                  </p>
+                  <p className="mt-1 text-lg font-semibold text-slate-950">
+                    Dia {initialProposal?.dueDay ?? "-"}
+                  </p>
+                </div>
+              </div>
+              {canGenerateBoletos ? (
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    className="gap-2 rounded-full bg-emerald-700 text-white hover:bg-emerald-800"
+                    disabled={generateBoletos.isPending || !initialProposal}
+                    onClick={() =>
+                      initialProposal &&
+                      generateBoletos.mutate({ id: initialProposal.id })
+                    }
+                  >
+                    <WandSparkles className="h-4 w-4" />
+                    {generateBoletos.isPending ? "Gerando..." : "Gerar boletos"}
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-600">
+                  Os boletos serão gerados após a aprovação dos contratos.
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                <span className="font-semibold">{boletos.length}</span> boleto(s)
+                gerado(s) para todo o período de vigência, totalizando{" "}
+                <span className="font-semibold">
+                  {formatCentsBRL(boletosTotalAmount)}
+                </span>
+                . O processo avançou para a etapa de seguros. A validação, edição
+                em lote/individual e o acompanhamento de status (em aberto,
+                atrasado, vencido, pago) são feitos na aba Boletos.
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-2 rounded-full bg-white"
+                  onClick={() =>
+                    setLocation("/admin/modulos/locacoes?tab=Boletos")
+                  }
+                >
+                  <Receipt className="h-4 w-4" />
+                  Abrir aba Boletos
+                </Button>
+              </div>
+            </div>
+          )}
         </StepCard>
       ) : null}
       <UserChangeDialog

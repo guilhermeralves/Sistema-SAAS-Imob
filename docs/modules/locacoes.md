@@ -72,6 +72,29 @@ Nas etapas 17 e 18, quando todos os contratos da proposta sao aprovados:
 - a proposta avanca para `status = "boletos_pendentes"` e `currentStep = "boletos_pendentes"`;
 - o codigo entra no rodape dos contratos de forma derivada na exibicao (cartao, banner e dialogo de edicao), sem alterar o `reviewedText` aprovado.
 
+Apos a aprovacao, cada contrato gerado exibe botoes de download no card de modelos/contratos, preservando o layout original do modelo Word:
+
+- "Baixar Word": preenche o `.docx` original do modelo (`contractTemplates.originalFileData`) com os valores ja substituidos do contrato (`variableValues`, chaveado por `[Rotulo]`), preservando fontes, tabelas e formatacao; placeholders sem valor permanecem visiveis como `[Rotulo]`;
+- "Baixar PDF": so aparece quando o servidor tem um conversor (LibreOffice/soffice headless); converte o `.docx` preenchido em PDF mantendo o layout. Sem conversor, o usuario baixa o Word e usa "Salvar como PDF";
+- o preenchimento usa `docxtemplater` + `pizzip` com os colchetes `[ ]` como delimitadores, resolvendo placeholders mesmo quando o Word os quebra em varios runs;
+- as edicoes de texto livre do passo de revisao NAO sao refletidas no documento fiel (apenas os valores das variaveis sobre o modelo original).
+
+Na etapa 19, quando a proposta esta em `boletos_pendentes`, o card Boletos da tela de detalhes apenas gera o cronograma e ja avanca o processo:
+
+- a geracao monta uma parcela por mes de vigencia (`leaseTermMonths`), com competencia a partir do mes de inicio (`startDate`) e vencimento no `dueDay` informado, fazendo "clamp" quando o mes nao tem o dia (ex.: 31 em fevereiro);
+- o valor inicial de cada boleto replica `rentAmount` + `condominiumAmount` da proposta; `extraAmount`/`extraDescription` permitem encargos avulsos (IPTU, multas etc.);
+- a geracao e idempotente: se ja existem boletos, nao duplica;
+- ao gerar, a proposta avanca direto para `status = "seguros_pendentes"` e `currentStep = "seguros_pendentes"`; gerar ja faz o processo seguir.
+
+Nas etapas 20 e 21, a gestao dos boletos vive na sub-pagina `Administrativo > Locacoes > Boletos` (independente da etapa da proposta):
+
+- a lista mostra um conjunto por proposta com boletos, exibindo o codigo de referencia, o imovel/locatario, o total e o status do "boleto atual" antes de entrar nos detalhes;
+- o status do boleto atual e derivado por `shared/rental-boletos.ts`: `Pago` (`paidAt` preenchido, futuramente por integracao bancaria), `Em aberto` (ainda nao venceu), `Atrasado` (venceu ha ate 2 dias) e `Vencido` (venceu ha mais de 2 dias);
+- o "boleto atual" e o boleto em aberto mais antigo ja vencido; sem vencidos, o proximo a vencer; se todos pagos, a ultima parcela;
+- em "Detalhes" o administrativo edita boletos em lote (todos ou um subconjunto selecionado) e individualmente, aprova cada boleto apos validacao manual das cobrancas, aprova todos de uma vez, da baixa manual de pagamento e estorna;
+- editar um boleto recalcula o total e o devolve para `pendente` (revalidacao);
+- e possivel regerar todo o cronograma enquanto nenhum boleto tiver sido aprovado.
+
 ## Regras de negocio
 
 - A escolha de modelos de contrato e feita por proposta.
@@ -87,6 +110,12 @@ Nas etapas 17 e 18, quando todos os contratos da proposta sao aprovados:
 - A aprovacao do ultimo contrato pendente gera o codigo de referencia da proposta e avanca para a etapa de boletos.
 - O codigo de referencia e unico por proposta e nao e regerado se ja existir.
 - O codigo de referencia compoe o rodape dos contratos, derivado na exibicao a partir de `rentalProposals.referenceCode`.
+- A geracao de boletos so ocorre quando `currentStep = "boletos_pendentes"` e a proposta ja tem `referenceCode`; gerar avanca a proposta direto para `seguros_pendentes`.
+- A gestao posterior dos boletos (regerar/editar/aprovar/baixar pagamento) fica disponivel sempre que a proposta tiver `referenceCode`, na sub-pagina de Boletos, sem alterar a etapa da proposta; regerar e bloqueado se houver boleto aprovado.
+- O total de um boleto e sempre `rentAmount + condominiumAmount + extraAmount` (recalculado no backend a cada edicao).
+- Reajustes (IGP-M etc.) nao sao aplicados automaticamente na geracao, pois o indice do periodo ainda nao e conhecido; sao lancados depois via edicao em lote.
+- A aprovacao e uma validacao administrativa por boleto (`pendente` -> `aprovado`), individual ou em massa, e nao altera a etapa da proposta.
+- O status temporal/pagamento exibido e derivado das datas e de `paidAt`: `pago`, `em_aberto`, `atrasado` (ate 2 dias apos vencer) e `vencido` (mais de 2 dias). `paidAt` sera preenchido por integracao bancaria; ha tambem baixa/estorno manual.
 - O dicionario de variaveis dos modelos usa o catalogo compartilhado `shared/contract-variables.ts`.
 - O catalogo deve expor campos cadastrais completos de envolvidos como locatario, comprador, proprietario, vendedor e corretor.
 - Labels do dicionario podem ser amigaveis em portugues, mas a `key` salva no modelo deve usar o mesmo nome tecnico do campo real do sistema, prefixado pelo papel no contrato. Exemplo: `Locatario > Profissao` salva `locatario.profession`, e nao `locatario.profissao`.
@@ -104,13 +133,17 @@ Nas etapas 17 e 18, quando todos os contratos da proposta sao aprovados:
 - `client/src/pages/AdminRentalProposalNew.tsx`: entrada da Nova Locacao.
 - `client/src/pages/AdminRentalProposalDetails.tsx`: detalhes da proposta existente.
 - `client/src/pages/admin/RentalProposalForm.tsx`: dados iniciais e selecao de modelos da proposta.
-- `client/src/pages/admin/AdminRentalProposalsPanel.tsx`: lista e acompanhamento das etapas.
+- `client/src/pages/admin/AdminRentalProposalsPanel.tsx`: lista, acompanhamento das etapas e exclusao de propostas.
+- `client/src/pages/admin/AdminRentalBoletosPanel.tsx`: sub-pagina Boletos (lista de conjuntos por proposta e detalhes com gestao em lote/individual).
 - `client/src/pages/admin/AdminContractsPanel.tsx`: cadastro de modelos de contrato filtrado pelo modulo administrativo.
 - `server/routers.ts`: validacoes e endpoints tRPC de propostas/modelos.
 - `server/db.ts`: persistencia de propostas, participantes e modelos escolhidos.
 - `drizzle/schema.ts`: schema Drizzle das entidades de locacao.
 - `shared/contract-variables.ts`: catalogo compartilhado de variaveis reconhecidas em modelos de contrato.
 - `shared/contract-reference.ts`: geracao do codigo de referencia da proposta e do rodape derivado dos contratos.
+- `server/contract-docx.ts`: preenche o `.docx` original do modelo com os valores das variaveis (docxtemplater + pizzip), preservando o layout do Word.
+- `server/docx-to-pdf.ts`: conversao opcional do `.docx` preenchido para PDF via LibreOffice/soffice headless (indisponivel quando nao ha conversor instalado).
+- `shared/rental-boletos.ts`: regra compartilhada de cronograma de boletos (competencia, vencimento com clamp e total).
 
 ## Impactos
 
@@ -122,4 +155,10 @@ Nas etapas 17 e 18, quando todos os contratos da proposta sao aprovados:
 - Frontend: a tela de detalhes usa cards de etapa colapsaveis (auto-minimizam ao concluir); a escolha de modelos e um checkbox unico de modelos de locacao que gera/atualiza/remove contratos, e cada contrato gerado pode ser editado, regerado, aprovado ou excluido enquanto a proposta nao estiver ativa.
 - Banco de dados: `rentalProposals` ganha `referenceCode` para o codigo de referencia gerado na aprovacao final.
 - API: `rentalProposals.approveGeneratedContract` passa a retornar `referenceCode` e, na ultima aprovacao, gera o codigo e avanca a proposta para `boletos_pendentes`.
-- Fluxo futuro: a proxima etapa (19) e gerar os boletos de todo o periodo de vigencia da proposta ja com codigo de referencia.
+- API: query `rentalProposals.generatedContractDocument` (`format: "docx" | "pdf"`) retorna `{ fileName, contentType, dataUrl }` do contrato aprovado preenchendo o `.docx` original; query `rentalProposals.documentExportCapabilities` informa se o servidor consegue gerar PDF. Botoes "Baixar Word" (sempre) e "Baixar PDF" (quando ha conversor) no card de contratos.
+- Dependencias: `docxtemplater` e `pizzip` (preenchimento de .docx). Conversao para PDF usa LibreOffice/soffice headless quando disponivel (env `SOFFICE_PATH` opcional). O gerenciador de pacotes do projeto e o pnpm.
+- Banco de dados: nova tabela `rentalProposalBoletos` (uma linha por parcela) com competencia, vencimento, componentes de valor, total, status de validacao, `paidAt` e auditoria de aprovacao.
+- API: mutations `rentalProposals.generateBoletos` (gera e avanca para `seguros_pendentes`), `regenerateBoletos`, `updateBoleto`, `updateBoletosBatch`, `approveBoleto`, `approveAllBoletos` e `setBoletoPaid`; query `rentalProposals.boletoSets` lista os conjuntos; `getById` passa a retornar `boletos`.
+- Frontend: card Boletos em `RentalProposalForm` reduzido a gerar (com preview) + atalho para a aba Boletos; a gestao (lista de conjuntos, edicao em lote/individual, aprovacao e baixa de pagamento) fica em `AdminRentalBoletosPanel`, na aba Boletos de Locacoes (deep-link via `?tab=Boletos`).
+- Migracao: `drizzle/pg/0030_rental_proposal_boletos.sql` e patches idempotentes `2026-06-07_rental_proposal_boletos` e `2026-06-07_rental_proposal_boletos_paid_at` em `scripts/manual-db-sync.mjs`.
+- Fluxo futuro: a proxima etapa (22) e aguardar e confirmar os comprovantes das primeiras parcelas dos seguros (fianca e incendio).
