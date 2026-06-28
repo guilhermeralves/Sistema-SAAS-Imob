@@ -13,6 +13,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ROLE_LABELS } from "@shared/auth";
+import PushNotificationToggle from "@/components/PushNotificationToggle";
+import NotificationBell from "@/components/NotificationBell";
 import {
   Bot,
   BookOpenCheck,
@@ -54,6 +56,7 @@ export default function Header() {
   const { data: taskSummary } = trpc.tasks.summary.useQuery(undefined, {
     enabled: isAuthenticated && isStaff,
     refetchOnWindowFocus: true,
+    refetchInterval: 30000,
   });
 
   const publicMenuItems = [
@@ -106,7 +109,7 @@ export default function Header() {
                 item => item.href !== "/" && item.href !== "/contato"
               ),
             ]
-          : [...publicMenuItems];
+          : [...publicMenuItems.filter(item => item.href !== "/lancamentos")];
 
     if (isAuthenticated && user) {
       if (user.role === "cliente") {
@@ -215,6 +218,8 @@ export default function Header() {
                 </Button>
               ) : null}
 
+              {isStaff ? <NotificationBell /> : null}
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -272,6 +277,7 @@ export default function Header() {
                   {isStaff ? (
                     <>
                       <DropdownMenuSeparator />
+                      <PushNotificationToggle />
                       <DropdownMenuItem asChild>
                         <Link href="/roleta-atendimentos">
                           <a className="flex items-center gap-2">

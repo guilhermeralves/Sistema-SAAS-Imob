@@ -42,6 +42,98 @@ const idSchema = z.object({
   id: z.number().int().positive(),
 });
 
+const pushSubscriptionSchema = z.object({
+  endpoint: z.string().url().max(2048),
+  keys: z.object({
+    p256dh: z.string().min(1).max(255),
+    auth: z.string().min(1).max(255),
+  }),
+  userAgent: z.string().max(255).optional(),
+});
+
+/**
+ * Notifica o corretor responsável de que um novo lead foi direcionado a ele.
+ * Nunca lança: push é um canal best-effort e não pode quebrar o fluxo do lead.
+ */
+async function notifyBrokerLeadAssigned(
+  brokerUserId: number,
+  leadName: string | null | undefined,
+  leadId: number
+) {
+  const title = "Novo Lead";
+  const body = leadName
+    ? `O Lead ${leadName} foi direcionado para o seu Atendimento`
+    : "Um novo Lead foi direcionado para o seu Atendimento";
+  const url = "/crm";
+
+  // Persiste no histórico primeiro (alimenta o sino mesmo se o push falhar).
+  try {
+    const { createUserNotification } = await import("./db");
+    await createUserNotification({ userId: brokerUserId, title, body, url });
+  } catch (error) {
+    console.warn("[notify] Falha ao salvar histórico de notificação:", error);
+  }
+
+  try {
+    const { sendPushToUser } = await import("./_core/push");
+    await sendPushToUser(brokerUserId, {
+      title,
+      body,
+      url,
+      tag: `lead-${leadId}`,
+    });
+  } catch (error) {
+    console.warn("[push] Falha ao notificar corretor do lead:", error);
+  }
+}
+
+/**
+ * Notifica (somente push) um usuário de que uma tarefa/evento foi atribuída a
+ * ele. Não grava no histórico do sino de propósito: o indicador visual de
+ * tarefas/eventos é o badge do ícone de calendário.
+ */
+function formatTaskDueAt(dueAt: Date | string | null | undefined): string | null {
+  if (!dueAt) return null;
+  const date = dueAt instanceof Date ? dueAt : new Date(dueAt);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+    .format(date)
+    .replace(", ", " às ");
+}
+
+async function notifyUserTaskAssigned(
+  userId: number,
+  kind: string,
+  taskTitle: string,
+  taskId: number,
+  dueAt: Date | string | null | undefined
+) {
+  const isEvent = kind === "evento";
+  const when = formatTaskDueAt(dueAt);
+  let body = `${isEvent ? "Evento" : "Tarefa"}: ${taskTitle}`;
+  if (when) {
+    body += isEvent ? ` — ${when}` : ` — vence em ${when}`;
+  }
+  try {
+    const { sendPushToUser } = await import("./_core/push");
+    await sendPushToUser(userId, {
+      title: isEvent ? "Novo Evento" : "Nova Tarefa",
+      body,
+      url: "/tarefas-eventos",
+      tag: `task-${taskId}`,
+    });
+  } catch (error) {
+    console.warn("[push] Falha ao notificar tarefa/evento:", error);
+  }
+}
+
 const cpfSchema = z
   .string()
   .trim()
@@ -1670,6 +1762,75 @@ async function getAdminUserWithFlags(adminUserId: number, userId: number) {
 
 export const appRouter = router({
   system: systemRouter,
+  notifications: router({
+    config: protectedProcedure.query(async () => {
+      const { getVapidPublicKey, isPushConfigured } = await import(
+        "./_core/push"
+      );
+      return {
+        enabled: isPushConfigured(),
+        publicKey: getVapidPublicKey(),
+      };
+    }),
+    subscribe: protectedProcedure
+      .input(pushSubscriptionSchema)
+      .mutation(async ({ ctx, input }) => {
+        const { savePushSubscription } = await import("./db");
+        await savePushSubscription({
+          userId: ctx.user.id,
+          endpoint: input.endpoint,
+          p256dh: input.keys.p256dh,
+          auth: input.keys.auth,
+          userAgent: input.userAgent ?? null,
+        });
+        return { ok: true };
+      }),
+    unsubscribe: protectedProcedure
+      .input(z.object({ endpoint: z.string().url().max(2048) }))
+      .mutation(async ({ input }) => {
+        const { deletePushSubscriptionByEndpoint } = await import("./db");
+        await deletePushSubscriptionByEndpoint(input.endpoint);
+        return { ok: true };
+      }),
+    sendTest: protectedProcedure.mutation(async ({ ctx }) => {
+      const { createUserNotification } = await import("./db");
+      await createUserNotification({
+        userId: ctx.user.id,
+        title: "Notificação de teste",
+        body: "Se você recebeu isto, o push está funcionando! 🎉",
+        url: "/dashboard",
+      });
+      const { sendPushToUser } = await import("./_core/push");
+      const result = await sendPushToUser(ctx.user.id, {
+        title: "Notificação de teste",
+        body: "Se você recebeu isto, o push está funcionando! 🎉",
+        url: "/dashboard",
+        tag: "test-notification",
+      });
+      return result;
+    }),
+    history: protectedProcedure.query(async ({ ctx }) => {
+      const { getUserNotifications, countUnreadUserNotifications } =
+        await import("./db");
+      const [items, unreadCount] = await Promise.all([
+        getUserNotifications(ctx.user.id, 30),
+        countUnreadUserNotifications(ctx.user.id),
+      ]);
+      return { items, unreadCount };
+    }),
+    markAllRead: protectedProcedure.mutation(async ({ ctx }) => {
+      const { markUserNotificationsRead } = await import("./db");
+      await markUserNotificationsRead(ctx.user.id);
+      return { ok: true };
+    }),
+    markRead: protectedProcedure
+      .input(idSchema)
+      .mutation(async ({ ctx, input }) => {
+        const { markUserNotificationRead } = await import("./db");
+        await markUserNotificationRead(input.id, ctx.user.id);
+        return { ok: true };
+      }),
+  }),
   auth: router({
     register: publicProcedure
       .input(registerSchema)
@@ -2768,6 +2929,14 @@ export const appRouter = router({
             eventType: "lead_assigned",
             message: `Lead direcionado ao responsável ID ${payload.idResponsavel}.`,
           });
+
+          if (payload.idResponsavel !== ctx.user?.id) {
+            await notifyBrokerLeadAssigned(
+              payload.idResponsavel,
+              payload.nome,
+              createdLeadId
+            );
+          }
         }
       }
 
@@ -2844,6 +3013,19 @@ export const appRouter = router({
         });
       }
 
+      if (nextResponsibleId && nextResponsibleId !== currentLead.idResponsavel) {
+        await createLeadInteraction({
+          idLead: id,
+          idUsuario: ctx.user.id,
+          eventType: "lead_assigned",
+          message: `Lead direcionado ao responsável ID ${nextResponsibleId}.`,
+        });
+
+        if (nextResponsibleId !== ctx.user.id) {
+          await notifyBrokerLeadAssigned(nextResponsibleId, currentLead.nome, id);
+        }
+      }
+
       return await ensureLeadAccess(ctx.user, id);
     }),
     assign: adminProcedure
@@ -2915,6 +3097,10 @@ export const appRouter = router({
             eventType: "lead_attention_required",
             message: "Lead estava em atendimento e teve responsável alterado.",
           });
+        }
+
+        if (input.userId !== ctx.user.id) {
+          await notifyBrokerLeadAssigned(input.userId, lead.nome, input.leadId);
         }
 
         return await ensureLeadAccess(
@@ -3135,6 +3321,18 @@ export const appRouter = router({
           });
         }
 
+        for (const assignee of fullTaskItem.assignees) {
+          if (assignee.id !== ctx.user.id) {
+            await notifyUserTaskAssigned(
+              assignee.id,
+              fullTaskItem.kind,
+              fullTaskItem.title,
+              fullTaskItem.id,
+              fullTaskItem.dueAt
+            );
+          }
+        }
+
         return {
           ...fullTaskItem,
           computedStatus: getComputedTaskStatus(fullTaskItem),
@@ -3177,6 +3375,24 @@ export const appRouter = router({
             code: "NOT_FOUND",
             message: "Nao foi possivel carregar a tarefa atualizada.",
           });
+        }
+
+        const previousAssigneeIds = new Set(
+          currentTask.assignees.map(assignee => assignee.id)
+        );
+        for (const assignee of updatedTaskItem.assignees) {
+          if (
+            assignee.id !== ctx.user.id &&
+            !previousAssigneeIds.has(assignee.id)
+          ) {
+            await notifyUserTaskAssigned(
+              assignee.id,
+              updatedTaskItem.kind,
+              updatedTaskItem.title,
+              updatedTaskItem.id,
+              updatedTaskItem.dueAt
+            );
+          }
         }
 
         return {

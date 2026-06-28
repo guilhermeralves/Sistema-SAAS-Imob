@@ -88,6 +88,44 @@ export const adminUserViews = pgTable(
 export type AdminUserView = typeof adminUserViews.$inferSelect;
 export type InsertAdminUserView = typeof adminUserViews.$inferInsert;
 
+/**
+ * Inscrições de Web Push por usuário. Cada aparelho/navegador gera um endpoint
+ * único; um mesmo usuário pode ter várias inscrições (celular, desktop, etc.).
+ */
+export const pushSubscriptions = pgTable(
+  "pushSubscriptions",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("userId").notNull(),
+    endpoint: text("endpoint").notNull(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    userAgent: varchar("userAgent", { length: 255 }),
+    createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  },
+  table => [uniqueIndex("pushSubscriptions_endpoint_idx").on(table.endpoint)]
+);
+
+export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
+export type InsertPushSubscription = typeof pushSubscriptions.$inferInsert;
+
+/**
+ * Histórico de notificações por usuário (alimenta o sino no cabeçalho).
+ * Persistido sempre que o sistema notifica o usuário, independente do push.
+ */
+export const userNotifications = pgTable("userNotifications", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  title: varchar("title", { length: 160 }).notNull(),
+  body: text("body").notNull(),
+  url: varchar("url", { length: 512 }),
+  isRead: integer("isRead").default(0).notNull(),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export type UserNotification = typeof userNotifications.$inferSelect;
+export type InsertUserNotification = typeof userNotifications.$inferInsert;
+
 export const propertyOwners = pgTable(
   "propertyOwners",
   {

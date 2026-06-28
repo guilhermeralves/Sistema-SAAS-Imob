@@ -17,6 +17,8 @@ import {
   InsertPropertyLaunch,
   InsertPropertyOwner,
   InsertProperty,
+  InsertPushSubscription,
+  InsertUserNotification,
   InsertTaskItem,
   InsertTaskItemAssignment,
   InsertTaskItemNote,
@@ -53,6 +55,8 @@ import {
   propertyOwnerLinks,
   propertyOwners,
   properties,
+  pushSubscriptions,
+  userNotifications,
   users,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
@@ -2678,4 +2682,112 @@ export async function updateUserRole(
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(users).set({ role }).where(eq(users.id, id));
+}
+
+export async function savePushSubscription(input: InsertPushSubscription) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const [existing] = await db
+    .select()
+    .from(pushSubscriptions)
+    .where(eq(pushSubscriptions.endpoint, input.endpoint))
+    .limit(1);
+
+  if (existing) {
+    await db
+      .update(pushSubscriptions)
+      .set({
+        userId: input.userId,
+        p256dh: input.p256dh,
+        auth: input.auth,
+        userAgent: input.userAgent ?? null,
+      })
+      .where(eq(pushSubscriptions.endpoint, input.endpoint));
+    return existing.id;
+  }
+
+  const [created] = await db
+    .insert(pushSubscriptions)
+    .values(input)
+    .returning();
+  return created?.id ?? null;
+}
+
+export async function getPushSubscriptionsByUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
+    .select()
+    .from(pushSubscriptions)
+    .where(eq(pushSubscriptions.userId, userId));
+}
+
+export async function deletePushSubscriptionByEndpoint(endpoint: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .delete(pushSubscriptions)
+    .where(eq(pushSubscriptions.endpoint, endpoint));
+}
+
+export async function createUserNotification(input: InsertUserNotification) {
+  const db = await getDb();
+  if (!db) return null;
+  const [created] = await db
+    .insert(userNotifications)
+    .values(input)
+    .returning();
+  return created ?? null;
+}
+
+export async function getUserNotifications(userId: number, limit = 30) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
+    .select()
+    .from(userNotifications)
+    .where(eq(userNotifications.userId, userId))
+    .orderBy(desc(userNotifications.createdAt))
+    .limit(limit);
+}
+
+export async function countUnreadUserNotifications(userId: number) {
+  const db = await getDb();
+  if (!db) return 0;
+  const rows = await db
+    .select()
+    .from(userNotifications)
+    .where(
+      and(
+        eq(userNotifications.userId, userId),
+        eq(userNotifications.isRead, 0)
+      )
+    );
+  return rows.length;
+}
+
+export async function markUserNotificationsRead(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(userNotifications)
+    .set({ isRead: 1 })
+    .where(
+      and(
+        eq(userNotifications.userId, userId),
+        eq(userNotifications.isRead, 0)
+      )
+    );
+}
+
+export async function markUserNotificationRead(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(userNotifications)
+    .set({ isRead: 1 })
+    .where(
+      and(eq(userNotifications.id, id), eq(userNotifications.userId, userId))
+    );
 }

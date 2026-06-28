@@ -180,6 +180,40 @@ const patches = [
       `ALTER TABLE "rentalProposalBoletos" ADD COLUMN IF NOT EXISTS "paidAt" timestamp;`,
     ],
   },
+  {
+    id: "2026-06-22_push_subscriptions",
+    description: "Cria tabela de inscricoes de Web Push por usuario para notificar corretores no celular",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS "pushSubscriptions" (
+        "id" serial PRIMARY KEY NOT NULL,
+        "userId" integer NOT NULL,
+        "endpoint" text NOT NULL,
+        "p256dh" text NOT NULL,
+        "auth" text NOT NULL,
+        "userAgent" varchar(255),
+        "createdAt" timestamp DEFAULT now() NOT NULL
+      );`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "pushSubscriptions_endpoint_idx" ON "pushSubscriptions" ("endpoint");`,
+      `CREATE INDEX IF NOT EXISTS "pushSubscriptions_userId_idx" ON "pushSubscriptions" ("userId");`,
+    ],
+  },
+  {
+    id: "2026-06-23_user_notifications",
+    description: "Cria tabela de historico de notificacoes por usuario (sino no cabecalho)",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS "userNotifications" (
+        "id" serial PRIMARY KEY NOT NULL,
+        "userId" integer NOT NULL,
+        "title" varchar(160) NOT NULL,
+        "body" text NOT NULL,
+        "url" varchar(512),
+        "isRead" integer DEFAULT 0 NOT NULL,
+        "createdAt" timestamp DEFAULT now() NOT NULL
+      );`,
+      `CREATE INDEX IF NOT EXISTS "userNotifications_userId_idx" ON "userNotifications" ("userId");`,
+      `CREATE INDEX IF NOT EXISTS "userNotifications_createdAt_idx" ON "userNotifications" ("createdAt");`,
+    ],
+  },
 ];
 
 async function ensureManualMigrationsTable(client) {

@@ -90,7 +90,12 @@ function Router() {
     <Switch>
       <Route path={"/"} component={RootEntryRoute} />
       <Route path={"/imoveis"} component={Imoveis} />
-      <Route path={"/lancamentos"} component={Lancamentos} />
+      <Route path={"/lancamentos"}>
+        <ProtectedRoute
+          component={Lancamentos}
+          roles={["corretor", "administrativo"]}
+        />
+      </Route>
       <Route path={"/imoveis/novo/preview"}>
         <ProtectedRoute
           component={ImovelNovoPreview}

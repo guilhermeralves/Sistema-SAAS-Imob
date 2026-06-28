@@ -32,4 +32,7 @@ export const ENV = {
   smtpSecure: parseBoolean(process.env.EMAIL_SMTP_SECURE, false),
   smtpUser: process.env.EMAIL_SMTP_USER?.trim() || "",
   smtpPass: process.env.EMAIL_SMTP_PASS ?? "",
+  vapidPublicKey: process.env.VAPID_PUBLIC_KEY?.trim() || "",
+  vapidPrivateKey: process.env.VAPID_PRIVATE_KEY?.trim() || "",
+  vapidSubject: process.env.VAPID_SUBJECT?.trim() || "mailto:contato@afg.com",
 };
