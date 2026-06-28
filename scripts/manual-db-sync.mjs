@@ -240,6 +240,89 @@ const patches = [
       `CREATE UNIQUE INDEX IF NOT EXISTS "rentalProposalInsurances_unique_idx" ON "rentalProposalInsurances" ("rentalProposalId", "kind");`,
     ],
   },
+  {
+    id: "2026-06-28_rental_proposal_signatures",
+    description:
+      "Cria tabela de assinaturas digitais (D4Sign) por contrato aprovado de proposta de locacao",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS "rentalProposalSignatures" (
+        "id" serial PRIMARY KEY NOT NULL,
+        "rentalProposalId" integer NOT NULL,
+        "generatedContractId" integer NOT NULL,
+        "provider" varchar(20) DEFAULT 'd4sign' NOT NULL,
+        "environment" varchar(20),
+        "status" varchar(20) DEFAULT 'pendente' NOT NULL,
+        "externalDocumentUuid" varchar(80),
+        "signersSnapshot" text,
+        "signedFileData" text,
+        "signedFileName" varchar(255),
+        "lastError" text,
+        "sentAt" timestamp,
+        "signedAt" timestamp,
+        "sentByUserId" integer,
+        "createdAt" timestamp DEFAULT now() NOT NULL,
+        "updatedAt" timestamp DEFAULT now() NOT NULL
+      );`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "rentalProposalSignatures_unique_idx" ON "rentalProposalSignatures" ("rentalProposalId", "generatedContractId");`,
+    ],
+  },
+  {
+    id: "2026-06-28_rental_proposal_utility_transfers",
+    description:
+      "Cria tabela de transferencia de titularidade de contas (energia/agua/gas) por proposta de locacao",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS "rentalProposalUtilityTransfers" (
+        "id" serial PRIMARY KEY NOT NULL,
+        "rentalProposalId" integer NOT NULL,
+        "kind" varchar(20) NOT NULL,
+        "status" varchar(20) DEFAULT 'pendente' NOT NULL,
+        "proofData" text,
+        "proofFileName" varchar(255),
+        "proofContentType" varchar(120),
+        "notes" text,
+        "requestedAt" timestamp,
+        "confirmedAt" timestamp,
+        "confirmedByUserId" integer,
+        "createdAt" timestamp DEFAULT now() NOT NULL,
+        "updatedAt" timestamp DEFAULT now() NOT NULL
+      );`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "rentalProposalUtilityTransfers_unique_idx" ON "rentalProposalUtilityTransfers" ("rentalProposalId", "kind");`,
+    ],
+  },
+  {
+    id: "2026-06-28_rental_utility_transfers_custom",
+    description:
+      "Permite contas personalizadas na transferencia de titularidade (coluna label + kind mais largo)",
+    statements: [
+      `ALTER TABLE "rentalProposalUtilityTransfers" ALTER COLUMN "kind" TYPE varchar(40);`,
+      `ALTER TABLE "rentalProposalUtilityTransfers" ADD COLUMN IF NOT EXISTS "label" varchar(160);`,
+    ],
+  },
+  {
+    id: "2026-06-28_rental_proposal_inspections",
+    description:
+      "Cria tabela de vistoria e laudo (etapas 27-28) por proposta de locacao",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS "rentalProposalInspections" (
+        "id" serial PRIMARY KEY NOT NULL,
+        "rentalProposalId" integer NOT NULL UNIQUE,
+        "status" varchar(20) DEFAULT 'pendente' NOT NULL,
+        "inspectorName" varchar(160),
+        "inspectorPhone" varchar(40),
+        "inspectorEmail" varchar(255),
+        "scheduledAt" date,
+        "requestedAt" timestamp,
+        "laudoData" text,
+        "laudoFileName" varchar(255),
+        "laudoContentType" varchar(120),
+        "tenantValidatedAt" timestamp,
+        "ownerValidatedAt" timestamp,
+        "notes" text,
+        "createdAt" timestamp DEFAULT now() NOT NULL,
+        "updatedAt" timestamp DEFAULT now() NOT NULL
+      );`,
+    ],
+  },
 ];
 
 async function ensureManualMigrationsTable(client) {

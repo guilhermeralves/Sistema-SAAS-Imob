@@ -846,6 +846,135 @@ export type InsertRentalProposalInsurance =
   typeof rentalProposalInsurances.$inferInsert;
 
 /**
+ * Assinaturas digitais dos contratos de uma proposta de locacao (etapa 24).
+ * Uma linha por contrato gerado/aprovado (chave unica proposta+contrato).
+ * O contrato aprovado e enviado a um provedor de assinatura (hoje D4Sign);
+ * guardamos o identificador externo do documento, o status e, ao concluir,
+ * o PDF assinado baixado do provedor. Os signatarios (locatarios e
+ * proprietarios) sao registrados num snapshot para auditoria.
+ */
+export const rentalProposalSignatures = pgTable(
+  "rentalProposalSignatures",
+  {
+    id: serial("id").primaryKey(),
+    rentalProposalId: integer("rentalProposalId").notNull(),
+    generatedContractId: integer("generatedContractId").notNull(),
+    provider: varchar("provider", { length: 20 })
+      .$type<"d4sign">()
+      .default("d4sign")
+      .notNull(),
+    environment: varchar("environment", { length: 20 }).$type<
+      "sandbox" | "production"
+    >(),
+    status: varchar("status", { length: 20 })
+      .$type<"pendente" | "enviado" | "assinado" | "cancelado" | "erro">()
+      .default("pendente")
+      .notNull(),
+    // UUID do documento no provedor (D4Sign).
+    externalDocumentUuid: varchar("externalDocumentUuid", { length: 80 }),
+    // Snapshot JSON dos signatarios enviados (papel, nome, e-mail).
+    signersSnapshot: text("signersSnapshot"),
+    // PDF assinado baixado do provedor (data URL base64) ao finalizar.
+    signedFileData: text("signedFileData"),
+    signedFileName: varchar("signedFileName", { length: 255 }),
+    lastError: text("lastError"),
+    sentAt: timestamp("sentAt", { mode: "date" }),
+    signedAt: timestamp("signedAt", { mode: "date" }),
+    sentByUserId: integer("sentByUserId"),
+    createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+  },
+  table => [
+    uniqueIndex("rentalProposalSignatures_unique_idx").on(
+      table.rentalProposalId,
+      table.generatedContractId
+    ),
+  ]
+);
+
+export type RentalProposalSignature =
+  typeof rentalProposalSignatures.$inferSelect;
+export type InsertRentalProposalSignature =
+  typeof rentalProposalSignatures.$inferInsert;
+
+/**
+ * Transferencia de titularidade das contas de consumo (etapas 25-26).
+ * Uma linha por (proposta, tipo): "energia", "agua" ou "gas". O locatario
+ * transfere a titularidade e envia o comprovante; o administrativo confirma
+ * (com anexo opcional) ou dispensa quando nao se aplica (ex.: sem gas encanado).
+ */
+export const rentalProposalUtilityTransfers = pgTable(
+  "rentalProposalUtilityTransfers",
+  {
+    id: serial("id").primaryKey(),
+    rentalProposalId: integer("rentalProposalId").notNull(),
+    // "energia", "agua", "gas" (padrao) ou um slug "custom_xxx" para contas
+    // personalizadas adicionadas pelo administrativo.
+    kind: varchar("kind", { length: 40 }).$type<string>().notNull(),
+    // Rotulo amigavel; para contas personalizadas guarda o nome digitado.
+    label: varchar("label", { length: 160 }),
+    status: varchar("status", { length: 20 })
+      .$type<"pendente" | "confirmado" | "dispensado">()
+      .default("pendente")
+      .notNull(),
+    proofData: text("proofData"),
+    proofFileName: varchar("proofFileName", { length: 255 }),
+    proofContentType: varchar("proofContentType", { length: 120 }),
+    notes: text("notes"),
+    requestedAt: timestamp("requestedAt", { mode: "date" }),
+    confirmedAt: timestamp("confirmedAt", { mode: "date" }),
+    confirmedByUserId: integer("confirmedByUserId"),
+    createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+  },
+  table => [
+    uniqueIndex("rentalProposalUtilityTransfers_unique_idx").on(
+      table.rentalProposalId,
+      table.kind
+    ),
+  ]
+);
+
+export type RentalProposalUtilityTransfer =
+  typeof rentalProposalUtilityTransfers.$inferSelect;
+export type InsertRentalProposalUtilityTransfer =
+  typeof rentalProposalUtilityTransfers.$inferInsert;
+
+/**
+ * Vistoria e laudo (etapas 27-28). Um registro por proposta. O administrativo
+ * informa o contato do vistoriador (externo, sem login) e solicita a vistoria
+ * (notificacao por wa.me/e-mail). Depois anexa o laudo e marca a validacao do
+ * estado do imovel pelo locatario e pelo proprietario.
+ */
+export const rentalProposalInspections = pgTable("rentalProposalInspections", {
+  id: serial("id").primaryKey(),
+  rentalProposalId: integer("rentalProposalId").notNull().unique(),
+  status: varchar("status", { length: 20 })
+    .$type<"pendente" | "solicitada" | "concluida">()
+    .default("pendente")
+    .notNull(),
+  inspectorName: varchar("inspectorName", { length: 160 }),
+  inspectorPhone: varchar("inspectorPhone", { length: 40 }),
+  inspectorEmail: varchar("inspectorEmail", { length: 255 }),
+  scheduledAt: date("scheduledAt", { mode: "date" }),
+  requestedAt: timestamp("requestedAt", { mode: "date" }),
+  // Laudo de vistoria (data URL base64) + metadados.
+  laudoData: text("laudoData"),
+  laudoFileName: varchar("laudoFileName", { length: 255 }),
+  laudoContentType: varchar("laudoContentType", { length: 120 }),
+  tenantValidatedAt: timestamp("tenantValidatedAt", { mode: "date" }),
+  ownerValidatedAt: timestamp("ownerValidatedAt", { mode: "date" }),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export type RentalProposalInspection =
+  typeof rentalProposalInspections.$inferSelect;
+export type InsertRentalProposalInspection =
+  typeof rentalProposalInspections.$inferInsert;
+
+/**
  * Tabela de documentos de imoveis
  * Armazena PDFs relacionados a cada imovel
  */

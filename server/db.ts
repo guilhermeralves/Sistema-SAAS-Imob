@@ -28,6 +28,9 @@ import {
   InsertRentalProposalBoleto,
   InsertRentalProposalGeneratedContract,
   InsertRentalProposalInsurance,
+  InsertRentalProposalSignature,
+  InsertRentalProposalUtilityTransfer,
+  InsertRentalProposalInspection,
   TaskItem,
   TaskItemTemplate,
   User,
@@ -44,6 +47,9 @@ import {
   rentalProposalContractTemplates,
   rentalProposalGeneratedContracts,
   rentalProposalInsurances,
+  rentalProposalSignatures,
+  rentalProposalUtilityTransfers,
+  rentalProposalInspections,
   rentalProposalOwners,
   rentalProposalTenants,
   rentalProposals,
@@ -2090,6 +2096,9 @@ export async function getRentalProposalById(id: number) {
     generatedContracts: await getRentalProposalGeneratedContracts(id),
     boletos: await getRentalProposalBoletos(id),
     insurances: await getRentalProposalInsurances(id),
+    signatures: await getRentalProposalSignatures(id),
+    utilityTransfers: await getRentalProposalUtilityTransfers(id),
+    inspection: await getRentalProposalInspection(id),
   };
 }
 
@@ -2472,6 +2481,351 @@ export async function ensureRentalProposalInsurances(rentalProposalId: number) {
     }
   }
   return await getRentalProposalInsurances(rentalProposalId);
+}
+
+// Colunas das assinaturas expostas em listagens (sem o PDF assinado em base64,
+// que e pesado e baixado sob demanda por query dedicada).
+const rentalSignatureListColumns = {
+  id: rentalProposalSignatures.id,
+  rentalProposalId: rentalProposalSignatures.rentalProposalId,
+  generatedContractId: rentalProposalSignatures.generatedContractId,
+  provider: rentalProposalSignatures.provider,
+  environment: rentalProposalSignatures.environment,
+  status: rentalProposalSignatures.status,
+  externalDocumentUuid: rentalProposalSignatures.externalDocumentUuid,
+  signersSnapshot: rentalProposalSignatures.signersSnapshot,
+  signedFileName: rentalProposalSignatures.signedFileName,
+  lastError: rentalProposalSignatures.lastError,
+  sentAt: rentalProposalSignatures.sentAt,
+  signedAt: rentalProposalSignatures.signedAt,
+  sentByUserId: rentalProposalSignatures.sentByUserId,
+  createdAt: rentalProposalSignatures.createdAt,
+  updatedAt: rentalProposalSignatures.updatedAt,
+} as const;
+
+export async function getRentalProposalSignatures(rentalProposalId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select(rentalSignatureListColumns)
+    .from(rentalProposalSignatures)
+    .where(eq(rentalProposalSignatures.rentalProposalId, rentalProposalId))
+    .orderBy(rentalProposalSignatures.generatedContractId);
+}
+
+export async function getRentalProposalSignatureById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const [row] = await db
+    .select()
+    .from(rentalProposalSignatures)
+    .where(eq(rentalProposalSignatures.id, id))
+    .limit(1);
+  return row;
+}
+
+export async function getRentalProposalSignatureByContract(
+  rentalProposalId: number,
+  generatedContractId: number
+) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const [row] = await db
+    .select()
+    .from(rentalProposalSignatures)
+    .where(
+      and(
+        eq(rentalProposalSignatures.rentalProposalId, rentalProposalId),
+        eq(rentalProposalSignatures.generatedContractId, generatedContractId)
+      )
+    )
+    .limit(1);
+  return row;
+}
+
+export async function getRentalProposalSignatureByExternalUuid(uuid: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const [row] = await db
+    .select()
+    .from(rentalProposalSignatures)
+    .where(eq(rentalProposalSignatures.externalDocumentUuid, uuid))
+    .limit(1);
+  return row;
+}
+
+// Cria/atualiza a assinatura de um contrato (chave unica proposta+contrato).
+export async function upsertRentalProposalSignature(
+  rentalProposalId: number,
+  generatedContractId: number,
+  data: Partial<
+    Omit<
+      InsertRentalProposalSignature,
+      "id" | "rentalProposalId" | "generatedContractId" | "createdAt"
+    >
+  >
+) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const existing = await getRentalProposalSignatureByContract(
+    rentalProposalId,
+    generatedContractId
+  );
+
+  if (existing) {
+    const [updated] = await db
+      .update(rentalProposalSignatures)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(rentalProposalSignatures.id, existing.id))
+      .returning();
+    return updated;
+  }
+
+  const [created] = await db
+    .insert(rentalProposalSignatures)
+    .values({ rentalProposalId, generatedContractId, ...data })
+    .returning();
+  return created;
+}
+
+// Garante uma linha de assinatura (status pendente) para cada contrato aprovado
+// da proposta. Retorna a lista atualizada.
+export async function ensureRentalProposalSignatures(rentalProposalId: number) {
+  const contracts = await getRentalProposalGeneratedContracts(rentalProposalId);
+  const approved = contracts.filter(item => item.status === "aprovado");
+
+  for (const contract of approved) {
+    const existing = await getRentalProposalSignatureByContract(
+      rentalProposalId,
+      contract.id
+    );
+    if (!existing) {
+      await upsertRentalProposalSignature(rentalProposalId, contract.id, {});
+    }
+  }
+  return await getRentalProposalSignatures(rentalProposalId);
+}
+
+// ---- Transferencia de titularidade de contas (energia/agua/gas) ----
+
+const rentalUtilityTransferListColumns = {
+  id: rentalProposalUtilityTransfers.id,
+  rentalProposalId: rentalProposalUtilityTransfers.rentalProposalId,
+  kind: rentalProposalUtilityTransfers.kind,
+  label: rentalProposalUtilityTransfers.label,
+  status: rentalProposalUtilityTransfers.status,
+  proofFileName: rentalProposalUtilityTransfers.proofFileName,
+  notes: rentalProposalUtilityTransfers.notes,
+  requestedAt: rentalProposalUtilityTransfers.requestedAt,
+  confirmedAt: rentalProposalUtilityTransfers.confirmedAt,
+} as const;
+
+// Contas padrao que sempre existem e nao podem ser removidas.
+export const DEFAULT_UTILITY_TRANSFER_KINDS = ["energia", "agua", "gas"] as const;
+
+export async function getRentalProposalUtilityTransfers(
+  rentalProposalId: number
+) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select(rentalUtilityTransferListColumns)
+    .from(rentalProposalUtilityTransfers)
+    .where(eq(rentalProposalUtilityTransfers.rentalProposalId, rentalProposalId))
+    .orderBy(rentalProposalUtilityTransfers.kind);
+}
+
+export async function getRentalProposalUtilityTransferByKind(
+  rentalProposalId: number,
+  kind: string
+) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const [row] = await db
+    .select()
+    .from(rentalProposalUtilityTransfers)
+    .where(
+      and(
+        eq(rentalProposalUtilityTransfers.rentalProposalId, rentalProposalId),
+        eq(rentalProposalUtilityTransfers.kind, kind)
+      )
+    )
+    .limit(1);
+  return row;
+}
+
+// Adiciona uma conta personalizada (slug gerado) com o rotulo informado.
+export async function createCustomUtilityTransfer(
+  rentalProposalId: number,
+  label: string
+) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const kind = `custom_${Date.now().toString(36)}${Math.random()
+    .toString(36)
+    .slice(2, 6)}`;
+
+  const [created] = await db
+    .insert(rentalProposalUtilityTransfers)
+    .values({ rentalProposalId, kind, label, status: "pendente" })
+    .returning();
+  return created;
+}
+
+export async function deleteRentalProposalUtilityTransfer(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .delete(rentalProposalUtilityTransfers)
+    .where(eq(rentalProposalUtilityTransfers.id, id));
+}
+
+export async function upsertRentalProposalUtilityTransfer(
+  rentalProposalId: number,
+  kind: string,
+  data: Partial<
+    Omit<
+      InsertRentalProposalUtilityTransfer,
+      "id" | "rentalProposalId" | "kind" | "createdAt"
+    >
+  >
+) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const existing = await getRentalProposalUtilityTransferByKind(
+    rentalProposalId,
+    kind
+  );
+
+  if (existing) {
+    const [updated] = await db
+      .update(rentalProposalUtilityTransfers)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(rentalProposalUtilityTransfers.id, existing.id))
+      .returning();
+    return updated;
+  }
+
+  const [created] = await db
+    .insert(rentalProposalUtilityTransfers)
+    .values({ rentalProposalId, kind, ...data })
+    .returning();
+  return created;
+}
+
+// Garante uma linha pendente para cada conta (energia, agua, gas).
+export async function ensureRentalProposalUtilityTransfers(
+  rentalProposalId: number
+) {
+  for (const kind of ["energia", "agua", "gas"] as const) {
+    const existing = await getRentalProposalUtilityTransferByKind(
+      rentalProposalId,
+      kind
+    );
+    if (!existing) {
+      await upsertRentalProposalUtilityTransfer(rentalProposalId, kind, {});
+    }
+  }
+  return await getRentalProposalUtilityTransfers(rentalProposalId);
+}
+
+// ---- Vistoria e laudo (etapas 27-28) ----
+
+// Colunas da vistoria sem o laudo em base64 (baixado sob demanda).
+const rentalInspectionColumns = {
+  id: rentalProposalInspections.id,
+  rentalProposalId: rentalProposalInspections.rentalProposalId,
+  status: rentalProposalInspections.status,
+  inspectorName: rentalProposalInspections.inspectorName,
+  inspectorPhone: rentalProposalInspections.inspectorPhone,
+  inspectorEmail: rentalProposalInspections.inspectorEmail,
+  scheduledAt: rentalProposalInspections.scheduledAt,
+  requestedAt: rentalProposalInspections.requestedAt,
+  laudoFileName: rentalProposalInspections.laudoFileName,
+  tenantValidatedAt: rentalProposalInspections.tenantValidatedAt,
+  ownerValidatedAt: rentalProposalInspections.ownerValidatedAt,
+  notes: rentalProposalInspections.notes,
+} as const;
+
+export async function getRentalProposalInspection(rentalProposalId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const [row] = await db
+    .select(rentalInspectionColumns)
+    .from(rentalProposalInspections)
+    .where(eq(rentalProposalInspections.rentalProposalId, rentalProposalId))
+    .limit(1);
+  return row ?? null;
+}
+
+export async function getRentalProposalInspectionLaudo(
+  rentalProposalId: number
+) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const [row] = await db
+    .select({
+      laudoData: rentalProposalInspections.laudoData,
+      laudoFileName: rentalProposalInspections.laudoFileName,
+      laudoContentType: rentalProposalInspections.laudoContentType,
+    })
+    .from(rentalProposalInspections)
+    .where(eq(rentalProposalInspections.rentalProposalId, rentalProposalId))
+    .limit(1);
+  return row ?? null;
+}
+
+export async function upsertRentalProposalInspection(
+  rentalProposalId: number,
+  data: Partial<
+    Omit<
+      InsertRentalProposalInspection,
+      "id" | "rentalProposalId" | "createdAt"
+    >
+  >
+) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const [existing] = await db
+    .select({ id: rentalProposalInspections.id })
+    .from(rentalProposalInspections)
+    .where(eq(rentalProposalInspections.rentalProposalId, rentalProposalId))
+    .limit(1);
+
+  if (existing) {
+    const [updated] = await db
+      .update(rentalProposalInspections)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(rentalProposalInspections.id, existing.id))
+      .returning();
+    return updated;
+  }
+
+  const [created] = await db
+    .insert(rentalProposalInspections)
+    .values({ rentalProposalId, ...data })
+    .returning();
+  return created;
+}
+
+export async function ensureRentalProposalInspection(rentalProposalId: number) {
+  const existing = await getRentalProposalInspection(rentalProposalId);
+  if (!existing) {
+    await upsertRentalProposalInspection(rentalProposalId, {});
+  }
+  return await getRentalProposalInspection(rentalProposalId);
 }
 
 export async function updateRentalProposalBoleto(

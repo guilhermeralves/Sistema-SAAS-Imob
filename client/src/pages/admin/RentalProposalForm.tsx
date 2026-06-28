@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatCpf, isValidCpf, normalizeCpf } from "@/lib/cpf";
 import { buildContractReferenceFooter } from "@shared/contract-reference";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeftRight, CheckCircle2, ChevronDown, ChevronUp, Download, FileSignature, Home, MessageCircle, Pencil, Plus, Receipt, RotateCw, Save, Send, ShieldCheck, Trash2, WandSparkles, X } from "lucide-react";
+import { ArrowLeftRight, CheckCircle2, ChevronDown, ChevronUp, Download, FileSignature, FileText, Home, MessageCircle, Pencil, Plus, Receipt, RotateCw, Save, Send, ShieldCheck, Trash2, WandSparkles, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 
@@ -157,6 +157,20 @@ type InitialRentalProposal = {
   generatedContracts?: GeneratedContractOption[];
   boletos?: BoletoOption[];
   insurances?: InsuranceOption[];
+  signatures?: SignatureOption[];
+  utilityTransfers?: UtilityTransferOption[];
+  inspection?: InspectionOption | null;
+  property?: {
+    id: number;
+    titulo?: string | null;
+    endereco?: string | null;
+    numero?: string | null;
+    complemento?: string | null;
+    bairro?: string | null;
+    cidade?: string | null;
+    estado?: string | null;
+    cep?: string | null;
+  } | null;
   tenant?: {
     id: number;
     name: string | null;
@@ -232,6 +246,49 @@ type InsuranceOption = {
   confirmedAt: Date | string | null;
 };
 
+type SignatureOption = {
+  id: number;
+  rentalProposalId: number;
+  generatedContractId: number;
+  provider: string;
+  environment: string | null;
+  status: "pendente" | "enviado" | "assinado" | "cancelado" | "erro";
+  externalDocumentUuid: string | null;
+  signersSnapshot: string | null;
+  signedFileName: string | null;
+  lastError: string | null;
+  sentAt?: Date | string | null;
+  signedAt?: Date | string | null;
+  sentByUserId?: number | null;
+};
+
+type UtilityTransferOption = {
+  id: number;
+  rentalProposalId: number;
+  kind: string;
+  label: string | null;
+  status: "pendente" | "confirmado" | "dispensado";
+  proofFileName: string | null;
+  notes: string | null;
+  requestedAt?: Date | string | null;
+  confirmedAt: Date | string | null;
+};
+
+type InspectionOption = {
+  id: number;
+  rentalProposalId: number;
+  status: "pendente" | "solicitada" | "concluida";
+  inspectorName: string | null;
+  inspectorPhone: string | null;
+  inspectorEmail: string | null;
+  scheduledAt?: Date | string | null;
+  requestedAt?: Date | string | null;
+  laudoFileName: string | null;
+  tenantValidatedAt: Date | string | null;
+  ownerValidatedAt: Date | string | null;
+  notes: string | null;
+};
+
 type RentalProposalFormProps = {
   initialProposal?: InitialRentalProposal | null;
   onDirtyChange?: (isDirty: boolean) => void;
@@ -259,6 +316,79 @@ const SEGUROS_OR_LATER_STEPS = new Set([
   "entrega_chaves_pendente",
   "ativo",
 ]);
+
+// Etapas em que o card de Assinaturas deve aparecer (etapa de assinaturas e
+// seguintes).
+const ASSINATURAS_OR_LATER_STEPS = new Set([
+  "assinaturas_pendentes",
+  "transferencias_pendentes",
+  "vistoria_pendente",
+  "entrega_chaves_pendente",
+  "ativo",
+]);
+
+// Etapas posteriores a assinaturas (usadas para marcar o card como concluido).
+const APOS_ASSINATURAS_STEPS = new Set([
+  "transferencias_pendentes",
+  "vistoria_pendente",
+  "entrega_chaves_pendente",
+  "ativo",
+]);
+
+// Etapas em que o card de Transferência de titularidade deve aparecer.
+const TRANSFERENCIAS_OR_LATER_STEPS = new Set([
+  "transferencias_pendentes",
+  "vistoria_pendente",
+  "entrega_chaves_pendente",
+  "ativo",
+]);
+
+// Etapas posteriores às transferências (para marcar o card como concluído).
+const APOS_TRANSFERENCIAS_STEPS = new Set([
+  "vistoria_pendente",
+  "entrega_chaves_pendente",
+  "ativo",
+]);
+
+const UTILITY_LABELS: Record<"energia" | "agua" | "gas", string> = {
+  energia: "Energia elétrica",
+  agua: "Água",
+  gas: "Gás",
+};
+
+// Etapas em que o card de Vistoria deve aparecer.
+const VISTORIA_OR_LATER_STEPS = new Set([
+  "vistoria_pendente",
+  "entrega_chaves_pendente",
+  "ativo",
+]);
+
+// Etapas posteriores à vistoria (para marcar o card como concluído).
+const APOS_VISTORIA_STEPS = new Set(["entrega_chaves_pendente", "ativo"]);
+
+// Monta o endereço completo do imóvel a partir do contexto da proposta.
+function buildPropertyAddress(
+  property?: InitialRentalProposal["property"]
+): string {
+  if (!property) return "";
+  const street = [property.endereco?.trim(), property.numero?.trim()]
+    .filter(Boolean)
+    .join(", ");
+  const withComplement = [street, property.complemento?.trim()]
+    .filter(Boolean)
+    .join(" - ");
+  const cityState = [property.cidade?.trim(), property.estado?.trim()]
+    .filter(Boolean)
+    .join("/");
+  return [
+    withComplement,
+    property.bairro?.trim(),
+    cityState,
+    property.cep?.trim() ? `CEP ${property.cep.trim()}` : "",
+  ]
+    .filter(Boolean)
+    .join(" - ");
+}
 
 function getRentalStepIndex(currentStep: string | undefined | null) {
   if (!currentStep) return 0;
@@ -418,20 +548,61 @@ function RentalInsuranceBlock({
   onChanged: () => Promise<void> | void;
 }) {
   const utils = trpc.useUtils();
-  const [insurer, setInsurer] = useState(record?.insurer ?? "");
-  const [policyNumber, setPolicyNumber] = useState(record?.policyNumber ?? "");
-  const [amount, setAmount] = useState(formatCurrencyInput(record?.amount));
   const [notes, setNotes] = useState(record?.notes ?? "");
   const [file, setFile] = useState<File | null>(null);
   const [downloading, setDownloading] = useState(false);
+  // Preview local do arquivo recém-selecionado (antes de confirmar).
+  const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
+  // Comprovante já salvo, carregado sob demanda para preview/download.
+  const [savedProof, setSavedProof] = useState<{
+    dataUrl: string;
+    contentType: string;
+    fileName: string;
+  } | null>(null);
+
+  const status = record?.status ?? "pendente";
+  const isConfirmed = status === "confirmado";
+  const hasProof = Boolean(record?.proofFileName);
 
   useEffect(() => {
-    setInsurer(record?.insurer ?? "");
-    setPolicyNumber(record?.policyNumber ?? "");
-    setAmount(formatCurrencyInput(record?.amount));
     setNotes(record?.notes ?? "");
     setFile(null);
   }, [record?.id, record?.status]);
+
+  // Cria/descarta o preview local quando o usuário seleciona uma imagem.
+  useEffect(() => {
+    if (!file || !file.type.startsWith("image/")) {
+      setLocalPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setLocalPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  // Carrega o comprovante salvo (preview + download) quando confirmado.
+  useEffect(() => {
+    if (!isConfirmed || !hasProof) {
+      setSavedProof(null);
+      return;
+    }
+    let active = true;
+    utils.rentalProposals.insuranceProof
+      .fetch({ id: proposalId, kind })
+      .then(proof => {
+        if (active && proof?.dataUrl) {
+          setSavedProof({
+            dataUrl: proof.dataUrl,
+            contentType: proof.contentType,
+            fileName: proof.fileName,
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [isConfirmed, hasProof, proposalId, kind, utils]);
 
   const confirmMutation = trpc.rentalProposals.confirmInsurance.useMutation({
     onSuccess: async () => {
@@ -486,9 +657,6 @@ function RentalInsuranceBlock({
     confirmMutation.mutate({
       id: proposalId,
       kind,
-      insurer: insurer.trim() || undefined,
-      policyNumber: policyNumber.trim() || undefined,
-      amount: amount.trim() ? parseCurrencyToCents(amount) : undefined,
       notes: notes.trim() || undefined,
       proof,
     });
@@ -497,10 +665,12 @@ function RentalInsuranceBlock({
   const handleDownloadProof = async () => {
     setDownloading(true);
     try {
-      const proof = await utils.rentalProposals.insuranceProof.fetch({
-        id: proposalId,
-        kind,
-      });
+      const proof =
+        savedProof ??
+        (await utils.rentalProposals.insuranceProof.fetch({
+          id: proposalId,
+          kind,
+        }));
       if (!proof?.dataUrl) {
         toast.error("Comprovante n\u00e3o encontrado.");
         return;
@@ -518,7 +688,6 @@ function RentalInsuranceBlock({
     }
   };
 
-  const status = record?.status ?? "pendente";
   const isResolved = status === "confirmado" || status === "dispensado";
 
   const statusBadge =
@@ -549,29 +718,40 @@ function RentalInsuranceBlock({
       {isResolved ? (
         <div className="mt-3 space-y-2 text-sm text-slate-600">
           {status === "confirmado" ? (
-            <div className="space-y-1">
-              {record?.insurer ? <p>Seguradora: {record.insurer}</p> : null}
-              {record?.policyNumber ? (
-                <p>Ap\u00f3lice: {record.policyNumber}</p>
-              ) : null}
-              {record?.amount ? (
-                <p>Valor da parcela: {formatCentsBRL(record.amount)}</p>
-              ) : null}
+            <div className="space-y-2">
+              {savedProof && savedProof.contentType.startsWith("image/") ? (
+                <img
+                  src={savedProof.dataUrl}
+                  alt="Comprovante de pagamento"
+                  className="max-h-44 w-auto rounded-lg border border-slate-200 object-contain"
+                />
+              ) : record?.proofFileName ? (
+                <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                  <FileText className="h-4 w-4 shrink-0" />
+                  {record.proofFileName}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500">Sem comprovante anexado.</p>
+              )}
               {record?.proofFileName ? (
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="mt-1 gap-2 rounded-full bg-white"
+                  className="gap-2 rounded-full bg-white"
                   disabled={downloading}
                   onClick={handleDownloadProof}
                 >
                   <Download className="h-4 w-4" />
                   {downloading ? "Baixando..." : "Baixar comprovante"}
                 </Button>
-              ) : (
-                <p className="text-xs text-slate-500">Sem comprovante anexado.</p>
-              )}
+              ) : null}
+              {record?.notes?.trim() ? (
+                <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                  <span className="font-semibold">{"Observa\u00e7\u00f5es: "}</span>
+                  {record.notes}
+                </p>
+              ) : null}
             </div>
           ) : (
             <p>{record?.notes?.trim() || "Seguro dispensado para esta loca\u00e7\u00e3o."}</p>
@@ -589,46 +769,32 @@ function RentalInsuranceBlock({
         </div>
       ) : (
         <div className="mt-3 space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1">
-              <Label className="text-xs">Seguradora</Label>
-              <Input
-                className={FIELD_CLASS}
-                value={insurer}
-                onChange={event => setInsurer(event.target.value)}
-                placeholder="Ex.: Porto Seguro"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">N\u00ba da ap\u00f3lice</Label>
-              <Input
-                className={FIELD_CLASS}
-                value={policyNumber}
-                onChange={event => setPolicyNumber(event.target.value)}
-                placeholder="Opcional"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Valor da 1\u00aa parcela</Label>
-              <Input
-                className={FIELD_CLASS}
-                value={amount}
-                onChange={event => setAmount(event.target.value)}
-                placeholder="R$ 0,00"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Comprovante (PDF/imagem)</Label>
-              <Input
-                type="file"
-                accept="image/*,application/pdf"
-                className={FIELD_CLASS}
-                onChange={event => setFile(event.target.files?.[0] ?? null)}
-              />
-            </div>
-          </div>
           <div className="space-y-1">
-            <Label className="text-xs">Observa\u00e7\u00f5es</Label>
+            <Label className="text-xs">Comprovante de pagamento</Label>
+            <Input
+              type="file"
+              accept=".png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,image/webp,application/pdf"
+              className={FIELD_CLASS}
+              onChange={event => setFile(event.target.files?.[0] ?? null)}
+            />
+            <p className="text-[11px] text-slate-400">
+              {"Formatos aceitos: PNG, JPG, JPEG, WEBP ou PDF (m\u00e1x. 10MB)."}
+            </p>
+          </div>
+          {localPreviewUrl ? (
+            <img
+              src={localPreviewUrl}
+              alt={"Pr\u00e9-visualiza\u00e7\u00e3o do comprovante"}
+              className="max-h-44 w-auto rounded-lg border border-slate-200 object-contain"
+            />
+          ) : file ? (
+            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              <FileText className="h-4 w-4 shrink-0" />
+              {file.name}
+            </div>
+          ) : null}
+          <div className="space-y-1">
+            <Label className="text-xs">{"Observa\u00e7\u00f5es"}</Label>
             <Textarea
               className={FIELD_CLASS}
               value={notes}
@@ -943,6 +1109,957 @@ function OwnerProposalDialog({
   );
 }
 
+// Bloco de assinatura de um contrato aprovado (etapa 24). Cuida das proprias
+// mutations (enviar/atualizar/cancelar) e do download do PDF assinado.
+function RentalSignatureBlock({
+  proposalId,
+  contract,
+  record,
+  configured,
+  onChanged,
+}: {
+  proposalId: number;
+  contract: GeneratedContractOption;
+  record: SignatureOption | null;
+  configured: boolean;
+  onChanged: () => Promise<void> | void;
+}) {
+  const utils = trpc.useUtils();
+  const [downloading, setDownloading] = useState(false);
+  const [manualFile, setManualFile] = useState<File | null>(null);
+
+  const sendMutation = trpc.rentalProposals.sendForSignature.useMutation({
+    onSuccess: async () => {
+      toast.success("Contrato enviado para assinatura na D4Sign.");
+      await onChanged();
+    },
+    onError: error =>
+      toast.error(error.message || "Não foi possível enviar para assinatura."),
+  });
+  const refreshMutation =
+    trpc.rentalProposals.refreshSignatureStatus.useMutation({
+      onSuccess: async result => {
+        const status = result.signature?.status;
+        toast.success(
+          status === "assinado"
+            ? "Contrato assinado por todos!"
+            : "Status atualizado."
+        );
+        await onChanged();
+      },
+      onError: error =>
+        toast.error(error.message || "Não foi possível consultar a D4Sign."),
+    });
+  const cancelMutation = trpc.rentalProposals.cancelSignature.useMutation({
+    onSuccess: async () => {
+      toast.success("Assinatura cancelada.");
+      await onChanged();
+    },
+    onError: error =>
+      toast.error(error.message || "Não foi possível cancelar a assinatura."),
+  });
+  const markManualMutation =
+    trpc.rentalProposals.markSignatureSignedManually.useMutation({
+      onSuccess: async () => {
+        toast.success("Contrato marcado como assinado.");
+        setManualFile(null);
+        await onChanged();
+      },
+      onError: error =>
+        toast.error(error.message || "Não foi possível marcar como assinado."),
+    });
+
+  const busy =
+    sendMutation.isPending ||
+    refreshMutation.isPending ||
+    cancelMutation.isPending ||
+    markManualMutation.isPending;
+
+  const status = record?.status ?? "pendente";
+  const canSend =
+    status === "pendente" || status === "cancelado" || status === "erro";
+
+  const signers: Array<{ displayName?: string; email?: string; role?: string }> =
+    (() => {
+      if (!record?.signersSnapshot) return [];
+      try {
+        const parsed = JSON.parse(record.signersSnapshot);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    })();
+
+  const handleDownloadSigned = async () => {
+    if (!record) return;
+    setDownloading(true);
+    try {
+      const proof = await utils.rentalProposals.signatureProof.fetch({
+        signatureId: record.id,
+      });
+      if (!proof?.dataUrl) {
+        toast.error("PDF assinado ainda não disponível.");
+        return;
+      }
+      const link = document.createElement("a");
+      link.href = proof.dataUrl;
+      link.download = proof.fileName || "contrato-assinado.pdf";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch {
+      toast.error("Não foi possível baixar o PDF assinado.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleMarkManual = async () => {
+    let proof:
+      | { fileName: string; contentType: string; dataUrl: string }
+      | undefined;
+    if (manualFile) {
+      if (manualFile.size > 10 * 1024 * 1024) {
+        toast.error("O arquivo excede o limite de 10MB.");
+        return;
+      }
+      try {
+        const dataUrl = await readFileAsDataUrl(manualFile);
+        proof = {
+          fileName: manualFile.name.slice(0, 255),
+          contentType: manualFile.type || "application/octet-stream",
+          dataUrl,
+        };
+      } catch {
+        toast.error("Não foi possível ler o arquivo.");
+        return;
+      }
+    }
+    markManualMutation.mutate({
+      id: proposalId,
+      contractId: contract.id,
+      proof,
+    });
+  };
+
+  const statusBadge =
+    status === "assinado" ? (
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+        <CheckCircle2 className="h-3.5 w-3.5" /> Assinado
+      </span>
+    ) : status === "enviado" ? (
+      <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-700">
+        Aguardando assinatura
+      </span>
+    ) : status === "cancelado" ? (
+      <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700">
+        Cancelado
+      </span>
+    ) : status === "erro" ? (
+      <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
+        Erro no envio
+      </span>
+    ) : (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+        Pendente
+      </span>
+    );
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white/85 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+          <FileSignature className="h-4 w-4 text-emerald-700" />
+          {contract.title}
+        </p>
+        {statusBadge}
+      </div>
+
+      {signers.length > 0 ? (
+        <p className="mt-2 text-xs text-slate-500">
+          Signatários: {signers.map(s => s.displayName || s.email).join(", ")}
+        </p>
+      ) : null}
+
+      {status === "erro" && record?.lastError ? (
+        <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+          {record.lastError}
+        </p>
+      ) : null}
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {canSend ? (
+          <Button
+            type="button"
+            className="gap-2 rounded-full bg-emerald-700 text-white hover:bg-emerald-800"
+            size="sm"
+            disabled={busy || !configured}
+            onClick={() =>
+              sendMutation.mutate({ id: proposalId, contractId: contract.id })
+            }
+          >
+            <Send className="h-4 w-4" />
+            {sendMutation.isPending ? "Enviando..." : "Enviar para assinatura"}
+          </Button>
+        ) : null}
+
+        {status === "enviado" ? (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2 rounded-full bg-white"
+              disabled={busy}
+              onClick={() =>
+                refreshMutation.mutate({ signatureId: record!.id })
+              }
+            >
+              <RotateCw className="h-4 w-4" />
+              {refreshMutation.isPending ? "Consultando..." : "Atualizar status"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="gap-2 text-slate-600"
+              disabled={busy}
+              onClick={() => cancelMutation.mutate({ signatureId: record!.id })}
+            >
+              <X className="h-4 w-4" /> Cancelar
+            </Button>
+          </>
+        ) : null}
+
+        {status === "assinado" ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-2 rounded-full bg-white"
+            disabled={downloading}
+            onClick={handleDownloadSigned}
+          >
+            <Download className="h-4 w-4" />
+            {downloading ? "Baixando..." : "Baixar PDF assinado"}
+          </Button>
+        ) : null}
+      </div>
+
+      {!configured && canSend ? (
+        <p className="mt-2 text-xs text-amber-700">
+          Configure as credenciais da D4Sign no servidor (.env) para habilitar o
+          envio.
+        </p>
+      ) : null}
+
+      {status !== "assinado" ? (
+        <div className="mt-3 space-y-2 rounded-xl border border-dashed border-slate-200 bg-slate-50/60 p-3">
+          <p className="text-xs font-medium text-slate-600">
+            {"Sem D4Sign? Marque como assinado manualmente (assinatura coletada por fora):"}
+          </p>
+          <Input
+            type="file"
+            accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp"
+            className={FIELD_CLASS}
+            onChange={event => setManualFile(event.target.files?.[0] ?? null)}
+          />
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] text-slate-400">
+              {"Anexo opcional do PDF/foto do contrato assinado."}
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2 rounded-full bg-white"
+              disabled={busy}
+              onClick={handleMarkManual}
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              {markManualMutation.isPending
+                ? "Salvando..."
+                : "Marcar como assinado"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// Bloco de uma conta (energia/agua/gas) na etapa de transferencia de
+// titularidade. Comprovante + observacoes, com preview, no mesmo padrao do
+// card de Seguros.
+function RentalUtilityTransferBlock({
+  proposalId,
+  kind,
+  record,
+  onChanged,
+}: {
+  proposalId: number;
+  kind: string;
+  record: UtilityTransferOption | null;
+  onChanged: () => Promise<void> | void;
+}) {
+  const utils = trpc.useUtils();
+  const displayName =
+    record?.label ||
+    UTILITY_LABELS[kind as "energia" | "agua" | "gas"] ||
+    kind;
+  const removable = kind.startsWith("custom_");
+  const [notes, setNotes] = useState(record?.notes ?? "");
+  const [file, setFile] = useState<File | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null);
+  const [savedProof, setSavedProof] = useState<{
+    dataUrl: string;
+    contentType: string;
+    fileName: string;
+  } | null>(null);
+
+  const status = record?.status ?? "pendente";
+  const isConfirmed = status === "confirmado";
+  const hasProof = Boolean(record?.proofFileName);
+
+  useEffect(() => {
+    setNotes(record?.notes ?? "");
+    setFile(null);
+  }, [record?.id, record?.status]);
+
+  useEffect(() => {
+    if (!file || !file.type.startsWith("image/")) {
+      setLocalPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setLocalPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  useEffect(() => {
+    if (!isConfirmed || !hasProof) {
+      setSavedProof(null);
+      return;
+    }
+    let active = true;
+    utils.rentalProposals.utilityTransferProof
+      .fetch({ id: proposalId, kind })
+      .then(proof => {
+        if (active && proof?.dataUrl) {
+          setSavedProof({
+            dataUrl: proof.dataUrl,
+            contentType: proof.contentType,
+            fileName: proof.fileName,
+          });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [isConfirmed, hasProof, proposalId, kind, utils]);
+
+  const confirmMutation =
+    trpc.rentalProposals.confirmUtilityTransfer.useMutation({
+      onSuccess: async () => {
+        toast.success(`${displayName}: transferência confirmada.`);
+        await onChanged();
+      },
+      onError: error =>
+        toast.error(error.message || "Não foi possível confirmar."),
+    });
+  const dispenseMutation =
+    trpc.rentalProposals.dispenseUtilityTransfer.useMutation({
+      onSuccess: async () => {
+        toast.success(`${displayName}: dispensada.`);
+        await onChanged();
+      },
+      onError: error =>
+        toast.error(error.message || "Não foi possível dispensar."),
+    });
+  const reopenMutation = trpc.rentalProposals.reopenUtilityTransfer.useMutation({
+    onSuccess: async () => {
+      toast.success(`${displayName}: reaberta.`);
+      await onChanged();
+    },
+    onError: error => toast.error(error.message || "Não foi possível reabrir."),
+  });
+  const removeMutation = trpc.rentalProposals.removeUtilityTransfer.useMutation({
+    onSuccess: async () => {
+      toast.success(`${displayName}: conta removida.`);
+      await onChanged();
+    },
+    onError: error => toast.error(error.message || "Não foi possível remover."),
+  });
+
+  const busy =
+    confirmMutation.isPending ||
+    dispenseMutation.isPending ||
+    reopenMutation.isPending ||
+    removeMutation.isPending;
+
+  const handleConfirm = async () => {
+    let proof:
+      | { fileName: string; contentType: string; dataUrl: string }
+      | undefined;
+    if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error("O comprovante excede o limite de 10MB.");
+        return;
+      }
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        proof = {
+          fileName: file.name.slice(0, 255),
+          contentType: file.type || "application/octet-stream",
+          dataUrl,
+        };
+      } catch {
+        toast.error("Não foi possível ler o arquivo do comprovante.");
+        return;
+      }
+    }
+    confirmMutation.mutate({
+      id: proposalId,
+      kind,
+      notes: notes.trim() || undefined,
+      proof,
+    });
+  };
+
+  const handleDownloadProof = async () => {
+    setDownloading(true);
+    try {
+      const proof =
+        savedProof ??
+        (await utils.rentalProposals.utilityTransferProof.fetch({
+          id: proposalId,
+          kind,
+        }));
+      if (!proof?.dataUrl) {
+        toast.error("Comprovante não encontrado.");
+        return;
+      }
+      const link = document.createElement("a");
+      link.href = proof.dataUrl;
+      link.download = proof.fileName || "comprovante";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch {
+      toast.error("Não foi possível baixar o comprovante.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const isResolved = status === "confirmado" || status === "dispensado";
+
+  const statusBadge =
+    status === "confirmado" ? (
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+        <CheckCircle2 className="h-3.5 w-3.5" /> Confirmada
+      </span>
+    ) : status === "dispensado" ? (
+      <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700">
+        Dispensada
+      </span>
+    ) : (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+        Pendente
+      </span>
+    );
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white/85 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+          <FileText className="h-4 w-4 text-emerald-700" />
+          {displayName}
+        </p>
+        <div className="flex items-center gap-2">
+          {statusBadge}
+          {removable ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 shrink-0 rounded-full text-slate-400 hover:text-red-600"
+              disabled={busy}
+              onClick={() => removeMutation.mutate({ id: proposalId, kind })}
+              aria-label="Remover conta"
+              title="Remover conta"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      {isResolved ? (
+        <div className="mt-3 space-y-3 text-sm text-slate-600">
+          {isConfirmed ? (
+            <div className="space-y-2">
+              {savedProof && savedProof.contentType.startsWith("image/") ? (
+                <img
+                  src={savedProof.dataUrl}
+                  alt={"Comprovante de transferência"}
+                  className="max-h-44 w-auto rounded-lg border border-slate-200 object-contain"
+                />
+              ) : record?.proofFileName ? (
+                <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                  <FileText className="h-4 w-4 shrink-0" />
+                  {record.proofFileName}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500">
+                  {"Sem comprovante anexado."}
+                </p>
+              )}
+              {record?.proofFileName ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-2 rounded-full bg-white"
+                  disabled={downloading}
+                  onClick={handleDownloadProof}
+                >
+                  <Download className="h-4 w-4" />
+                  {downloading ? "Baixando..." : "Baixar comprovante"}
+                </Button>
+              ) : null}
+              {record?.notes?.trim() ? (
+                <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                  <span className="font-semibold">{"Observações: "}</span>
+                  {record.notes}
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <p>{record?.notes?.trim() || "Conta dispensada para esta locação."}</p>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="gap-2 text-slate-600"
+            disabled={busy}
+            onClick={() => reopenMutation.mutate({ id: proposalId, kind })}
+          >
+            <RotateCw className="h-4 w-4" /> Reabrir
+          </Button>
+        </div>
+      ) : (
+        <div className="mt-3 space-y-3">
+          <div className="space-y-1">
+            <Label className="text-xs">{"Comprovante de transferência"}</Label>
+            <Input
+              type="file"
+              accept=".png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,image/webp,application/pdf"
+              className={FIELD_CLASS}
+              onChange={event => setFile(event.target.files?.[0] ?? null)}
+            />
+            <p className="text-[11px] text-slate-400">
+              {"Formatos aceitos: PNG, JPG, JPEG, WEBP ou PDF (máx. 10MB)."}
+            </p>
+          </div>
+          {localPreviewUrl ? (
+            <img
+              src={localPreviewUrl}
+              alt={"Pré-visualização do comprovante"}
+              className="max-h-44 w-auto rounded-lg border border-slate-200 object-contain"
+            />
+          ) : file ? (
+            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              <FileText className="h-4 w-4 shrink-0" />
+              {file.name}
+            </div>
+          ) : null}
+          <div className="space-y-1">
+            <Label className="text-xs">{"Observações"}</Label>
+            <Textarea
+              className={FIELD_CLASS}
+              value={notes}
+              onChange={event => setNotes(event.target.value)}
+              rows={2}
+              placeholder="Opcional"
+            />
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2 rounded-full bg-white"
+              disabled={busy}
+              onClick={() => dispenseMutation.mutate({ id: proposalId, kind })}
+            >
+              <X className="h-4 w-4" /> Dispensar
+            </Button>
+            <Button
+              type="button"
+              className="gap-2 rounded-full bg-emerald-700 text-white hover:bg-emerald-800"
+              disabled={busy}
+              onClick={handleConfirm}
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              {confirmMutation.isPending ? "Confirmando..." : "Confirmar"}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Painel da etapa de Vistoria e laudo (etapas 27-28): contato do vistoriador,
+// solicitação (wa.me), upload do laudo e validação do locatário/proprietário.
+function RentalInspectionPanel({
+  proposalId,
+  record,
+  referenceCode,
+  propertyAddress,
+  onChanged,
+}: {
+  proposalId: number;
+  record: InspectionOption | null;
+  referenceCode: string | null;
+  propertyAddress: string;
+  onChanged: () => Promise<void> | void;
+}) {
+  const utils = trpc.useUtils();
+  const [name, setName] = useState(record?.inspectorName ?? "");
+  const [phone, setPhone] = useState(record?.inspectorPhone ?? "");
+  const [email, setEmail] = useState(record?.inspectorEmail ?? "");
+  const [laudoFile, setLaudoFile] = useState<File | null>(null);
+  const [laudoNotes, setLaudoNotes] = useState(record?.notes ?? "");
+  const [downloading, setDownloading] = useState(false);
+
+  useEffect(() => {
+    setName(record?.inspectorName ?? "");
+    setPhone(record?.inspectorPhone ?? "");
+    setEmail(record?.inspectorEmail ?? "");
+    setLaudoNotes(record?.notes ?? "");
+    setLaudoFile(null);
+  }, [
+    record?.id,
+    record?.requestedAt,
+    record?.laudoFileName,
+    record?.inspectorName,
+  ]);
+
+  const requestMutation = trpc.rentalProposals.requestInspection.useMutation({
+    onSuccess: async () => {
+      toast.success("Vistoria solicitada. Use o WhatsApp para avisar o vistoriador.");
+      await onChanged();
+    },
+    onError: error =>
+      toast.error(error.message || "Não foi possível solicitar a vistoria."),
+  });
+  const uploadMutation = trpc.rentalProposals.uploadInspectionLaudo.useMutation({
+    onSuccess: async () => {
+      toast.success("Laudo anexado.");
+      await onChanged();
+    },
+    onError: error =>
+      toast.error(error.message || "Não foi possível anexar o laudo."),
+  });
+  const validationMutation =
+    trpc.rentalProposals.setInspectionValidation.useMutation({
+      onSuccess: async () => {
+        await onChanged();
+      },
+      onError: error =>
+        toast.error(error.message || "Não foi possível atualizar a validação."),
+    });
+
+  const busy =
+    requestMutation.isPending ||
+    uploadMutation.isPending ||
+    validationMutation.isPending;
+
+  const requested = Boolean(record?.requestedAt);
+  const hasLaudo = Boolean(record?.laudoFileName);
+  const tenantValidated = Boolean(record?.tenantValidatedAt);
+  const ownerValidated = Boolean(record?.ownerValidatedAt);
+
+  const handleRequest = () => {
+    if (!name.trim()) {
+      toast.error("Informe o nome do vistoriador.");
+      return;
+    }
+    requestMutation.mutate({
+      id: proposalId,
+      inspectorName: name.trim(),
+      inspectorPhone: phone.trim() || undefined,
+      inspectorEmail: email.trim() || undefined,
+    });
+  };
+
+  const handleUploadLaudo = async () => {
+    if (!laudoFile) {
+      toast.error("Selecione o arquivo do laudo.");
+      return;
+    }
+    if (laudoFile.size > 10 * 1024 * 1024) {
+      toast.error("O laudo excede o limite de 10MB.");
+      return;
+    }
+    let dataUrl: string;
+    try {
+      dataUrl = await readFileAsDataUrl(laudoFile);
+    } catch {
+      toast.error("Não foi possível ler o arquivo do laudo.");
+      return;
+    }
+    uploadMutation.mutate({
+      id: proposalId,
+      notes: laudoNotes.trim() || undefined,
+      proof: {
+        fileName: laudoFile.name.slice(0, 255),
+        contentType: laudoFile.type || "application/octet-stream",
+        dataUrl,
+      },
+    });
+  };
+
+  const handleDownloadLaudo = async () => {
+    setDownloading(true);
+    try {
+      const laudo = await utils.rentalProposals.inspectionLaudo.fetch({
+        id: proposalId,
+      });
+      if (!laudo?.dataUrl) {
+        toast.error("Laudo não encontrado.");
+        return;
+      }
+      const link = document.createElement("a");
+      link.href = laudo.dataUrl;
+      link.download = laudo.fileName || "laudo";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch {
+      toast.error("Não foi possível baixar o laudo.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const phoneDigits = (record?.inspectorPhone ?? phone).replace(/\D/g, "");
+  const waNumber = phoneDigits
+    ? phoneDigits.startsWith("55")
+      ? phoneDigits
+      : `55${phoneDigits}`
+    : "";
+  const waMessage = encodeURIComponent(
+    `Ola${record?.inspectorName ? `, ${record.inspectorName}` : ""}! ` +
+      `Temos uma solicitacao de vistoria de imovel${
+        referenceCode ? ` (${referenceCode})` : ""
+      }.` +
+      (propertyAddress ? ` Endereco do imovel: ${propertyAddress}.` : "") +
+      ` Podemos agendar?`
+  );
+  const waLink = waNumber ? `https://wa.me/${waNumber}?text=${waMessage}` : "";
+
+  const ValidationButton = ({
+    party,
+    label,
+    validated,
+  }: {
+    party: "tenant" | "owner";
+    label: string;
+    validated: boolean;
+  }) => (
+    <Button
+      type="button"
+      variant={validated ? "outline" : "default"}
+      size="sm"
+      className={
+        validated
+          ? "gap-2 rounded-full border-emerald-200 bg-emerald-50 text-emerald-800"
+          : "gap-2 rounded-full bg-emerald-700 text-white hover:bg-emerald-800"
+      }
+      disabled={busy || !hasLaudo}
+      onClick={() =>
+        validationMutation.mutate({
+          id: proposalId,
+          party,
+          validated: !validated,
+        })
+      }
+    >
+      <CheckCircle2 className="h-4 w-4" />
+      {validated ? `${label} validou ✓` : `Marcar: ${label} validou`}
+    </Button>
+  );
+
+  return (
+    <div className="space-y-4">
+      {propertyAddress ? (
+        <div className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+          <span className="font-semibold">{"Imóvel da vistoria: "}</span>
+          {propertyAddress}
+        </div>
+      ) : null}
+      {/* 1) Contato do vistoriador + solicitação */}
+      <div className="rounded-2xl border border-slate-200 bg-white/85 p-4">
+        <p className="mb-2 text-sm font-semibold text-slate-900">
+          {"1. Vistoriador"}
+        </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="space-y-1">
+            <Label className="text-xs">{"Nome"}</Label>
+            <Input
+              className={FIELD_CLASS}
+              value={name}
+              onChange={event => setName(event.target.value)}
+              placeholder="Nome do vistoriador"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">{"Telefone (WhatsApp)"}</Label>
+            <Input
+              className={FIELD_CLASS}
+              value={phone}
+              onChange={event => setPhone(event.target.value)}
+              placeholder="(11) 90000-0000"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">{"E-mail (opcional)"}</Label>
+            <Input
+              className={FIELD_CLASS}
+              value={email}
+              onChange={event => setEmail(event.target.value)}
+              placeholder="email@exemplo.com"
+            />
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            className="gap-2 rounded-full bg-emerald-700 text-white hover:bg-emerald-800"
+            size="sm"
+            disabled={busy}
+            onClick={handleRequest}
+          >
+            <Send className="h-4 w-4" />
+            {requestMutation.isPending
+              ? "Salvando..."
+              : requested
+                ? "Atualizar vistoriador"
+                : "Solicitar vistoria"}
+          </Button>
+          {requested && waLink ? (
+            <a
+              href={waLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+            >
+              <MessageCircle className="h-4 w-4" />
+              {"Avisar por WhatsApp"}
+            </a>
+          ) : null}
+          {requested ? (
+            <span className="text-xs text-emerald-700">
+              {"Vistoria solicitada."}
+            </span>
+          ) : null}
+        </div>
+      </div>
+
+      {/* 2) Laudo */}
+      {requested ? (
+        <div className="rounded-2xl border border-slate-200 bg-white/85 p-4">
+          <p className="mb-2 text-sm font-semibold text-slate-900">
+            {"2. Laudo de vistoria"}
+          </p>
+          {hasLaudo ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                <FileText className="h-4 w-4 shrink-0" />
+                {record?.laudoFileName}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-2 rounded-full bg-white"
+                disabled={downloading}
+                onClick={handleDownloadLaudo}
+              >
+                <Download className="h-4 w-4" />
+                {downloading ? "Baixando..." : "Baixar laudo"}
+              </Button>
+            </div>
+          ) : null}
+          <div className="mt-3 space-y-1">
+            <Label className="text-xs">
+              {hasLaudo ? "Substituir laudo (opcional)" : "Anexar laudo"}
+            </Label>
+            <Input
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp"
+              className={FIELD_CLASS}
+              onChange={event => setLaudoFile(event.target.files?.[0] ?? null)}
+            />
+          </div>
+          <div className="mt-2 space-y-1">
+            <Label className="text-xs">{"Observações"}</Label>
+            <Textarea
+              className={FIELD_CLASS}
+              value={laudoNotes}
+              onChange={event => setLaudoNotes(event.target.value)}
+              rows={2}
+              placeholder="Opcional"
+            />
+          </div>
+          <div className="mt-2 flex justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2 rounded-full bg-white"
+              disabled={busy || !laudoFile}
+              onClick={handleUploadLaudo}
+            >
+              <FileText className="h-4 w-4" />
+              {uploadMutation.isPending ? "Enviando..." : "Salvar laudo"}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* 3) Validação do estado do imóvel */}
+      {hasLaudo ? (
+        <div className="rounded-2xl border border-slate-200 bg-white/85 p-4">
+          <p className="mb-1 text-sm font-semibold text-slate-900">
+            {"3. Validação do estado do imóvel"}
+          </p>
+          <p className="mb-3 text-xs text-slate-500">
+            {"Confirme a validação do laudo pelo locatário e pelo proprietário."}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <ValidationButton
+              party="tenant"
+              label="Locatário"
+              validated={tenantValidated}
+            />
+            <ValidationButton
+              party="owner"
+              label="Proprietário"
+              validated={ownerValidated}
+            />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function RentalProposalForm({
   initialProposal = null,
   onDirtyChange,
@@ -1006,6 +2123,10 @@ export default function RentalProposalForm({
   const [downloadingContractId, setDownloadingContractId] = useState<number | null>(null);
   const [openBoletos, setOpenBoletos] = useState(false);
   const [openSeguros, setOpenSeguros] = useState(false);
+  const [openAssinaturas, setOpenAssinaturas] = useState(false);
+  const [openTransferencias, setOpenTransferencias] = useState(false);
+  const [newUtilityLabel, setNewUtilityLabel] = useState("");
+  const [openVistoria, setOpenVistoria] = useState(false);
   const contractHighlightNeedles = useMemo(
     () => (editingGeneratedContract ? buildHighlightNeedles(editingGeneratedContract) : []),
     [editingGeneratedContract]
@@ -1071,6 +2192,16 @@ export default function RentalProposalForm({
     setOpenBoletos(index >= 3);
     // O card de seguros abre expandido enquanto a proposta esta nessa etapa.
     setOpenSeguros(initialProposal.currentStep === "seguros_pendentes");
+    // O card de assinaturas abre expandido enquanto a proposta esta nessa etapa.
+    setOpenAssinaturas(
+      initialProposal.currentStep === "assinaturas_pendentes"
+    );
+    // O card de transferencias abre expandido enquanto a proposta esta nessa etapa.
+    setOpenTransferencias(
+      initialProposal.currentStep === "transferencias_pendentes"
+    );
+    // O card de vistoria abre expandido enquanto a proposta esta nessa etapa.
+    setOpenVistoria(initialProposal.currentStep === "vistoria_pendente");
   }, [initialProposal]);
 
   useEffect(() => {
@@ -1555,6 +2686,91 @@ export default function RentalProposalForm({
   const allGeneratedContractsApproved =
     generatedContracts.length > 0 &&
     generatedContracts.every(contract => contract.status === "aprovado");
+
+  // Etapa 24 (Assinaturas): disponivel a partir de "assinaturas_pendentes".
+  const assinaturasReached =
+    isEditing &&
+    ASSINATURAS_OR_LATER_STEPS.has(initialProposal?.currentStep ?? "");
+  const signaturesQuery = trpc.rentalProposals.signatures.useQuery(
+    { id: initialProposal?.id ?? 0 },
+    { enabled: Boolean(assinaturasReached && initialProposal) }
+  );
+  const signaturesConfigured = signaturesQuery.data?.configured ?? false;
+  const signatureRecords = signaturesQuery.data?.signatures ?? [];
+  const approvedContracts = generatedContracts.filter(
+    contract => contract.status === "aprovado"
+  );
+  const assinaturasCompleted = APOS_ASSINATURAS_STEPS.has(
+    initialProposal?.currentStep ?? ""
+  );
+  const invalidateSignatures = async () => {
+    await invalidateProposal();
+    if (initialProposal) {
+      await utils.rentalProposals.signatures.invalidate({
+        id: initialProposal.id,
+      });
+    }
+  };
+
+  // Etapas 25-26 (Transferência de titularidade de contas).
+  const transferenciasReached =
+    isEditing &&
+    TRANSFERENCIAS_OR_LATER_STEPS.has(initialProposal?.currentStep ?? "");
+  const utilityTransfersQuery = trpc.rentalProposals.utilityTransfers.useQuery(
+    { id: initialProposal?.id ?? 0 },
+    { enabled: Boolean(transferenciasReached && initialProposal) }
+  );
+  const utilityTransfers = utilityTransfersQuery.data ?? [];
+  const utilityByKind = (kind: "energia" | "agua" | "gas") =>
+    utilityTransfers.find(item => item.kind === kind) ?? null;
+  // Contas padrao primeiro (na ordem energia/agua/gas), depois as personalizadas.
+  const utilityOrderIndex = (kind: string) => {
+    const index = ["energia", "agua", "gas"].indexOf(kind);
+    return index === -1 ? 99 : index;
+  };
+  const orderedUtilityTransfers = [...utilityTransfers].sort(
+    (a, b) => utilityOrderIndex(a.kind) - utilityOrderIndex(b.kind)
+  );
+  const transferenciasCompleted = APOS_TRANSFERENCIAS_STEPS.has(
+    initialProposal?.currentStep ?? ""
+  );
+  const invalidateUtilityTransfers = async () => {
+    await invalidateProposal();
+    if (initialProposal) {
+      await utils.rentalProposals.utilityTransfers.invalidate({
+        id: initialProposal.id,
+      });
+    }
+  };
+  const addUtilityTransfer = trpc.rentalProposals.addUtilityTransfer.useMutation({
+    onSuccess: async () => {
+      toast.success("Conta adicionada.");
+      setNewUtilityLabel("");
+      await invalidateUtilityTransfers();
+    },
+    onError: error =>
+      toast.error(error.message || "Não foi possível adicionar a conta."),
+  });
+
+  // Etapas 27-28 (Vistoria e laudo).
+  const vistoriaReached =
+    isEditing && VISTORIA_OR_LATER_STEPS.has(initialProposal?.currentStep ?? "");
+  const inspectionQuery = trpc.rentalProposals.inspection.useQuery(
+    { id: initialProposal?.id ?? 0 },
+    { enabled: Boolean(vistoriaReached && initialProposal) }
+  );
+  const inspection = inspectionQuery.data ?? null;
+  const vistoriaCompleted = APOS_VISTORIA_STEPS.has(
+    initialProposal?.currentStep ?? ""
+  );
+  const invalidateInspection = async () => {
+    await invalidateProposal();
+    if (initialProposal) {
+      await utils.rentalProposals.inspection.invalidate({
+        id: initialProposal.id,
+      });
+    }
+  };
   const proposalReferenceCode = initialProposal?.referenceCode ?? null;
   const appliedTemplateIds = (initialProposal?.contractTemplates ?? [])
     .map(template => String(template.id))
@@ -2390,6 +3606,196 @@ export default function RentalProposalForm({
               <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
                 Seguros confirmados. A proposta avançou para a etapa de
                 assinaturas.
+              </div>
+            ) : null}
+          </div>
+        </StepCard>
+      ) : null}
+      {assinaturasReached && initialProposal ? (
+        <StepCard
+          icon={<FileSignature className="h-5 w-5" />}
+          title="Assinaturas digitais"
+          subtitle="Envie os contratos aprovados para assinatura eletrônica (D4Sign) do locatário e do proprietário. Ao assinarem, o PDF assinado fica disponível e a proposta avança."
+          completed={assinaturasCompleted}
+          open={openAssinaturas}
+          onToggleOpen={() => setOpenAssinaturas(prev => !prev)}
+          headerAccessory={
+            assinaturasCompleted ? (
+              <span className="w-fit rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                Concluído
+              </span>
+            ) : (
+              <span className="w-fit rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                Aguardando assinaturas
+              </span>
+            )
+          }
+        >
+          <div className="space-y-4">
+            {!signaturesConfigured ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                Integração D4Sign ainda não configurada no servidor. Defina{" "}
+                <code>D4SIGN_TOKEN_API</code>, <code>D4SIGN_CRYPT_KEY</code> e{" "}
+                <code>D4SIGN_SAFE_UUID</code> no arquivo <code>.env</code> para
+                habilitar o envio.
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+                Para cada contrato aprovado, clique em “Enviar para assinatura”.
+                Os signatários recebem o e-mail da D4Sign; use “Atualizar status”
+                para checar a conclusão (ou aguarde o webhook).
+              </div>
+            )}
+
+            {approvedContracts.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                Nenhum contrato aprovado para assinar.
+              </p>
+            ) : (
+              <div className="grid gap-3 lg:grid-cols-2">
+                {approvedContracts.map(contract => (
+                  <RentalSignatureBlock
+                    key={contract.id}
+                    proposalId={initialProposal.id}
+                    contract={contract}
+                    configured={signaturesConfigured}
+                    record={
+                      signatureRecords.find(
+                        item => item.generatedContractId === contract.id
+                      ) ?? null
+                    }
+                    onChanged={invalidateSignatures}
+                  />
+                ))}
+              </div>
+            )}
+
+            {assinaturasCompleted ? (
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                Todos os contratos foram assinados. A proposta avançou para a
+                etapa de transferências de titularidade.
+              </div>
+            ) : null}
+          </div>
+        </StepCard>
+      ) : null}
+      {transferenciasReached && initialProposal ? (
+        <StepCard
+          icon={<FileText className="h-5 w-5" />}
+          title={"Transferência de titularidade"}
+          subtitle={
+            "Confirme a transferência das contas de consumo (energia, água e gás) para o nome do locatário, ou dispense a que não se aplicar."
+          }
+          completed={transferenciasCompleted}
+          open={openTransferencias}
+          onToggleOpen={() => setOpenTransferencias(prev => !prev)}
+          headerAccessory={
+            transferenciasCompleted ? (
+              <span className="w-fit rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                {"Concluído"}
+              </span>
+            ) : (
+              <span className="w-fit rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                {"Aguardando transferências"}
+              </span>
+            )
+          }
+        >
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+              {"O locatário deve transferir a titularidade das contas e enviar os comprovantes. Confirme cada conta ao receber, ou dispense quando não se aplicar (ex.: imóvel sem gás encanado)."}
+            </div>
+            <div className="grid gap-3 lg:grid-cols-2">
+              {orderedUtilityTransfers.map(transfer => (
+                <RentalUtilityTransferBlock
+                  key={transfer.id}
+                  proposalId={initialProposal.id}
+                  kind={transfer.kind}
+                  record={transfer}
+                  onChanged={invalidateUtilityTransfers}
+                />
+              ))}
+            </div>
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-white/60 p-3">
+              <Label className="text-xs">
+                {"Adicionar outra conta (ex.: Internet, IPTU, Condomínio)"}
+              </Label>
+              <div className="mt-1 flex flex-wrap gap-2">
+                <Input
+                  className={`${FIELD_CLASS} flex-1`}
+                  value={newUtilityLabel}
+                  onChange={event => setNewUtilityLabel(event.target.value)}
+                  placeholder="Nome da conta"
+                  onKeyDown={event => {
+                    if (event.key === "Enter" && newUtilityLabel.trim()) {
+                      event.preventDefault();
+                      addUtilityTransfer.mutate({
+                        id: initialProposal.id,
+                        label: newUtilityLabel.trim(),
+                      });
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-2 rounded-full bg-white"
+                  disabled={
+                    addUtilityTransfer.isPending || !newUtilityLabel.trim()
+                  }
+                  onClick={() =>
+                    addUtilityTransfer.mutate({
+                      id: initialProposal.id,
+                      label: newUtilityLabel.trim(),
+                    })
+                  }
+                >
+                  <Plus className="h-4 w-4" />
+                  {addUtilityTransfer.isPending ? "Adicionando..." : "Adicionar"}
+                </Button>
+              </div>
+            </div>
+            {transferenciasCompleted ? (
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                {"Transferências concluídas. A proposta avançou para a etapa de vistoria."}
+              </div>
+            ) : null}
+          </div>
+        </StepCard>
+      ) : null}
+      {vistoriaReached && initialProposal ? (
+        <StepCard
+          icon={<FileText className="h-5 w-5" />}
+          title={"Vistoria e laudo"}
+          subtitle={
+            "Solicite a vistoria ao vistoriador (WhatsApp), anexe o laudo recebido e confirme a validação do estado do imóvel pelo locatário e pelo proprietário."
+          }
+          completed={vistoriaCompleted}
+          open={openVistoria}
+          onToggleOpen={() => setOpenVistoria(prev => !prev)}
+          headerAccessory={
+            vistoriaCompleted ? (
+              <span className="w-fit rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                {"Concluído"}
+              </span>
+            ) : (
+              <span className="w-fit rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                {"Aguardando vistoria"}
+              </span>
+            )
+          }
+        >
+          <div className="space-y-4">
+            <RentalInspectionPanel
+              proposalId={initialProposal.id}
+              record={inspection}
+              referenceCode={initialProposal.referenceCode ?? null}
+              propertyAddress={buildPropertyAddress(initialProposal.property)}
+              onChanged={invalidateInspection}
+            />
+            {vistoriaCompleted ? (
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                {"Vistoria concluída. A proposta avançou para a entrega de chaves."}
               </div>
             ) : null}
           </div>

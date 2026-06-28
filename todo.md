@@ -74,9 +74,28 @@
 - [~] Código de referência da proposta (migração 0028 criada — validar implementação)
 - [x] Geração de boletos do período — automática na aprovação dos contratos (`autoGenerateRentalProposalBoletos`)
 - [x] Recebimento de comprovantes de seguro fiança e incêndio (etapa Seguros: confirmar/dispensar, anexo, e-mail + link wa.me)
-- [ ] Assinaturas digitais (preferência futura por GOV.BR)
-- [ ] Transferência de titularidade de contas (energia, água, gás)
-- [ ] Vistoria e laudo (assinatura locatário/proprietário)
+- [~] Assinaturas digitais — integração D4Sign (avançada por e-mail, configurável p/ ICP-Brasil)
+  - backend completo (tabela `rentalProposalSignatures`, serviço `server/integrations/d4sign.ts`,
+    mutations `signatures`/`sendForSignature`/`refreshSignatureStatus`/`cancelSignature`,
+    webhook `/api/integrations/d4sign/webhook`) + card "Assinaturas" no frontend
+  - envio MANUAL por contrato aprovado; signatários = locatário(s) + proprietário(s)
+  - FALTA: credenciais D4Sign no `.env` (D4SIGN_TOKEN_API/CRYPT_KEY/SAFE_UUID) p/ validar ponta a ponta
+  - GOV.BR fica como futuro (exige credenciamento SGD/ME, não self-service)
+  - FALLBACK MANUAL: botão "Marcar como assinado" (anexo opcional do PDF) avança sem D4Sign
+    (mutation `markSignatureSignedManually`) — contingência e desbloqueio de testes
+- [x] Transferência de titularidade de contas (energia, água, gás)
+  - tabela `rentalProposalUtilityTransfers` (energia/agua/gas + contas `custom_*`), card no padrão dos Seguros
+    (comprovante + observações + preview), confirmar/dispensar/reabrir
+  - CONTAS PERSONALIZADAS: admin adiciona/remove contas extras (Internet, IPTU etc.) — `addUtilityTransfer`/`removeUtilityTransfer`
+  - mutations `utilityTransfers`/`confirmUtilityTransfer`/`dispenseUtilityTransfer`/`reopenUtilityTransfer`
+  - ao concluir TODAS as contas → avança para `vistoria_pendente`
+  - PENDENTE (melhoria): e-mail/wa.me de solicitação ao locatário (hoje só cria as pendências)
+- [x] Vistoria e laudo
+  - tabela `rentalProposalInspections` (1 por proposta), card "Vistoria e laudo"
+  - vistoriador = contato externo (nome/telefone/e-mail); notifica por link wa.me (sem push/API)
+  - fluxo: solicitar vistoria → anexar laudo → validar locatário + proprietário → avança `entrega_chaves_pendente`
+  - mutations `inspection`/`requestInspection`/`uploadInspectionLaudo`/`setInspectionValidation` + `inspectionLaudo`
+  - PENDENTE (melhoria): e-mail automático ao vistoriador; agendamento (scheduledAt na UI)
 - [ ] Entrega de chaves + e-mail de boas-vindas
 - [ ] Conversão em locação ativa (sai de Propostas → Locações Ativas)
 

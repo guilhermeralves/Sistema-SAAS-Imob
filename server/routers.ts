@@ -1525,6 +1525,9 @@ async function maybeAdvanceAfterInsurances(proposalId: number) {
       status: "assinaturas_pendentes",
       currentStep: "assinaturas_pendentes",
     });
+    // Entrou na etapa de assinaturas: cria as assinaturas pendentes (uma por
+    // contrato aprovado). O envio a D4Sign e manual (admin clica "Enviar").
+    await initiateRentalSignatureStage(proposalId);
   }
 }
 
@@ -1552,6 +1555,434 @@ function assertRentalInsuranceStage(
       message:
         "A gestao de seguros so esta disponivel na etapa de seguros da proposta.",
     });
+  }
+}
+
+// ===========================================================================
+// Etapa 24 - Assinaturas digitais (provedor: D4Sign)
+// ===========================================================================
+
+// Inicia a etapa de assinaturas: garante uma linha de assinatura pendente para
+// cada contrato aprovado. Best-effort, nunca lanca.
+async function initiateRentalSignatureStage(proposalId: number) {
+  try {
+    const { ensureRentalProposalSignatures } = await import("./db");
+    await ensureRentalProposalSignatures(proposalId);
+  } catch (error) {
+    console.warn(
+      "[locacoes] Falha ao iniciar a etapa de assinaturas:",
+      error
+    );
+  }
+}
+
+// Garante que a proposta esta numa etapa em que a gestao de assinaturas e valida
+// (etapa de assinaturas ou a imediatamente seguinte, para permitir correcoes).
+function assertRentalSignatureStage(
+  proposal:
+    | { currentStep: string; referenceCode: string | null }
+    | undefined
+    | null
+): asserts proposal is { currentStep: string; referenceCode: string | null } {
+  if (!proposal) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Proposta de locacao nao encontrada.",
+    });
+  }
+  if (
+    !proposal.referenceCode ||
+    (proposal.currentStep !== "assinaturas_pendentes" &&
+      proposal.currentStep !== "transferencias_pendentes")
+  ) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "A gestao de assinaturas so esta disponivel na etapa de assinaturas da proposta.",
+    });
+  }
+}
+
+// Monta o .docx (base64) do contrato aprovado, preservando o layout do modelo
+// Word, com o rodape do codigo de referencia. Reaproveita a mesma logica do
+// download de contratos.
+async function buildApprovedContractDocxBase64(params: {
+  contract: {
+    id: number;
+    title: string;
+    reviewedText: string;
+    contractTemplateId: number;
+  };
+  referenceCode: string | null;
+}): Promise<{ base64: string; fileName: string }> {
+  const { getContractTemplateById } = await import("./db");
+  const { renderContractDocx, ContractDocxFillError } = await import(
+    "./contract-docx"
+  );
+  const { buildContractReferenceFooter } = await import(
+    "@shared/contract-reference"
+  );
+  const template = await getContractTemplateById(
+    params.contract.contractTemplateId
+  );
+  if (!template) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "O modelo .docx deste contrato nao existe mais. Selecione os modelos da proposta novamente.",
+    });
+  }
+
+  const isDocx =
+    template.originalMimeType ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    template.originalFileName.toLowerCase().endsWith(".docx");
+  if (!isDocx) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "O modelo deste contrato nao e um arquivo .docx, entao nao e possivel enviar preservando o layout.",
+    });
+  }
+
+  const templateBuffer = decodeDocxDataUrl(template.originalFileData);
+  let docxBuffer: Buffer;
+  try {
+    docxBuffer = renderContractDocx({
+      templateBuffer,
+      bodyText: params.contract.reviewedText,
+      footerText: params.referenceCode
+        ? buildContractReferenceFooter(params.referenceCode)
+        : null,
+    });
+  } catch (error) {
+    if (error instanceof ContractDocxFillError) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: error.message });
+    }
+    throw error;
+  }
+
+  const safeTitle =
+    params.contract.title
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-zA-Z0-9-_]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 80) || "contrato";
+  const referenceSuffix = params.referenceCode ? `-${params.referenceCode}` : "";
+
+  return {
+    base64: docxBuffer.toString("base64"),
+    fileName: `${safeTitle}${referenceSuffix}.docx`,
+  };
+}
+
+// Coleta os signatarios da proposta (locatarios + proprietarios) com e-mail.
+// Lanca BAD_REQUEST se faltar e-mail em algum envolvido obrigatorio.
+function collectRentalSigners(proposal: {
+  tenants?: Array<{ name?: string | null; email?: string | null }> | null;
+  tenant?: { name?: string | null; email?: string | null } | null;
+  owners?: Array<{ name?: string | null; email?: string | null }> | null;
+}): Array<{
+  email: string;
+  displayName: string;
+  role: "locatario" | "proprietario";
+}> {
+  const signers: Array<{
+    email: string;
+    displayName: string;
+    role: "locatario" | "proprietario";
+  }> = [];
+  const missing: string[] = [];
+
+  const tenants =
+    proposal.tenants && proposal.tenants.length > 0
+      ? proposal.tenants
+      : proposal.tenant
+        ? [proposal.tenant]
+        : [];
+
+  for (const tenant of tenants) {
+    const email = tenant.email?.trim();
+    const name = tenant.name?.trim() || email || "Locatario";
+    if (!email) {
+      missing.push(`Locatario "${name}"`);
+      continue;
+    }
+    signers.push({ email, displayName: name, role: "locatario" });
+  }
+
+  for (const owner of proposal.owners ?? []) {
+    const email = owner.email?.trim();
+    const name = owner.name?.trim() || email || "Proprietario";
+    if (!email) {
+      missing.push(`Proprietario "${name}"`);
+      continue;
+    }
+    signers.push({ email, displayName: name, role: "proprietario" });
+  }
+
+  if (signers.length === 0) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "Nenhum signatario com e-mail valido. Cadastre o e-mail do locatario e do proprietario antes de enviar para assinatura.",
+    });
+  }
+  if (missing.length > 0) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `Falta e-mail de: ${missing.join(
+        ", "
+      )}. Cadastre antes de enviar para assinatura.`,
+    });
+  }
+
+  return signers;
+}
+
+// Sincroniza uma assinatura com o provedor: consulta o status, e se finalizado
+// baixa o PDF assinado e marca como "assinado"; se cancelado marca "cancelado".
+// Best-effort em relacao a rede, mas propaga erros de configuracao.
+async function syncRentalSignatureFromProvider(signatureId: number) {
+  const {
+    getRentalProposalSignatureById,
+    upsertRentalProposalSignature,
+  } = await import("./db");
+  const {
+    getD4SignConfig,
+    getDocumentStatus,
+    downloadSigned,
+  } = await import("./integrations/d4sign");
+
+  const signature = await getRentalProposalSignatureById(signatureId);
+  if (!signature || !signature.externalDocumentUuid) return signature;
+  if (signature.status === "assinado" || signature.status === "cancelado") {
+    return signature;
+  }
+
+  const config = getD4SignConfig();
+  const status = await getDocumentStatus(
+    config,
+    signature.externalDocumentUuid
+  );
+
+  if (status.finished) {
+    const signed = await downloadSigned(
+      config,
+      signature.externalDocumentUuid
+    );
+    await upsertRentalProposalSignature(
+      signature.rentalProposalId,
+      signature.generatedContractId,
+      {
+        status: "assinado",
+        signedAt: new Date(),
+        signedFileData: signed.dataUrl,
+        signedFileName: signed.fileName,
+        lastError: null,
+      }
+    );
+    await maybeAdvanceAfterSignatures(signature.rentalProposalId);
+  } else if (status.cancelled) {
+    await upsertRentalProposalSignature(
+      signature.rentalProposalId,
+      signature.generatedContractId,
+      { status: "cancelado" }
+    );
+  }
+
+  return await getRentalProposalSignatureById(signatureId);
+}
+
+// Avanca a proposta para transferencias quando todas as assinaturas dos
+// contratos aprovados estiverem assinadas. So atua na etapa de assinaturas.
+async function maybeAdvanceAfterSignatures(proposalId: number) {
+  const {
+    getRentalProposalById,
+    getRentalProposalSignatures,
+    updateRentalProposal,
+  } = await import("./db");
+
+  const proposal = await getRentalProposalById(proposalId);
+  if (!proposal || proposal.currentStep !== "assinaturas_pendentes") return;
+
+  const approvedContracts = proposal.generatedContracts.filter(
+    item => item.status === "aprovado"
+  );
+  if (approvedContracts.length === 0) return;
+
+  const signatures = await getRentalProposalSignatures(proposalId);
+  const signedContractIds = new Set(
+    signatures
+      .filter(item => item.status === "assinado")
+      .map(item => item.generatedContractId)
+  );
+
+  const allSigned = approvedContracts.every(contract =>
+    signedContractIds.has(contract.id)
+  );
+
+  if (allSigned) {
+    await updateRentalProposal(proposalId, {
+      status: "transferencias_pendentes",
+      currentStep: "transferencias_pendentes",
+    });
+    // Entrou na etapa de transferencias: cria as contas pendentes.
+    await initiateRentalUtilityTransferStage(proposalId);
+  }
+}
+
+// ===========================================================================
+// Etapas 25-26 - Transferencia de titularidade de contas (energia/agua/gas)
+// ===========================================================================
+
+// Inicia a etapa: garante uma linha pendente por conta. Best-effort, nunca lanca.
+async function initiateRentalUtilityTransferStage(proposalId: number) {
+  try {
+    const { ensureRentalProposalUtilityTransfers } = await import("./db");
+    await ensureRentalProposalUtilityTransfers(proposalId);
+  } catch (error) {
+    console.warn(
+      "[locacoes] Falha ao iniciar a etapa de transferencias:",
+      error
+    );
+  }
+}
+
+// Garante que a proposta esta numa etapa em que a gestao de transferencias e
+// valida (etapa de transferencias ou a imediatamente seguinte).
+function assertRentalUtilityTransferStage(
+  proposal:
+    | { currentStep: string; referenceCode: string | null }
+    | undefined
+    | null
+): asserts proposal is { currentStep: string; referenceCode: string | null } {
+  if (!proposal) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Proposta de locacao nao encontrada.",
+    });
+  }
+  if (
+    proposal.currentStep !== "transferencias_pendentes" &&
+    proposal.currentStep !== "vistoria_pendente"
+  ) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "A gestao de transferencias so esta disponivel na etapa de transferencias da proposta.",
+    });
+  }
+}
+
+// Avanca para vistoria quando todas as contas estiverem confirmadas/dispensadas.
+async function maybeAdvanceAfterUtilityTransfers(proposalId: number) {
+  const {
+    getRentalProposalById,
+    getRentalProposalUtilityTransfers,
+    updateRentalProposal,
+  } = await import("./db");
+
+  const proposal = await getRentalProposalById(proposalId);
+  if (!proposal || proposal.currentStep !== "transferencias_pendentes") return;
+
+  const transfers = await getRentalProposalUtilityTransfers(proposalId);
+  if (transfers.length === 0) return;
+
+  // Avanca quando TODAS as contas (padrao + personalizadas) estiverem
+  // confirmadas ou dispensadas.
+  const allResolved = transfers.every(
+    item => item.status === "confirmado" || item.status === "dispensado"
+  );
+
+  if (allResolved) {
+    await updateRentalProposal(proposalId, {
+      status: "vistoria_pendente",
+      currentStep: "vistoria_pendente",
+    });
+    await initiateRentalInspectionStage(proposalId);
+  }
+}
+
+// ===========================================================================
+// Etapas 27-28 - Vistoria e laudo
+// ===========================================================================
+
+async function initiateRentalInspectionStage(proposalId: number) {
+  try {
+    const { ensureRentalProposalInspection } = await import("./db");
+    await ensureRentalProposalInspection(proposalId);
+  } catch (error) {
+    console.warn("[locacoes] Falha ao iniciar a etapa de vistoria:", error);
+  }
+}
+
+function assertRentalInspectionStage(
+  proposal:
+    | { currentStep: string; referenceCode: string | null }
+    | undefined
+    | null
+): asserts proposal is { currentStep: string; referenceCode: string | null } {
+  if (!proposal) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Proposta de locacao nao encontrada.",
+    });
+  }
+  if (
+    proposal.currentStep !== "vistoria_pendente" &&
+    proposal.currentStep !== "entrega_chaves_pendente"
+  ) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "A gestao de vistoria so esta disponivel na etapa de vistoria da proposta.",
+    });
+  }
+}
+
+// Avanca para entrega de chaves quando o laudo foi recebido e locatario e
+// proprietario validaram o estado do imovel.
+async function maybeAdvanceAfterInspection(proposalId: number) {
+  const {
+    getRentalProposalById,
+    getRentalProposalInspection,
+    updateRentalProposal,
+  } = await import("./db");
+
+  const proposal = await getRentalProposalById(proposalId);
+  if (!proposal || proposal.currentStep !== "vistoria_pendente") return;
+
+  const inspection = await getRentalProposalInspection(proposalId);
+  if (!inspection) return;
+
+  if (
+    inspection.laudoFileName &&
+    inspection.tenantValidatedAt &&
+    inspection.ownerValidatedAt
+  ) {
+    await updateRentalProposal(proposalId, {
+      status: "entrega_chaves_pendente",
+      currentStep: "entrega_chaves_pendente",
+    });
+  }
+}
+
+// Callback do webhook da D4Sign: dado o uuid do documento, sincroniza a
+// assinatura correspondente. Best-effort, nunca lanca.
+export async function handleD4SignSignatureCallback(externalUuid: string) {
+  try {
+    const { getRentalProposalSignatureByExternalUuid } = await import("./db");
+    const signature =
+      await getRentalProposalSignatureByExternalUuid(externalUuid);
+    if (!signature) return;
+    await syncRentalSignatureFromProvider(signature.id);
+  } catch (error) {
+    console.warn(
+      "[locacoes] Falha ao processar webhook de assinatura D4Sign:",
+      error
+    );
   }
 }
 
@@ -2234,79 +2665,12 @@ export const appRouter = router({
   }),
 
   integracoes: router({
-    list: adminProcedure
-      .input(listIntegrationsSchema.optional())
-      .query(async ({ input }) => {
-        const { listIntegrations } = await import("./db");
-        return await listIntegrations({
-          category: input?.category,
-          status: input?.status,
-        });
-      }),
-    create: adminProcedure
-      .input(integrationMutationSchema)
-      .mutation(async ({ ctx, input }) => {
-        const { createIntegration } = await import("./db");
-
-        return await createIntegration({
-          name: input.name,
-          category: input.category,
-          provider: input.provider,
-          connectionType: input.connectionType,
-          status: input.status,
-          endpoint: input.endpoint ?? null,
-          apiKey: input.apiKey ?? null,
-          configJson: input.configJson ?? null,
-          notes: input.notes ?? null,
-          createdByUserId: ctx.user.id,
-        });
-      }),
-    update: adminProcedure
-      .input(updateIntegrationSchema)
-      .mutation(async ({ input }) => {
-        const { updateIntegration } = await import("./db");
-        await ensureIntegrationExists(input.id);
-
-        const updated = await updateIntegration(input.id, {
-          name: input.name,
-          category: input.category,
-          provider: input.provider,
-          connectionType: input.connectionType,
-          status: input.status,
-          endpoint: input.endpoint ?? null,
-          apiKey: input.apiKey ?? null,
-          configJson: input.configJson ?? null,
-          notes: input.notes ?? null,
-        });
-
-        if (!updated) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Integracao nao encontrada.",
-          });
-        }
-
-        return updated;
-      }),
-    updateStatus: adminProcedure
-      .input(updateIntegrationStatusSchema)
-      .mutation(async ({ input }) => {
-        const { updateIntegration } = await import("./db");
-        await ensureIntegrationExists(input.id);
-
-        const updated = await updateIntegration(input.id, {
-          status: input.status,
-        });
-
-        if (!updated) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Integracao nao encontrada.",
-          });
-        }
-
-        return updated;
-      }),
+    // Integracoes nativas (configuradas por .env): info previa + status calculado.
+    // O cadastro manual de integracoes foi descontinuado em favor deste modelo.
+    native: adminProcedure.query(async () => {
+      const { getNativeIntegrations } = await import("./integrations/catalog");
+      return getNativeIntegrations();
+    }),
   }),
 
   launches: router({
@@ -5079,6 +5443,596 @@ export const appRouter = router({
           }
         }
         return { success: true, emailSent } as const;
+      }),
+    // -------- Etapa 24: Assinaturas digitais (D4Sign) --------
+    signatures: adminProcedure.input(idSchema).query(async ({ input }) => {
+      const {
+        getRentalProposalById,
+        ensureRentalProposalSignatures,
+        getRentalProposalSignatures,
+      } = await import("./db");
+      const { isD4SignConfigured } = await import("./integrations/d4sign");
+      const proposal = await getRentalProposalById(input.id);
+      // Cria as linhas pendentes ao abrir a etapa (idempotente).
+      if (
+        proposal &&
+        (proposal.currentStep === "assinaturas_pendentes" ||
+          proposal.currentStep === "transferencias_pendentes")
+      ) {
+        await ensureRentalProposalSignatures(input.id);
+      }
+      const signatures = await getRentalProposalSignatures(input.id);
+      return { configured: isD4SignConfigured(), signatures } as const;
+    }),
+    signatureProof: adminProcedure
+      .input(z.object({ signatureId: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const { getRentalProposalSignatureById } = await import("./db");
+        const row = await getRentalProposalSignatureById(input.signatureId);
+        if (!row || !row.signedFileData) return null;
+        return {
+          fileName: row.signedFileName ?? "contrato-assinado.pdf",
+          contentType: "application/pdf",
+          dataUrl: row.signedFileData,
+        };
+      }),
+    sendForSignature: adminProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          contractId: z.number().int().positive(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const {
+          getRentalProposalById,
+          getRentalProposalGeneratedContractById,
+          upsertRentalProposalSignature,
+        } = await import("./db");
+        const {
+          isD4SignConfigured,
+          getD4SignConfig,
+          uploadDocxBase64,
+          createSignersList,
+          registerWebhook,
+          sendToSigner,
+          D4SignError,
+        } = await import("./integrations/d4sign");
+
+        const proposal = await getRentalProposalById(input.id);
+        assertRentalSignatureStage(proposal);
+
+        if (!isD4SignConfigured()) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "Integracao D4Sign nao configurada. Defina D4SIGN_TOKEN_API, D4SIGN_CRYPT_KEY e D4SIGN_SAFE_UUID no .env.",
+          });
+        }
+
+        const contract = await getRentalProposalGeneratedContractById(
+          input.contractId
+        );
+        if (
+          !contract ||
+          contract.rentalProposalId !== input.id ||
+          contract.status !== "aprovado"
+        ) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "Contrato nao encontrado ou ainda nao aprovado para esta proposta.",
+          });
+        }
+
+        const existing = (proposal.signatures ?? []).find(
+          item => item.generatedContractId === contract.id
+        );
+        if (existing && existing.status === "assinado") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Este contrato ja foi assinado.",
+          });
+        }
+        if (existing && existing.status === "enviado") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "Este contrato ja foi enviado para assinatura. Atualize o status ou cancele antes de reenviar.",
+          });
+        }
+
+        const signers = collectRentalSigners(proposal);
+        const config = getD4SignConfig();
+
+        try {
+          const { base64, fileName } = await buildApprovedContractDocxBase64({
+            contract,
+            referenceCode: proposal.referenceCode ?? null,
+          });
+
+          const uuid = await uploadDocxBase64(config, {
+            base64,
+            name: fileName,
+          });
+          await createSignersList(config, uuid, signers);
+          // Webhook e best-effort: se falhar, o admin pode atualizar manualmente.
+          try {
+            await registerWebhook(config, uuid);
+          } catch (error) {
+            console.warn(
+              "[locacoes] Falha ao registrar webhook D4Sign (segue sem webhook):",
+              error
+            );
+          }
+          await sendToSigner(config, uuid, {
+            message: `Contrato de locacao ${
+              proposal.referenceCode ?? ""
+            } para assinatura.`.trim(),
+          });
+
+          const saved = await upsertRentalProposalSignature(
+            input.id,
+            contract.id,
+            {
+              status: "enviado",
+              environment: config.environment,
+              externalDocumentUuid: uuid,
+              signersSnapshot: JSON.stringify(signers),
+              sentAt: new Date(),
+              sentByUserId: ctx.user.id,
+              lastError: null,
+            }
+          );
+          return { success: true, signature: saved } as const;
+        } catch (error) {
+          const message =
+            error instanceof D4SignError
+              ? error.message
+              : error instanceof Error
+                ? error.message
+                : "Falha ao enviar para a D4Sign.";
+          await upsertRentalProposalSignature(input.id, contract.id, {
+            status: "erro",
+            lastError: message,
+          });
+          throw new TRPCError({ code: "BAD_REQUEST", message });
+        }
+      }),
+    refreshSignatureStatus: adminProcedure
+      .input(z.object({ signatureId: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        const { getRentalProposalSignatureById } = await import("./db");
+        const row = await getRentalProposalSignatureById(input.signatureId);
+        if (!row) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Assinatura nao encontrada.",
+          });
+        }
+        try {
+          const updated = await syncRentalSignatureFromProvider(
+            input.signatureId
+          );
+          return { success: true, signature: updated } as const;
+        } catch (error) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Falha ao consultar a D4Sign.";
+          throw new TRPCError({ code: "BAD_REQUEST", message });
+        }
+      }),
+    cancelSignature: adminProcedure
+      .input(z.object({ signatureId: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        const {
+          getRentalProposalSignatureById,
+          upsertRentalProposalSignature,
+        } = await import("./db");
+        const { getD4SignConfig, cancelDocument } = await import(
+          "./integrations/d4sign"
+        );
+        const row = await getRentalProposalSignatureById(input.signatureId);
+        if (!row) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Assinatura nao encontrada.",
+          });
+        }
+        if (row.externalDocumentUuid) {
+          try {
+            await cancelDocument(
+              getD4SignConfig(),
+              row.externalDocumentUuid,
+              "Cancelado pela imobiliaria."
+            );
+          } catch (error) {
+            console.warn(
+              "[locacoes] Falha ao cancelar documento na D4Sign:",
+              error
+            );
+          }
+        }
+        const updated = await upsertRentalProposalSignature(
+          row.rentalProposalId,
+          row.generatedContractId,
+          {
+            status: "cancelado",
+            externalDocumentUuid: null,
+            lastError: null,
+          }
+        );
+        return { success: true, signature: updated } as const;
+      }),
+    // Fallback manual: marca um contrato como assinado sem passar pela D4Sign
+    // (assinatura coletada por fora). Permite anexar o PDF assinado e avanca a
+    // proposta quando todos os contratos estiverem assinados.
+    markSignatureSignedManually: adminProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          contractId: z.number().int().positive(),
+          proof: z
+            .object({
+              fileName: z.string().min(1).max(255),
+              contentType: z.string().min(1).max(120),
+              dataUrl: z.string().min(1).max(20_000_000),
+            })
+            .optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const {
+          getRentalProposalById,
+          getRentalProposalGeneratedContractById,
+          upsertRentalProposalSignature,
+        } = await import("./db");
+
+        const proposal = await getRentalProposalById(input.id);
+        assertRentalSignatureStage(proposal);
+
+        const contract = await getRentalProposalGeneratedContractById(
+          input.contractId
+        );
+        if (
+          !contract ||
+          contract.rentalProposalId !== input.id ||
+          contract.status !== "aprovado"
+        ) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "Contrato nao encontrado ou ainda nao aprovado para esta proposta.",
+          });
+        }
+
+        await upsertRentalProposalSignature(input.id, contract.id, {
+          status: "assinado",
+          signedAt: new Date(),
+          sentByUserId: ctx.user.id,
+          lastError: null,
+          ...(input.proof
+            ? {
+                signedFileData: input.proof.dataUrl,
+                signedFileName: input.proof.fileName,
+              }
+            : {}),
+        });
+
+        await maybeAdvanceAfterSignatures(input.id);
+        return { success: true } as const;
+      }),
+    // -------- Etapas 25-26: Transferencia de titularidade de contas --------
+    utilityTransfers: adminProcedure
+      .input(idSchema)
+      .query(async ({ input }) => {
+        const {
+          getRentalProposalById,
+          ensureRentalProposalUtilityTransfers,
+          getRentalProposalUtilityTransfers,
+        } = await import("./db");
+        const proposal = await getRentalProposalById(input.id);
+        if (
+          proposal &&
+          (proposal.currentStep === "transferencias_pendentes" ||
+            proposal.currentStep === "vistoria_pendente")
+        ) {
+          await ensureRentalProposalUtilityTransfers(input.id);
+        }
+        return await getRentalProposalUtilityTransfers(input.id);
+      }),
+    utilityTransferProof: adminProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          kind: z.string().min(1).max(40),
+        })
+      )
+      .query(async ({ input }) => {
+        const { getRentalProposalUtilityTransferByKind } = await import("./db");
+        const row = await getRentalProposalUtilityTransferByKind(
+          input.id,
+          input.kind
+        );
+        if (!row || !row.proofData) return null;
+        return {
+          fileName: row.proofFileName ?? "comprovante",
+          contentType: row.proofContentType ?? "application/octet-stream",
+          dataUrl: row.proofData,
+        };
+      }),
+    confirmUtilityTransfer: adminProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          kind: z.string().min(1).max(40),
+          notes: z.string().max(2000).optional(),
+          proof: z
+            .object({
+              fileName: z.string().min(1).max(255),
+              contentType: z.string().min(1).max(120),
+              dataUrl: z.string().min(1).max(14_000_000),
+            })
+            .optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { getRentalProposalById, upsertRentalProposalUtilityTransfer } =
+          await import("./db");
+        const proposal = await getRentalProposalById(input.id);
+        assertRentalUtilityTransferStage(proposal);
+
+        await upsertRentalProposalUtilityTransfer(input.id, input.kind, {
+          status: "confirmado",
+          notes: input.notes?.trim() || null,
+          confirmedAt: new Date(),
+          confirmedByUserId: ctx.user.id,
+          ...(input.proof
+            ? {
+                proofData: input.proof.dataUrl,
+                proofFileName: input.proof.fileName,
+                proofContentType: input.proof.contentType,
+              }
+            : {}),
+        });
+
+        await maybeAdvanceAfterUtilityTransfers(input.id);
+        return { success: true } as const;
+      }),
+    dispenseUtilityTransfer: adminProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          kind: z.string().min(1).max(40),
+          notes: z.string().max(2000).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { getRentalProposalById, upsertRentalProposalUtilityTransfer } =
+          await import("./db");
+        const proposal = await getRentalProposalById(input.id);
+        assertRentalUtilityTransferStage(proposal);
+
+        await upsertRentalProposalUtilityTransfer(input.id, input.kind, {
+          status: "dispensado",
+          notes: input.notes?.trim() || null,
+          confirmedAt: new Date(),
+          confirmedByUserId: ctx.user.id,
+        });
+
+        await maybeAdvanceAfterUtilityTransfers(input.id);
+        return { success: true } as const;
+      }),
+    reopenUtilityTransfer: adminProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          kind: z.string().min(1).max(40),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const {
+          getRentalProposalById,
+          upsertRentalProposalUtilityTransfer,
+          updateRentalProposal,
+        } = await import("./db");
+        const proposal = await getRentalProposalById(input.id);
+        assertRentalUtilityTransferStage(proposal);
+
+        await upsertRentalProposalUtilityTransfer(input.id, input.kind, {
+          status: "pendente",
+          confirmedAt: null,
+          confirmedByUserId: null,
+        });
+
+        // Se a proposta ja tinha avancado, volta para a etapa de transferencias.
+        if (proposal.currentStep === "vistoria_pendente") {
+          await updateRentalProposal(input.id, {
+            status: "transferencias_pendentes",
+            currentStep: "transferencias_pendentes",
+          });
+        }
+        return { success: true } as const;
+      }),
+    addUtilityTransfer: adminProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          label: z.string().min(1).max(160),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const {
+          getRentalProposalById,
+          createCustomUtilityTransfer,
+          updateRentalProposal,
+        } = await import("./db");
+        const proposal = await getRentalProposalById(input.id);
+        assertRentalUtilityTransferStage(proposal);
+
+        const created = await createCustomUtilityTransfer(
+          input.id,
+          input.label.trim()
+        );
+        // A nova conta entra pendente; se a proposta ja tinha avancado, volta.
+        if (proposal.currentStep === "vistoria_pendente") {
+          await updateRentalProposal(input.id, {
+            status: "transferencias_pendentes",
+            currentStep: "transferencias_pendentes",
+          });
+        }
+        return { success: true, transfer: created } as const;
+      }),
+    removeUtilityTransfer: adminProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          kind: z.string().min(1).max(40),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const {
+          getRentalProposalById,
+          getRentalProposalUtilityTransferByKind,
+          deleteRentalProposalUtilityTransfer,
+        } = await import("./db");
+        const proposal = await getRentalProposalById(input.id);
+        assertRentalUtilityTransferStage(proposal);
+
+        if (["energia", "agua", "gas"].includes(input.kind)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "As contas padrao (energia, agua, gas) nao podem ser removidas.",
+          });
+        }
+
+        const row = await getRentalProposalUtilityTransferByKind(
+          input.id,
+          input.kind
+        );
+        if (row) {
+          await deleteRentalProposalUtilityTransfer(row.id);
+        }
+        // Remover uma conta pendente pode completar a etapa.
+        await maybeAdvanceAfterUtilityTransfers(input.id);
+        return { success: true } as const;
+      }),
+    // -------- Etapas 27-28: Vistoria e laudo --------
+    inspection: adminProcedure.input(idSchema).query(async ({ input }) => {
+      const { getRentalProposalById, ensureRentalProposalInspection } =
+        await import("./db");
+      const proposal = await getRentalProposalById(input.id);
+      if (
+        proposal &&
+        (proposal.currentStep === "vistoria_pendente" ||
+          proposal.currentStep === "entrega_chaves_pendente")
+      ) {
+        return await ensureRentalProposalInspection(input.id);
+      }
+      const { getRentalProposalInspection } = await import("./db");
+      return await getRentalProposalInspection(input.id);
+    }),
+    inspectionLaudo: adminProcedure
+      .input(idSchema)
+      .query(async ({ input }) => {
+        const { getRentalProposalInspectionLaudo } = await import("./db");
+        const row = await getRentalProposalInspectionLaudo(input.id);
+        if (!row || !row.laudoData) return null;
+        return {
+          fileName: row.laudoFileName ?? "laudo",
+          contentType: row.laudoContentType ?? "application/octet-stream",
+          dataUrl: row.laudoData,
+        };
+      }),
+    requestInspection: adminProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          inspectorName: z.string().min(1).max(160),
+          inspectorPhone: z.string().max(40).optional(),
+          inspectorEmail: z.string().max(255).optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { getRentalProposalById, upsertRentalProposalInspection } =
+          await import("./db");
+        const proposal = await getRentalProposalById(input.id);
+        assertRentalInspectionStage(proposal);
+
+        await upsertRentalProposalInspection(input.id, {
+          status: "solicitada",
+          inspectorName: input.inspectorName.trim(),
+          inspectorPhone: input.inspectorPhone?.trim() || null,
+          inspectorEmail: input.inspectorEmail?.trim() || null,
+          requestedAt: new Date(),
+        });
+        return { success: true } as const;
+      }),
+    uploadInspectionLaudo: adminProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          notes: z.string().max(2000).optional(),
+          proof: z.object({
+            fileName: z.string().min(1).max(255),
+            contentType: z.string().min(1).max(120),
+            dataUrl: z.string().min(1).max(20_000_000),
+          }),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { getRentalProposalById, upsertRentalProposalInspection } =
+          await import("./db");
+        const proposal = await getRentalProposalById(input.id);
+        assertRentalInspectionStage(proposal);
+
+        await upsertRentalProposalInspection(input.id, {
+          laudoData: input.proof.dataUrl,
+          laudoFileName: input.proof.fileName,
+          laudoContentType: input.proof.contentType,
+          notes: input.notes?.trim() || null,
+        });
+        await maybeAdvanceAfterInspection(input.id);
+        return { success: true } as const;
+      }),
+    setInspectionValidation: adminProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          party: z.enum(["tenant", "owner"]),
+          validated: z.boolean(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const {
+          getRentalProposalById,
+          upsertRentalProposalInspection,
+          updateRentalProposal,
+        } = await import("./db");
+        const proposal = await getRentalProposalById(input.id);
+        assertRentalInspectionStage(proposal);
+
+        const value = input.validated ? new Date() : null;
+        await upsertRentalProposalInspection(input.id, {
+          ...(input.party === "tenant"
+            ? { tenantValidatedAt: value }
+            : { ownerValidatedAt: value }),
+        });
+
+        if (
+          !input.validated &&
+          proposal.currentStep === "entrega_chaves_pendente"
+        ) {
+          // Removeu uma validacao depois de avancar: volta para vistoria.
+          await updateRentalProposal(input.id, {
+            status: "vistoria_pendente",
+            currentStep: "vistoria_pendente",
+          });
+        } else {
+          await maybeAdvanceAfterInspection(input.id);
+        }
+        return { success: true } as const;
       }),
     delete: adminProcedure.input(idSchema).mutation(async ({ input }) => {
       const { deleteRentalProposal, getRentalProposalById } = await import(

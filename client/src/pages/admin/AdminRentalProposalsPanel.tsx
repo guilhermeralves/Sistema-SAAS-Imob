@@ -10,6 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
 import { formatStoredDate } from "@/lib/date";
 import { trpc } from "@/lib/trpc";
 import {
@@ -21,6 +22,7 @@ import {
   KeyRound,
   MailCheck,
   Receipt,
+  Search,
   ShieldCheck,
   Trash2,
   type LucideIcon,
@@ -131,6 +133,7 @@ export default function AdminRentalProposalsPanel() {
   const proposalsWorkspaceRef = useRef<HTMLDivElement | null>(null);
   const [selectedProposalId, setSelectedProposalId] = useState<number | null>(null);
   const [proposalToDelete, setProposalToDelete] = useState<RentalProposalListItem | null>(null);
+  const [search, setSearch] = useState("");
   const utils = trpc.useUtils();
   const { data: proposals, isLoading: loadingProposals } = trpc.rentalProposals.list.useQuery();
   const deleteProposal = trpc.rentalProposals.delete.useMutation({
@@ -151,6 +154,28 @@ export default function AdminRentalProposalsPanel() {
     () => (proposals ?? []).find(proposal => proposal.id === selectedProposalId) ?? null,
     [proposals, selectedProposalId]
   );
+
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredProposals = useMemo(() => {
+    const list = proposals ?? [];
+    if (!normalizedSearch) return list;
+    return list.filter(proposal => {
+      const haystack = [
+        proposal.property?.titulo,
+        proposal.tenant?.name,
+        proposal.tenant?.email,
+        proposal.broker?.name,
+        proposal.broker?.email,
+        proposal.referenceCode,
+        getStatusLabel(proposal.status),
+        `imovel id ${proposal.propertyId}`,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(normalizedSearch);
+    });
+  }, [proposals, normalizedSearch]);
 
   const currentStepIndex = getProposalStepIndex(selectedProposal);
 
@@ -224,7 +249,17 @@ export default function AdminRentalProposalsPanel() {
     <>
       <div ref={proposalsWorkspaceRef} className="grid scroll-mt-32 gap-4 xl:grid-cols-[minmax(520px,1.35fr)_minmax(360px,0.85fr)]">
         <div className="space-y-3">
-          {proposals.map(proposal => {
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+              placeholder="Pesquisar por imóvel, locatário, corretor ou código..."
+              className="rounded-full border-slate-200 bg-white pl-9"
+            />
+          </div>
+          <div className="max-h-[70vh] space-y-3 overflow-y-auto pr-1">
+          {filteredProposals.map(proposal => {
             const isSelected = proposal.id === selectedProposalId;
             const shouldShowReference = proposal.status !== "rascunho" && proposal.currentStep !== "modelos_contrato";
             const referenceLabel = shouldShowReference ? "Gerado no contrato" : "Rascunho";
@@ -313,6 +348,12 @@ export default function AdminRentalProposalsPanel() {
               </div>
             );
           })}
+          {filteredProposals.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-5 text-sm text-slate-600">
+              Nenhuma proposta encontrada para a busca.
+            </div>
+          ) : null}
+          </div>
         </div>
 
         <RentalProposalProcessPanel selectedProposal={selectedProposal} currentStepIndex={currentStepIndex} />

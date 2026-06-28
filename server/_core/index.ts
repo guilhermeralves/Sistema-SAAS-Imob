@@ -106,6 +106,26 @@ async function startServer() {
 
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+
+  // Webhook da D4Sign (assinaturas de locacao). A D4Sign envia o uuid do
+  // documento quando o status muda; sincronizamos a assinatura correspondente.
+  // Respondemos sempre 200 para evitar reenfileiramento do lado deles.
+  app.post("/api/integrations/d4sign/webhook", async (req, res) => {
+    try {
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const uuid = String(
+        body.uuid ?? body.uuidDoc ?? req.query.uuid ?? ""
+      ).trim();
+      if (uuid) {
+        const { handleD4SignSignatureCallback } = await import("../routers");
+        await handleD4SignSignatureCallback(uuid);
+      }
+    } catch (error) {
+      console.warn("[d4sign] Falha ao processar webhook:", error);
+    }
+    res.status(200).json({ ok: true });
+  });
+
   // tRPC API
   app.use(
     "/api/trpc",
