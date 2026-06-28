@@ -24,7 +24,14 @@ export default defineConfig({
   },
   server: {
     host: true,
-    allowedHosts: ["localhost", "127.0.0.1"],
+    allowedHosts: [
+      "localhost",
+      "127.0.0.1",
+      ".trycloudflare.com",
+      ".ngrok-free.app",
+      ".ngrok.io",
+      ".ngrok.app",
+    ],
     fs: {
       strict: true,
       deny: ["**/.*"],
