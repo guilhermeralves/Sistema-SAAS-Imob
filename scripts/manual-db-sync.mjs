@@ -214,6 +214,32 @@ const patches = [
       `CREATE INDEX IF NOT EXISTS "userNotifications_createdAt_idx" ON "userNotifications" ("createdAt");`,
     ],
   },
+  {
+    id: "2026-06-27_rental_proposal_insurances",
+    description:
+      "Cria tabela de seguros (fianca/incendio) por proposta de locacao com comprovante e confirmacao",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS "rentalProposalInsurances" (
+        "id" serial PRIMARY KEY NOT NULL,
+        "rentalProposalId" integer NOT NULL,
+        "kind" varchar(20) NOT NULL,
+        "status" varchar(20) DEFAULT 'pendente' NOT NULL,
+        "insurer" varchar(160),
+        "policyNumber" varchar(80),
+        "amount" integer,
+        "proofData" text,
+        "proofFileName" varchar(255),
+        "proofContentType" varchar(120),
+        "notes" text,
+        "requestedAt" timestamp,
+        "confirmedAt" timestamp,
+        "confirmedByUserId" integer,
+        "createdAt" timestamp DEFAULT now() NOT NULL,
+        "updatedAt" timestamp DEFAULT now() NOT NULL
+      );`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "rentalProposalInsurances_unique_idx" ON "rentalProposalInsurances" ("rentalProposalId", "kind");`,
+    ],
+  },
 ];
 
 async function ensureManualMigrationsTable(client) {

@@ -27,6 +27,7 @@ import {
   InsertRentalProposal,
   InsertRentalProposalBoleto,
   InsertRentalProposalGeneratedContract,
+  InsertRentalProposalInsurance,
   TaskItem,
   TaskItemTemplate,
   User,
@@ -42,6 +43,7 @@ import {
   rentalProposalBoletos,
   rentalProposalContractTemplates,
   rentalProposalGeneratedContracts,
+  rentalProposalInsurances,
   rentalProposalOwners,
   rentalProposalTenants,
   rentalProposals,
@@ -2087,6 +2089,7 @@ export async function getRentalProposalById(id: number) {
     contractTemplates: await getRentalProposalContractTemplates(id),
     generatedContracts: await getRentalProposalGeneratedContracts(id),
     boletos: await getRentalProposalBoletos(id),
+    insurances: await getRentalProposalInsurances(id),
   };
 }
 
@@ -2364,6 +2367,113 @@ export async function replaceRentalProposalBoletos(
   return await db.insert(rentalProposalBoletos).values(boletos).returning();
 }
 
+// Colunas dos seguros sem o `proofData` (base64 pode ser grande): a lista/agregado
+// nao carrega o blob; o download usa getRentalProposalInsuranceByKind.
+const rentalInsuranceListColumns = {
+  id: rentalProposalInsurances.id,
+  rentalProposalId: rentalProposalInsurances.rentalProposalId,
+  kind: rentalProposalInsurances.kind,
+  status: rentalProposalInsurances.status,
+  insurer: rentalProposalInsurances.insurer,
+  policyNumber: rentalProposalInsurances.policyNumber,
+  amount: rentalProposalInsurances.amount,
+  proofFileName: rentalProposalInsurances.proofFileName,
+  proofContentType: rentalProposalInsurances.proofContentType,
+  notes: rentalProposalInsurances.notes,
+  requestedAt: rentalProposalInsurances.requestedAt,
+  confirmedAt: rentalProposalInsurances.confirmedAt,
+  confirmedByUserId: rentalProposalInsurances.confirmedByUserId,
+  createdAt: rentalProposalInsurances.createdAt,
+  updatedAt: rentalProposalInsurances.updatedAt,
+};
+
+export async function getRentalProposalInsurances(rentalProposalId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return await db
+    .select(rentalInsuranceListColumns)
+    .from(rentalProposalInsurances)
+    .where(eq(rentalProposalInsurances.rentalProposalId, rentalProposalId))
+    .orderBy(rentalProposalInsurances.kind);
+}
+
+export async function getRentalProposalInsuranceByKind(
+  rentalProposalId: number,
+  kind: "fianca" | "incendio"
+) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const [row] = await db
+    .select()
+    .from(rentalProposalInsurances)
+    .where(
+      and(
+        eq(rentalProposalInsurances.rentalProposalId, rentalProposalId),
+        eq(rentalProposalInsurances.kind, kind)
+      )
+    )
+    .limit(1);
+
+  return row;
+}
+
+// Cria/atualiza o seguro de um tipo (chave unica proposta+tipo).
+export async function upsertRentalProposalInsurance(
+  rentalProposalId: number,
+  kind: "fianca" | "incendio",
+  data: Partial<
+    Omit<
+      InsertRentalProposalInsurance,
+      "id" | "rentalProposalId" | "kind" | "createdAt"
+    >
+  >
+) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const [existing] = await db
+    .select({ id: rentalProposalInsurances.id })
+    .from(rentalProposalInsurances)
+    .where(
+      and(
+        eq(rentalProposalInsurances.rentalProposalId, rentalProposalId),
+        eq(rentalProposalInsurances.kind, kind)
+      )
+    )
+    .limit(1);
+
+  if (existing) {
+    const [updated] = await db
+      .update(rentalProposalInsurances)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(rentalProposalInsurances.id, existing.id))
+      .returning();
+    return updated;
+  }
+
+  const [created] = await db
+    .insert(rentalProposalInsurances)
+    .values({ rentalProposalId, kind, ...data })
+    .returning();
+  return created;
+}
+
+// Garante que ambos os seguros (fianca e incendio) existam como linhas pendentes.
+export async function ensureRentalProposalInsurances(rentalProposalId: number) {
+  for (const kind of ["fianca", "incendio"] as const) {
+    const existing = await getRentalProposalInsuranceByKind(
+      rentalProposalId,
+      kind
+    );
+    if (!existing) {
+      await upsertRentalProposalInsurance(rentalProposalId, kind, {});
+    }
+  }
+  return await getRentalProposalInsurances(rentalProposalId);
+}
+
 export async function updateRentalProposalBoleto(
   id: number,
   data: Partial<InsertRentalProposalBoleto>
@@ -2589,6 +2699,9 @@ export async function deleteRentalProposal(id: number) {
   await db
     .delete(rentalProposalBoletos)
     .where(eq(rentalProposalBoletos.rentalProposalId, id));
+  await db
+    .delete(rentalProposalInsurances)
+    .where(eq(rentalProposalInsurances.rentalProposalId, id));
   await db.delete(rentalProposals).where(eq(rentalProposals.id, id));
 }
 

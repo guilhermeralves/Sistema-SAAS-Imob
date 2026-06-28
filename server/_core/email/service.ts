@@ -5,6 +5,7 @@ import { getEmailProvider } from "./provider";
 import { renderWelcomeAdminTemplate } from "./templates/welcome-admin";
 import { renderWelcomeBrokerTemplate } from "./templates/welcome-broker";
 import { renderWelcomeClientTemplate } from "./templates/welcome-client";
+import { renderRentalInsuranceRequestTemplate } from "./templates/rental-insurance-request";
 
 type WelcomeEmailInput = {
   user: Pick<User, "id" | "name" | "email" | "role">;
@@ -72,6 +73,51 @@ export async function sendWelcomeEmail(input: WelcomeEmailInput) {
   if (result.provider === "preview") {
     console.log(
       `[Email][preview] Boas-vindas para ${input.user.email} salvas em ${result.previewHtmlPath}`
+    );
+  }
+
+  return result;
+}
+
+type RentalInsuranceRequestEmailInput = {
+  to: string;
+  tenantName: string;
+  propertyLabel: string;
+  referenceCode: string | null;
+  req?: IncomingMessage;
+};
+
+/**
+ * Solicita ao locatario os comprovantes das primeiras parcelas dos seguros
+ * (fianca e incendio). Usado quando a proposta entra na etapa de seguros.
+ */
+export async function sendRentalInsuranceRequestEmail(
+  input: RentalInsuranceRequestEmailInput
+) {
+  if (!input.to.trim()) {
+    return null;
+  }
+
+  const appUrl = resolveAppBaseUrl(input.req);
+  const provider = getEmailProvider();
+  const template = renderRentalInsuranceRequestTemplate({
+    name: input.tenantName,
+    propertyLabel: input.propertyLabel,
+    referenceCode: input.referenceCode,
+    appUrl,
+  });
+
+  const result = await provider.send({
+    to: input.to.trim(),
+    subject: "Comprovantes dos seguros da sua locacao",
+    html: template.html,
+    text: template.text,
+    replyTo: ENV.emailReplyTo || undefined,
+  });
+
+  if (result.provider === "preview") {
+    console.log(
+      `[Email][preview] Solicitacao de seguros para ${input.to} salva em ${result.previewHtmlPath}`
     );
   }
 

@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatCpf, isValidCpf, normalizeCpf } from "@/lib/cpf";
 import { buildContractReferenceFooter } from "@shared/contract-reference";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeftRight, CheckCircle2, ChevronDown, ChevronUp, Download, FileSignature, Home, Pencil, Plus, Receipt, RotateCw, Save, Trash2, WandSparkles } from "lucide-react";
+import { ArrowLeftRight, CheckCircle2, ChevronDown, ChevronUp, Download, FileSignature, Home, MessageCircle, Pencil, Plus, Receipt, RotateCw, Save, Send, ShieldCheck, Trash2, WandSparkles, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 
@@ -156,6 +156,13 @@ type InitialRentalProposal = {
   contractTemplates?: ContractTemplateOption[];
   generatedContracts?: GeneratedContractOption[];
   boletos?: BoletoOption[];
+  insurances?: InsuranceOption[];
+  tenant?: {
+    id: number;
+    name: string | null;
+    email: string | null;
+    phone?: string | null;
+  } | null;
   referenceCode?: string | null;
   ownerConfirmedAt: Date | string | null;
   tenantConfirmedAt: Date | string | null;
@@ -212,6 +219,19 @@ type BoletoOption = {
   approvedAt?: Date | string | null;
 };
 
+type InsuranceOption = {
+  id: number;
+  kind: "fianca" | "incendio";
+  status: "pendente" | "confirmado" | "dispensado";
+  insurer: string | null;
+  policyNumber: string | null;
+  amount: number | null;
+  proofFileName: string | null;
+  notes: string | null;
+  requestedAt?: Date | string | null;
+  confirmedAt: Date | string | null;
+};
+
 type RentalProposalFormProps = {
   initialProposal?: InitialRentalProposal | null;
   onDirtyChange?: (isDirty: boolean) => void;
@@ -229,6 +249,16 @@ const RENTAL_STEP_ORDER = [
   "modelos_contrato",
   "contratos_em_revisao",
 ] as const;
+
+// Etapas em que o card de Seguros deve aparecer (etapa de seguros e seguintes).
+const SEGUROS_OR_LATER_STEPS = new Set([
+  "seguros_pendentes",
+  "assinaturas_pendentes",
+  "transferencias_pendentes",
+  "vistoria_pendente",
+  "entrega_chaves_pendente",
+  "ativo",
+]);
 
 function getRentalStepIndex(currentStep: string | undefined | null) {
   if (!currentStep) return 0;
@@ -356,6 +386,281 @@ function normalizeSearchValue(value: string) {
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim();
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+type RentalInsuranceRecord = InsuranceOption | null;
+
+const INSURANCE_LABELS: Record<"fianca" | "incendio", string> = {
+  fianca: "Seguro fian\u00e7a",
+  incendio: "Seguro inc\u00eandio",
+};
+
+// Bloco de gestao de um seguro (fianca ou incendio) dentro do card de Seguros.
+// Cada bloco cuida das proprias mutations e invalida a proposta ao concluir.
+function RentalInsuranceBlock({
+  proposalId,
+  kind,
+  record,
+  onChanged,
+}: {
+  proposalId: number;
+  kind: "fianca" | "incendio";
+  record: RentalInsuranceRecord;
+  onChanged: () => Promise<void> | void;
+}) {
+  const utils = trpc.useUtils();
+  const [insurer, setInsurer] = useState(record?.insurer ?? "");
+  const [policyNumber, setPolicyNumber] = useState(record?.policyNumber ?? "");
+  const [amount, setAmount] = useState(formatCurrencyInput(record?.amount));
+  const [notes, setNotes] = useState(record?.notes ?? "");
+  const [file, setFile] = useState<File | null>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  useEffect(() => {
+    setInsurer(record?.insurer ?? "");
+    setPolicyNumber(record?.policyNumber ?? "");
+    setAmount(formatCurrencyInput(record?.amount));
+    setNotes(record?.notes ?? "");
+    setFile(null);
+  }, [record?.id, record?.status]);
+
+  const confirmMutation = trpc.rentalProposals.confirmInsurance.useMutation({
+    onSuccess: async () => {
+      toast.success(`${INSURANCE_LABELS[kind]}: pagamento confirmado.`);
+      await onChanged();
+    },
+    onError: error =>
+      toast.error(error.message || "N\u00e3o foi poss\u00edvel confirmar o pagamento."),
+  });
+  const dispenseMutation = trpc.rentalProposals.dispenseInsurance.useMutation({
+    onSuccess: async () => {
+      toast.success(`${INSURANCE_LABELS[kind]}: dispensado.`);
+      await onChanged();
+    },
+    onError: error =>
+      toast.error(error.message || "N\u00e3o foi poss\u00edvel dispensar o seguro."),
+  });
+  const reopenMutation = trpc.rentalProposals.reopenInsurance.useMutation({
+    onSuccess: async () => {
+      toast.success(`${INSURANCE_LABELS[kind]}: reaberto.`);
+      await onChanged();
+    },
+    onError: error =>
+      toast.error(error.message || "N\u00e3o foi poss\u00edvel reabrir o seguro."),
+  });
+
+  const busy =
+    confirmMutation.isPending ||
+    dispenseMutation.isPending ||
+    reopenMutation.isPending;
+
+  const handleConfirm = async () => {
+    let proof: { fileName: string; contentType: string; dataUrl: string } | undefined;
+    if (file) {
+      // ~10MB binarios = ~13.4MB em base64.
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error("O comprovante excede o limite de 10MB.");
+        return;
+      }
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        proof = {
+          fileName: file.name.slice(0, 255),
+          contentType: file.type || "application/octet-stream",
+          dataUrl,
+        };
+      } catch {
+        toast.error("N\u00e3o foi poss\u00edvel ler o arquivo do comprovante.");
+        return;
+      }
+    }
+    confirmMutation.mutate({
+      id: proposalId,
+      kind,
+      insurer: insurer.trim() || undefined,
+      policyNumber: policyNumber.trim() || undefined,
+      amount: amount.trim() ? parseCurrencyToCents(amount) : undefined,
+      notes: notes.trim() || undefined,
+      proof,
+    });
+  };
+
+  const handleDownloadProof = async () => {
+    setDownloading(true);
+    try {
+      const proof = await utils.rentalProposals.insuranceProof.fetch({
+        id: proposalId,
+        kind,
+      });
+      if (!proof?.dataUrl) {
+        toast.error("Comprovante n\u00e3o encontrado.");
+        return;
+      }
+      const link = document.createElement("a");
+      link.href = proof.dataUrl;
+      link.download = proof.fileName || "comprovante";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch {
+      toast.error("N\u00e3o foi poss\u00edvel baixar o comprovante.");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const status = record?.status ?? "pendente";
+  const isResolved = status === "confirmado" || status === "dispensado";
+
+  const statusBadge =
+    status === "confirmado" ? (
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+        <CheckCircle2 className="h-3.5 w-3.5" /> Confirmado
+      </span>
+    ) : status === "dispensado" ? (
+      <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700">
+        Dispensado
+      </span>
+    ) : (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+        Pendente
+      </span>
+    );
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white/85 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+          <ShieldCheck className="h-4 w-4 text-emerald-700" />
+          {INSURANCE_LABELS[kind]}
+        </p>
+        {statusBadge}
+      </div>
+
+      {isResolved ? (
+        <div className="mt-3 space-y-2 text-sm text-slate-600">
+          {status === "confirmado" ? (
+            <div className="space-y-1">
+              {record?.insurer ? <p>Seguradora: {record.insurer}</p> : null}
+              {record?.policyNumber ? (
+                <p>Ap\u00f3lice: {record.policyNumber}</p>
+              ) : null}
+              {record?.amount ? (
+                <p>Valor da parcela: {formatCentsBRL(record.amount)}</p>
+              ) : null}
+              {record?.proofFileName ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-1 gap-2 rounded-full bg-white"
+                  disabled={downloading}
+                  onClick={handleDownloadProof}
+                >
+                  <Download className="h-4 w-4" />
+                  {downloading ? "Baixando..." : "Baixar comprovante"}
+                </Button>
+              ) : (
+                <p className="text-xs text-slate-500">Sem comprovante anexado.</p>
+              )}
+            </div>
+          ) : (
+            <p>{record?.notes?.trim() || "Seguro dispensado para esta loca\u00e7\u00e3o."}</p>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="gap-2 text-slate-600"
+            disabled={busy}
+            onClick={() => reopenMutation.mutate({ id: proposalId, kind })}
+          >
+            <RotateCw className="h-4 w-4" /> Reabrir
+          </Button>
+        </div>
+      ) : (
+        <div className="mt-3 space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Seguradora</Label>
+              <Input
+                className={FIELD_CLASS}
+                value={insurer}
+                onChange={event => setInsurer(event.target.value)}
+                placeholder="Ex.: Porto Seguro"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">N\u00ba da ap\u00f3lice</Label>
+              <Input
+                className={FIELD_CLASS}
+                value={policyNumber}
+                onChange={event => setPolicyNumber(event.target.value)}
+                placeholder="Opcional"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Valor da 1\u00aa parcela</Label>
+              <Input
+                className={FIELD_CLASS}
+                value={amount}
+                onChange={event => setAmount(event.target.value)}
+                placeholder="R$ 0,00"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Comprovante (PDF/imagem)</Label>
+              <Input
+                type="file"
+                accept="image/*,application/pdf"
+                className={FIELD_CLASS}
+                onChange={event => setFile(event.target.files?.[0] ?? null)}
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Observa\u00e7\u00f5es</Label>
+            <Textarea
+              className={FIELD_CLASS}
+              value={notes}
+              onChange={event => setNotes(event.target.value)}
+              rows={2}
+              placeholder="Opcional"
+            />
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2 rounded-full bg-white"
+              disabled={busy}
+              onClick={() => dispenseMutation.mutate({ id: proposalId, kind })}
+            >
+              <X className="h-4 w-4" /> Dispensar
+            </Button>
+            <Button
+              type="button"
+              className="gap-2 rounded-full bg-emerald-700 text-white hover:bg-emerald-800"
+              disabled={busy}
+              onClick={handleConfirm}
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              {confirmMutation.isPending ? "Confirmando..." : "Confirmar Pagamento"}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function SearchableUserPicker({
@@ -700,6 +1005,7 @@ export default function RentalProposalForm({
   const [contractToDelete, setContractToDelete] = useState<GeneratedContractOption | null>(null);
   const [downloadingContractId, setDownloadingContractId] = useState<number | null>(null);
   const [openBoletos, setOpenBoletos] = useState(false);
+  const [openSeguros, setOpenSeguros] = useState(false);
   const contractHighlightNeedles = useMemo(
     () => (editingGeneratedContract ? buildHighlightNeedles(editingGeneratedContract) : []),
     [editingGeneratedContract]
@@ -763,6 +1069,8 @@ export default function RentalProposalForm({
     setOpenModelos(index >= 1 && index < 3);
     // Etapa de boletos (e seguintes) abre o card de boletos expandido.
     setOpenBoletos(index >= 3);
+    // O card de seguros abre expandido enquanto a proposta esta nessa etapa.
+    setOpenSeguros(initialProposal.currentStep === "seguros_pendentes");
   }, [initialProposal]);
 
   useEffect(() => {
@@ -1015,6 +1323,20 @@ export default function RentalProposalForm({
     },
   });
 
+  const resendInsuranceRequest =
+    trpc.rentalProposals.resendInsuranceRequest.useMutation({
+      onSuccess: async data => {
+        toast.success(
+          data.emailSent
+            ? "Solicitação de comprovantes reenviada por e-mail."
+            : "Solicitação registrada (locatário sem e-mail cadastrado)."
+        );
+        await invalidateProposal();
+      },
+      onError: error =>
+        toast.error(error.message || "Não foi possível reenviar a solicitação."),
+    });
+
   const createQuickOwner = trpc.propertyOwners.createQuick.useMutation({
     onSuccess: async owner => {
       toast.success("Proprietario cadastrado e vinculado.");
@@ -1256,6 +1578,45 @@ export default function RentalProposalForm({
     (sum, boleto) => sum + boleto.totalAmount,
     0
   );
+
+  // Etapa de seguros: disponivel a partir de "seguros_pendentes" em diante.
+  const insurances = initialProposal?.insurances ?? [];
+  const segurosReached =
+    isEditing &&
+    (SEGUROS_OR_LATER_STEPS.has(initialProposal?.currentStep ?? "") ||
+      insurances.length > 0);
+  const fiancaInsurance =
+    insurances.find(item => item.kind === "fianca") ?? null;
+  const incendioInsurance =
+    insurances.find(item => item.kind === "incendio") ?? null;
+  const isInsuranceResolved = (status?: string) =>
+    status === "confirmado" || status === "dispensado";
+  const segurosCompleted =
+    isInsuranceResolved(fiancaInsurance?.status) &&
+    isInsuranceResolved(incendioInsurance?.status);
+
+  // Link wa.me (admin clica e envia): telefone do locatario + mensagem pronta.
+  const tenantPhoneDigits = (initialProposal?.tenant?.phone ?? "").replace(
+    /\D/g,
+    ""
+  );
+  const tenantWhatsappNumber = tenantPhoneDigits
+    ? tenantPhoneDigits.startsWith("55")
+      ? tenantPhoneDigits
+      : `55${tenantPhoneDigits}`
+    : "";
+  const insuranceWhatsappMessage = encodeURIComponent(
+    `Ola${initialProposal?.tenant?.name ? `, ${initialProposal.tenant.name}` : ""}! ` +
+      `Para prosseguir com a sua locacao${
+        initialProposal?.referenceCode
+          ? ` (${initialProposal.referenceCode})`
+          : ""
+      }, precisamos dos comprovantes das primeiras parcelas do seguro fianca e do seguro incendio. ` +
+      `Pode nos enviar por aqui? Obrigado!`
+  );
+  const insuranceWhatsappLink = tenantWhatsappNumber
+    ? `https://wa.me/${tenantWhatsappNumber}?text=${insuranceWhatsappMessage}`
+    : "";
 
   return (
     <div className="space-y-5">
@@ -1951,6 +2312,87 @@ export default function RentalProposalForm({
               </div>
             </div>
           )}
+        </StepCard>
+      ) : null}
+      {segurosReached && initialProposal ? (
+        <StepCard
+          icon={<ShieldCheck className="h-5 w-5" />}
+          title="Seguros"
+          subtitle="Receba e confirme os comprovantes das primeiras parcelas do seguro fiança e do seguro incêndio (ou dispense quando não se aplicar)."
+          completed={segurosCompleted}
+          open={openSeguros}
+          onToggleOpen={() => setOpenSeguros(prev => !prev)}
+          headerAccessory={
+            segurosCompleted ? (
+              <span className="w-fit rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                Concluído
+              </span>
+            ) : (
+              <span className="w-fit rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+                Aguardando comprovantes
+              </span>
+            )
+          }
+        >
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+              Ao entrar nesta etapa, o sistema enviou um e-mail ao locatário
+              solicitando os comprovantes. Você pode reenviar o e-mail ou mandar
+              uma mensagem pronta pelo WhatsApp.
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2 rounded-full bg-white"
+                disabled={resendInsuranceRequest.isPending}
+                onClick={() =>
+                  resendInsuranceRequest.mutate({ id: initialProposal.id })
+                }
+              >
+                <Send className="h-4 w-4" />
+                {resendInsuranceRequest.isPending
+                  ? "Reenviando..."
+                  : "Reenviar e-mail"}
+              </Button>
+              {insuranceWhatsappLink ? (
+                <a
+                  href={insuranceWhatsappLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  Enviar WhatsApp
+                </a>
+              ) : (
+                <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-500">
+                  <MessageCircle className="h-4 w-4" />
+                  Locatário sem telefone cadastrado
+                </span>
+              )}
+            </div>
+            <div className="grid gap-3 lg:grid-cols-2">
+              <RentalInsuranceBlock
+                proposalId={initialProposal.id}
+                kind="fianca"
+                record={fiancaInsurance}
+                onChanged={invalidateProposal}
+              />
+              <RentalInsuranceBlock
+                proposalId={initialProposal.id}
+                kind="incendio"
+                record={incendioInsurance}
+                onChanged={invalidateProposal}
+              />
+            </div>
+            {segurosCompleted ? (
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                Seguros confirmados. A proposta avançou para a etapa de
+                assinaturas.
+              </div>
+            ) : null}
+          </div>
         </StepCard>
       ) : null}
       <UserChangeDialog

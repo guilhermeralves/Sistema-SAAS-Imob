@@ -72,8 +72,8 @@
 - [x] Geração de contratos com substituição de variáveis (`shared/contract-variables.ts`)
 - [x] Revisão e aprovação manual de contratos (etapas 1–16 do fluxo)
 - [~] Código de referência da proposta (migração 0028 criada — validar implementação)
-- [~] Geração de boletos do período (migração 0030 criada — em andamento)
-- [ ] Recebimento de comprovantes de seguro fiança e incêndio
+- [x] Geração de boletos do período — automática na aprovação dos contratos (`autoGenerateRentalProposalBoletos`)
+- [x] Recebimento de comprovantes de seguro fiança e incêndio (etapa Seguros: confirmar/dispensar, anexo, e-mail + link wa.me)
 - [ ] Assinaturas digitais (preferência futura por GOV.BR)
 - [ ] Transferência de titularidade de contas (energia, água, gás)
 - [ ] Vistoria e laudo (assinatura locatário/proprietário)

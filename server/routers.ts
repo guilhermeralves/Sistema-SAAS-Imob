@@ -1376,6 +1376,9 @@ async function reconcileRentalProposalContractStage(proposalId: number) {
     const referenceCode =
       proposal.referenceCode ?? buildRentalProposalReferenceCode(proposal.id);
     await setRentalProposalReferenceCode(proposal.id, referenceCode);
+    // Aprovar todos os contratos ja gera os boletos do periodo e avanca para a
+    // etapa de seguros, sem depender de uma acao manual posterior.
+    await autoGenerateRentalProposalBoletos(proposal.id);
     return { referenceCode, allApproved } as const;
   }
 
@@ -1387,6 +1390,169 @@ async function reconcileRentalProposalContractStage(proposalId: number) {
   }
 
   return { referenceCode: proposal.referenceCode ?? null, allApproved } as const;
+}
+
+// Gera os boletos de todo o periodo e avanca a proposta para a etapa de seguros.
+// Idempotente (nao duplica boletos) e best-effort: se nao for possivel montar o
+// cronograma, mantem a proposta em "boletos_pendentes" para tratamento manual em
+// vez de quebrar a aprovacao do contrato.
+async function autoGenerateRentalProposalBoletos(proposalId: number) {
+  const {
+    getRentalProposalById,
+    getRentalProposalBoletos,
+    insertRentalProposalBoletos,
+    updateRentalProposal,
+  } = await import("./db");
+
+  const proposal = await getRentalProposalById(proposalId);
+  if (!proposal || !proposal.referenceCode) return;
+  // So gera/avanca a partir da etapa de boletos (evita reprocessar etapas adiante).
+  if (proposal.currentStep !== "boletos_pendentes") return;
+
+  const existing = await getRentalProposalBoletos(proposalId);
+  if (existing.length === 0) {
+    const schedule = buildRentalBoletoSchedule({
+      startDate: proposal.startDate,
+      dueDay: proposal.dueDay,
+      leaseTermMonths: proposal.leaseTermMonths,
+      rentAmount: proposal.rentAmount,
+      condominiumAmount: proposal.condominiumAmount,
+    });
+    // Sem cronograma valido: mantem em boletos_pendentes para o admin gerar manual.
+    if (schedule.length === 0) return;
+
+    await insertRentalProposalBoletos(
+      schedule.map(item => ({
+        rentalProposalId: proposal.id,
+        installmentNumber: item.installmentNumber,
+        referenceMonth: new Date(`${item.referenceMonth}T00:00:00.000Z`),
+        dueDate: new Date(`${item.dueDate}T00:00:00.000Z`),
+        rentAmount: item.rentAmount,
+        condominiumAmount: item.condominiumAmount,
+        extraAmount: item.extraAmount,
+        totalAmount: item.totalAmount,
+        status: "pendente" as const,
+      }))
+    );
+  }
+
+  await updateRentalProposal(proposal.id, {
+    status: "seguros_pendentes",
+    currentStep: "seguros_pendentes",
+  });
+
+  // Entrou na etapa de seguros: solicita os comprovantes ao locatario.
+  await initiateRentalInsuranceStage(proposal.id);
+}
+
+// Rotulo curto do imovel de uma proposta para usar em e-mails/mensagens.
+function getRentalProposalPropertyLabel(proposal: {
+  property?: { titulo?: string | null; endereco?: string | null } | null;
+  propertyId: number;
+}) {
+  return (
+    proposal.property?.titulo?.trim() ||
+    proposal.property?.endereco?.trim() ||
+    `Imovel #${proposal.propertyId}`
+  );
+}
+
+// Inicia a etapa de seguros: garante as linhas de seguro (fianca/incendio),
+// solicita os comprovantes ao locatario por e-mail (best-effort) e marca
+// requestedAt para nao reenviar a cada reprocessamento. Nunca lanca.
+async function initiateRentalInsuranceStage(proposalId: number) {
+  try {
+    const {
+      getRentalProposalById,
+      ensureRentalProposalInsurances,
+      upsertRentalProposalInsurance,
+      getRentalProposalInsurances,
+    } = await import("./db");
+
+    const proposal = await getRentalProposalById(proposalId);
+    if (!proposal) return;
+
+    await ensureRentalProposalInsurances(proposalId);
+
+    const insurances = await getRentalProposalInsurances(proposalId);
+    if (insurances.some(item => item.requestedAt)) return;
+
+    const now = new Date();
+    for (const kind of ["fianca", "incendio"] as const) {
+      await upsertRentalProposalInsurance(proposalId, kind, {
+        requestedAt: now,
+      });
+    }
+
+    const tenantEmail = proposal.tenant?.email?.trim();
+    if (tenantEmail) {
+      const { sendRentalInsuranceRequestEmail } = await import(
+        "./_core/email/service"
+      );
+      await sendRentalInsuranceRequestEmail({
+        to: tenantEmail,
+        tenantName: proposal.tenant?.name?.trim() || tenantEmail,
+        propertyLabel: getRentalProposalPropertyLabel(proposal),
+        referenceCode: proposal.referenceCode ?? null,
+      });
+    }
+  } catch (error) {
+    console.warn(
+      "[locacoes] Falha ao iniciar a etapa de seguros (solicitacao de comprovantes):",
+      error
+    );
+  }
+}
+
+// Avanca a proposta para assinaturas quando ambos os seguros estiverem
+// confirmados ou dispensados. So atua na etapa de seguros.
+async function maybeAdvanceAfterInsurances(proposalId: number) {
+  const { getRentalProposalById, getRentalProposalInsurances, updateRentalProposal } =
+    await import("./db");
+
+  const proposal = await getRentalProposalById(proposalId);
+  if (!proposal || proposal.currentStep !== "seguros_pendentes") return;
+
+  const insurances = await getRentalProposalInsurances(proposalId);
+  const byKind = new Map(insurances.map(item => [item.kind, item.status]));
+  const resolved = (kind: "fianca" | "incendio") => {
+    const status = byKind.get(kind);
+    return status === "confirmado" || status === "dispensado";
+  };
+
+  if (resolved("fianca") && resolved("incendio")) {
+    await updateRentalProposal(proposalId, {
+      status: "assinaturas_pendentes",
+      currentStep: "assinaturas_pendentes",
+    });
+  }
+}
+
+// Garante que a proposta esta numa etapa em que a gestao de seguros e valida
+// (etapa de seguros ou a imediatamente seguinte, para permitir correcoes).
+function assertRentalInsuranceStage(
+  proposal:
+    | { currentStep: string; referenceCode: string | null }
+    | undefined
+    | null
+): asserts proposal is { currentStep: string; referenceCode: string | null } {
+  if (!proposal) {
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "Proposta de locacao nao encontrada.",
+    });
+  }
+  if (
+    !proposal.referenceCode ||
+    (proposal.currentStep !== "seguros_pendentes" &&
+      proposal.currentStep !== "assinaturas_pendentes")
+  ) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "A gestao de seguros so esta disponivel na etapa de seguros da proposta.",
+    });
+  }
 }
 
 function getComputedTaskStatus(task: {
@@ -4748,6 +4914,172 @@ export const appRouter = router({
       const { getRentalProposalBoletoSets } = await import("./db");
       return await getRentalProposalBoletoSets();
     }),
+    insurances: adminProcedure.input(idSchema).query(async ({ input }) => {
+      const { getRentalProposalInsurances } = await import("./db");
+      return await getRentalProposalInsurances(input.id);
+    }),
+    insuranceProof: adminProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          kind: z.enum(["fianca", "incendio"]),
+        })
+      )
+      .query(async ({ input }) => {
+        const { getRentalProposalInsuranceByKind } = await import("./db");
+        const row = await getRentalProposalInsuranceByKind(input.id, input.kind);
+        if (!row || !row.proofData) return null;
+        return {
+          fileName: row.proofFileName ?? "comprovante",
+          contentType: row.proofContentType ?? "application/octet-stream",
+          dataUrl: row.proofData,
+        };
+      }),
+    confirmInsurance: adminProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          kind: z.enum(["fianca", "incendio"]),
+          insurer: z.string().max(160).optional(),
+          policyNumber: z.string().max(80).optional(),
+          amount: z.number().int().min(0).max(100_000_000).optional(),
+          notes: z.string().max(2000).optional(),
+          proof: z
+            .object({
+              fileName: z.string().min(1).max(255),
+              contentType: z.string().min(1).max(120),
+              // Comprovante em data URL base64 (limite ~10MB binarios).
+              dataUrl: z.string().min(1).max(14_000_000),
+            })
+            .optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { getRentalProposalById, upsertRentalProposalInsurance } =
+          await import("./db");
+        const proposal = await getRentalProposalById(input.id);
+        assertRentalInsuranceStage(proposal);
+
+        await upsertRentalProposalInsurance(input.id, input.kind, {
+          status: "confirmado",
+          insurer: input.insurer?.trim() || null,
+          policyNumber: input.policyNumber?.trim() || null,
+          amount: input.amount ?? null,
+          notes: input.notes?.trim() || null,
+          confirmedAt: new Date(),
+          confirmedByUserId: ctx.user.id,
+          ...(input.proof
+            ? {
+                proofData: input.proof.dataUrl,
+                proofFileName: input.proof.fileName,
+                proofContentType: input.proof.contentType,
+              }
+            : {}),
+        });
+
+        await maybeAdvanceAfterInsurances(input.id);
+        return { success: true } as const;
+      }),
+    dispenseInsurance: adminProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          kind: z.enum(["fianca", "incendio"]),
+          notes: z.string().max(2000).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { getRentalProposalById, upsertRentalProposalInsurance } =
+          await import("./db");
+        const proposal = await getRentalProposalById(input.id);
+        assertRentalInsuranceStage(proposal);
+
+        await upsertRentalProposalInsurance(input.id, input.kind, {
+          status: "dispensado",
+          notes: input.notes?.trim() || null,
+          confirmedAt: new Date(),
+          confirmedByUserId: ctx.user.id,
+        });
+
+        await maybeAdvanceAfterInsurances(input.id);
+        return { success: true } as const;
+      }),
+    reopenInsurance: adminProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          kind: z.enum(["fianca", "incendio"]),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const {
+          getRentalProposalById,
+          upsertRentalProposalInsurance,
+          updateRentalProposal,
+        } = await import("./db");
+        const proposal = await getRentalProposalById(input.id);
+        assertRentalInsuranceStage(proposal);
+
+        await upsertRentalProposalInsurance(input.id, input.kind, {
+          status: "pendente",
+          confirmedAt: null,
+          confirmedByUserId: null,
+        });
+
+        // Se a proposta ja tinha avancado, volta para a etapa de seguros, pois
+        // deixou de ter ambos os seguros resolvidos.
+        if (proposal.currentStep === "assinaturas_pendentes") {
+          await updateRentalProposal(input.id, {
+            status: "seguros_pendentes",
+            currentStep: "seguros_pendentes",
+          });
+        }
+        return { success: true } as const;
+      }),
+    resendInsuranceRequest: adminProcedure
+      .input(idSchema)
+      .mutation(async ({ input }) => {
+        const {
+          getRentalProposalById,
+          ensureRentalProposalInsurances,
+          upsertRentalProposalInsurance,
+        } = await import("./db");
+        const proposal = await getRentalProposalById(input.id);
+        assertRentalInsuranceStage(proposal);
+
+        const fullProposal = await getRentalProposalById(input.id);
+        await ensureRentalProposalInsurances(input.id);
+
+        const now = new Date();
+        for (const kind of ["fianca", "incendio"] as const) {
+          await upsertRentalProposalInsurance(input.id, kind, {
+            requestedAt: now,
+          });
+        }
+
+        const tenantEmail = fullProposal?.tenant?.email?.trim();
+        let emailSent = false;
+        if (tenantEmail) {
+          try {
+            const { sendRentalInsuranceRequestEmail } = await import(
+              "./_core/email/service"
+            );
+            await sendRentalInsuranceRequestEmail({
+              to: tenantEmail,
+              tenantName: fullProposal?.tenant?.name?.trim() || tenantEmail,
+              propertyLabel: getRentalProposalPropertyLabel(fullProposal!),
+              referenceCode: fullProposal?.referenceCode ?? null,
+            });
+            emailSent = true;
+          } catch (error) {
+            console.warn(
+              "[locacoes] Falha ao reenviar solicitacao de seguros:",
+              error
+            );
+          }
+        }
+        return { success: true, emailSent } as const;
+      }),
     delete: adminProcedure.input(idSchema).mutation(async ({ input }) => {
       const { deleteRentalProposal, getRentalProposalById } = await import(
         "./db"

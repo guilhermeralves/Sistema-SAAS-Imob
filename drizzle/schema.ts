@@ -801,6 +801,51 @@ export type InsertRentalProposalBoleto =
   typeof rentalProposalBoletos.$inferInsert;
 
 /**
+ * Seguros exigidos na etapa pos-boletos de uma proposta de locacao. Uma linha
+ * por (proposta, tipo), onde tipo e "fianca" (seguro fianca) ou "incendio"
+ * (seguro incendio). O administrativo confirma o recebimento do comprovante da
+ * primeira parcela (com anexo opcional em base64) ou dispensa o seguro quando
+ * nao se aplica (ex.: locacao com fiador no lugar de seguro fianca).
+ */
+export const rentalProposalInsurances = pgTable(
+  "rentalProposalInsurances",
+  {
+    id: serial("id").primaryKey(),
+    rentalProposalId: integer("rentalProposalId").notNull(),
+    kind: varchar("kind", { length: 20 })
+      .$type<"fianca" | "incendio">()
+      .notNull(),
+    status: varchar("status", { length: 20 })
+      .$type<"pendente" | "confirmado" | "dispensado">()
+      .default("pendente")
+      .notNull(),
+    insurer: varchar("insurer", { length: 160 }),
+    policyNumber: varchar("policyNumber", { length: 80 }),
+    amount: integer("amount"),
+    proofData: text("proofData"),
+    proofFileName: varchar("proofFileName", { length: 255 }),
+    proofContentType: varchar("proofContentType", { length: 120 }),
+    notes: text("notes"),
+    requestedAt: timestamp("requestedAt", { mode: "date" }),
+    confirmedAt: timestamp("confirmedAt", { mode: "date" }),
+    confirmedByUserId: integer("confirmedByUserId"),
+    createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+  },
+  table => [
+    uniqueIndex("rentalProposalInsurances_unique_idx").on(
+      table.rentalProposalId,
+      table.kind
+    ),
+  ]
+);
+
+export type RentalProposalInsurance =
+  typeof rentalProposalInsurances.$inferSelect;
+export type InsertRentalProposalInsurance =
+  typeof rentalProposalInsurances.$inferInsert;
+
+/**
  * Tabela de documentos de imoveis
  * Armazena PDFs relacionados a cada imovel
  */

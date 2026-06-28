@@ -69,7 +69,9 @@ Nas etapas 17 e 18, quando todos os contratos da proposta sao aprovados:
 - o sistema gera o codigo de referencia e grava em `rentalProposals.referenceCode`;
 - o formato e `LOC-<ano de geracao>-<id da proposta com 4 digitos>` (ex.: `LOC-2026-0042`), derivado pelo helper compartilhado `shared/contract-reference.ts`;
 - a geracao e idempotente: se a proposta ja tem `referenceCode`, nao gera outro;
-- a proposta avanca para `status = "boletos_pendentes"` e `currentStep = "boletos_pendentes"`;
+- a proposta avanca para `status = "boletos_pendentes"` e, em seguida, os boletos
+  do periodo sao gerados automaticamente, levando a proposta direto para
+  `status = "seguros_pendentes"` (ver etapa 19) — sem acao manual intermediaria;
 - o codigo entra no rodape dos contratos de forma derivada na exibicao (cartao, banner e dialogo de edicao), sem alterar o `reviewedText` aprovado.
 
 Apos a aprovacao, cada contrato gerado exibe botoes de download no card de modelos/contratos, preservando o layout original do modelo Word:
@@ -79,12 +81,17 @@ Apos a aprovacao, cada contrato gerado exibe botoes de download no card de model
 - o preenchimento usa `docxtemplater` + `pizzip` com os colchetes `[ ]` como delimitadores, resolvendo placeholders mesmo quando o Word os quebra em varios runs;
 - as edicoes de texto livre do passo de revisao NAO sao refletidas no documento fiel (apenas os valores das variaveis sobre o modelo original).
 
-Na etapa 19, quando a proposta esta em `boletos_pendentes`, o card Boletos da tela de detalhes apenas gera o cronograma e ja avanca o processo:
+Na etapa 19, a geracao dos boletos e **automatica**: ao aprovar o ultimo contrato,
+`reconcileRentalProposalContractStage` gera o codigo de referencia e, na sequencia,
+`autoGenerateRentalProposalBoletos` monta o cronograma e avanca a proposta para
+`seguros_pendentes`. O card Boletos da tela de detalhes mantem um botao manual de
+geracao apenas como fallback (propostas legadas que ficaram em `boletos_pendentes`):
 
 - a geracao monta uma parcela por mes de vigencia (`leaseTermMonths`), com competencia a partir do mes de inicio (`startDate`) e vencimento no `dueDay` informado, fazendo "clamp" quando o mes nao tem o dia (ex.: 31 em fevereiro);
 - o valor inicial de cada boleto replica `rentAmount` + `condominiumAmount` da proposta; `extraAmount`/`extraDescription` permitem encargos avulsos (IPTU, multas etc.);
 - a geracao e idempotente: se ja existem boletos, nao duplica;
-- ao gerar, a proposta avanca direto para `status = "seguros_pendentes"` e `currentStep = "seguros_pendentes"`; gerar ja faz o processo seguir.
+- a geracao automatica e best-effort: se o cronograma nao puder ser montado, a proposta permanece em `boletos_pendentes` para geracao manual, sem quebrar a aprovacao do contrato;
+- gerar (auto ou manual) leva a proposta a `status = "seguros_pendentes"` e `currentStep = "seguros_pendentes"`.
 
 Nas etapas 20 e 21, a gestao dos boletos vive na sub-pagina `Administrativo > Locacoes > Boletos` (independente da etapa da proposta):
 
@@ -94,6 +101,26 @@ Nas etapas 20 e 21, a gestao dos boletos vive na sub-pagina `Administrativo > Lo
 - em "Detalhes" o administrativo edita boletos em lote (todos ou um subconjunto selecionado) e individualmente, aprova cada boleto apos validacao manual das cobrancas, aprova todos de uma vez, da baixa manual de pagamento e estorna;
 - editar um boleto recalcula o total e o devolve para `pendente` (revalidacao);
 - e possivel regerar todo o cronograma enquanto nenhum boleto tiver sido aprovado.
+
+Nas etapas 22 e 23 (Seguros), ao a proposta entrar em `seguros_pendentes` o helper
+`initiateRentalInsuranceStage` cria duas linhas em `rentalProposalInsurances`
+(`fianca` e `incendio`), marca `requestedAt` e envia ao locatario um e-mail
+solicitando os comprovantes das primeiras parcelas (template
+`rental-insurance-request`, best-effort). A gestao acontece no card "Seguros" da
+tela de detalhes:
+
+- cada seguro pode ser **confirmado** (com seguradora, apolice, valor e
+  comprovante opcional anexado como base64) ou **dispensado** (quando nao se
+  aplica, ex.: locacao com fiador no lugar de seguro fianca);
+- o comprovante e guardado em `proofData` (data URL base64) e baixado por uma
+  query admin-only (`insuranceProof`), no mesmo padrao do download de contratos —
+  sem nova rota de midia;
+- ha um botao para **reenviar o e-mail** de solicitacao e um **link wa.me** com
+  mensagem pronta (o admin clica e envia pelo proprio WhatsApp; nao ha integracao
+  automatica de WhatsApp);
+- confirmar/dispensar **ambos** os seguros avanca a proposta para
+  `assinaturas_pendentes`; reabrir um seguro ja resolvido retorna a proposta para
+  `seguros_pendentes`.
 
 ## Regras de negocio
 
@@ -107,10 +134,10 @@ Nas etapas 20 e 21, a gestao dos boletos vive na sub-pagina `Administrativo > Lo
 - Variaveis reconhecidas sao substituidas pelos dados do `contextSnapshot`; variaveis sem mapeamento ou sem valor permanecem pendentes para revisao manual.
 - A validacao manual ocorre contrato a contrato.
 - Contrato gerado com texto revisado vazio nao pode ser aprovado.
-- A aprovacao do ultimo contrato pendente gera o codigo de referencia da proposta e avanca para a etapa de boletos.
+- A aprovacao do ultimo contrato pendente gera o codigo de referencia, gera automaticamente os boletos do periodo e avanca a proposta direto para a etapa de seguros (`seguros_pendentes`).
 - O codigo de referencia e unico por proposta e nao e regerado se ja existir.
 - O codigo de referencia compoe o rodape dos contratos, derivado na exibicao a partir de `rentalProposals.referenceCode`.
-- A geracao de boletos so ocorre quando `currentStep = "boletos_pendentes"` e a proposta ja tem `referenceCode`; gerar avanca a proposta direto para `seguros_pendentes`.
+- A geracao de boletos ocorre automaticamente na aprovacao do ultimo contrato (helper `autoGenerateRentalProposalBoletos`); o botao manual permanece apenas como fallback quando `currentStep = "boletos_pendentes"` e a proposta ja tem `referenceCode`. Em ambos os casos, gerar avanca a proposta direto para `seguros_pendentes`.
 - A gestao posterior dos boletos (regerar/editar/aprovar/baixar pagamento) fica disponivel sempre que a proposta tiver `referenceCode`, na sub-pagina de Boletos, sem alterar a etapa da proposta; regerar e bloqueado se houver boleto aprovado.
 - O total de um boleto e sempre `rentAmount + condominiumAmount + extraAmount` (recalculado no backend a cada edicao).
 - Reajustes (IGP-M etc.) nao sao aplicados automaticamente na geracao, pois o indice do periodo ainda nao e conhecido; sao lancados depois via edicao em lote.
@@ -161,4 +188,8 @@ Nas etapas 20 e 21, a gestao dos boletos vive na sub-pagina `Administrativo > Lo
 - API: mutations `rentalProposals.generateBoletos` (gera e avanca para `seguros_pendentes`), `regenerateBoletos`, `updateBoleto`, `updateBoletosBatch`, `approveBoleto`, `approveAllBoletos` e `setBoletoPaid`; query `rentalProposals.boletoSets` lista os conjuntos; `getById` passa a retornar `boletos`.
 - Frontend: card Boletos em `RentalProposalForm` reduzido a gerar (com preview) + atalho para a aba Boletos; a gestao (lista de conjuntos, edicao em lote/individual, aprovacao e baixa de pagamento) fica em `AdminRentalBoletosPanel`, na aba Boletos de Locacoes (deep-link via `?tab=Boletos`).
 - Migracao: `drizzle/pg/0030_rental_proposal_boletos.sql` e patches idempotentes `2026-06-07_rental_proposal_boletos` e `2026-06-07_rental_proposal_boletos_paid_at` em `scripts/manual-db-sync.mjs`.
-- Fluxo futuro: a proxima etapa (22) e aguardar e confirmar os comprovantes das primeiras parcelas dos seguros (fianca e incendio).
+- Banco de dados: nova tabela `rentalProposalInsurances` (uma linha por proposta+tipo: `fianca`/`incendio`) com seguradora, apolice, valor, comprovante em base64, status (`pendente`/`confirmado`/`dispensado`) e auditoria. Migracao via patch idempotente `2026-06-27_rental_proposal_insurances` em `scripts/manual-db-sync.mjs`.
+- API: query `rentalProposals.insurances` e `insuranceProof`; mutations `confirmInsurance` (anexo opcional), `dispenseInsurance`, `reopenInsurance` e `resendInsuranceRequest`; `getById` passa a retornar `insurances`. A aprovacao do ultimo contrato agora gera boletos e dispara a solicitacao de seguros (`autoGenerateRentalProposalBoletos` + `initiateRentalInsuranceStage`).
+- E-mail: template `server/_core/email/templates/rental-insurance-request.ts` e funcao `sendRentalInsuranceRequestEmail` em `server/_core/email/service.ts`. Em dev o provider padrao e `preview` (grava HTML em `tmp/email-previews`); envio real exige `EMAIL_PROVIDER=smtp` + credenciais.
+- Frontend: card "Seguros" em `RentalProposalForm` com dois blocos (`RentalInsuranceBlock`), botoes de reenviar e-mail e link wa.me.
+- Fluxo futuro: a proxima etapa (24) e aguardar as assinaturas digitais (preferencia futura por GOV.BR).

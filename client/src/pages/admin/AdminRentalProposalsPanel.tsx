@@ -20,6 +20,7 @@ import {
   Home,
   KeyRound,
   MailCheck,
+  Receipt,
   ShieldCheck,
   Trash2,
   type LucideIcon,
@@ -258,11 +259,17 @@ export default function AdminRentalProposalsPanel() {
                         </span>
                       ) : null}
                     </div>
-                    <p className="mt-1 text-xs font-semibold uppercase tracking-[0.08em] text-emerald-700">
-                      Cód. Referência{" "}
-                      <span className="text-slate-700">
-                        {referenceLabel}
-                      </span>
+                    <p className="mt-1 flex flex-wrap items-center gap-2 text-xs font-semibold uppercase tracking-[0.08em] text-emerald-700">
+                      {proposal.referenceCode ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold normal-case tracking-normal text-white">
+                          <Receipt className="h-3.5 w-3.5" />
+                          {proposal.referenceCode}
+                        </span>
+                      ) : (
+                        <span className="text-slate-700">
+                          {referenceLabel}
+                        </span>
+                      )}
                     </p>
                     <p className="mt-2 text-sm text-slate-600">
                       Locatário: {proposal.tenant?.name || proposal.tenant?.email || `ID ${proposal.tenantUserId}`}
