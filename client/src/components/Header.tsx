@@ -99,14 +99,18 @@ export default function Header() {
               item =>
                 item.href !== "/" &&
                 item.href !== "/contato" &&
-                item.href !== "/servicos"
+                item.href !== "/servicos" &&
+                item.href !== "/lancamentos"
             ),
           ]
         : isAuthenticated && user?.role === "corretor"
           ? [
               dashboardItem,
               ...publicMenuItems.filter(
-                item => item.href !== "/" && item.href !== "/contato"
+                item =>
+                  item.href !== "/" &&
+                  item.href !== "/contato" &&
+                  item.href !== "/lancamentos"
               ),
             ]
           : [...publicMenuItems.filter(item => item.href !== "/lancamentos")];
@@ -119,7 +123,9 @@ export default function Header() {
           ...corretorMenuItems.filter(item => item.href !== "/dashboard")
         );
       } else if (user.role === "administrativo") {
-        items.push(...adminMenuItems);
+        items.push(
+          ...adminMenuItems.filter(item => item.href !== "/admin/users")
+        );
       }
     }
 
@@ -210,9 +216,9 @@ export default function Header() {
                   title="Tarefas e Eventos"
                 >
                   <CalendarDays className="h-5 w-5" />
-                  {(taskSummary?.assignedOpenCount ?? 0) > 0 ? (
+                  {(taskSummary?.assignedUnseenCount ?? 0) > 0 ? (
                     <span className="absolute right-0.5 top-0.5 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-emerald-700 px-1 text-[10px] font-semibold text-white">
-                      {Math.min(taskSummary?.assignedOpenCount ?? 0, 99)}
+                      {Math.min(taskSummary?.assignedUnseenCount ?? 0, 99)}
                     </span>
                   ) : null}
                 </Button>
@@ -300,6 +306,16 @@ export default function Header() {
                   ) : null}
                   {isStaff ? (
                     <DropdownMenuItem asChild>
+                      <Link href="/lancamentos">
+                        <a className="flex items-center gap-2">
+                          <Hammer className="h-4 w-4" />
+                          Lançamentos
+                        </a>
+                      </Link>
+                    </DropdownMenuItem>
+                  ) : null}
+                  {isStaff ? (
+                    <DropdownMenuItem asChild>
                       <Link href="/condominios">
                         <a className="flex items-center gap-2">
                           <Building2 className="h-4 w-4" />
@@ -343,6 +359,23 @@ export default function Header() {
                         </Link>
                       </DropdownMenuItem>
                     </>
+                  ) : null}
+                  {user.role === "administrativo" ? (
+                    <DropdownMenuItem asChild>
+                      <Link href="/admin/users">
+                        <a className="flex items-center gap-2">
+                          <Users className="h-4 w-4" />
+                          Usuários
+                          {hasNewUsers ? (
+                            <span
+                              className="ml-1 inline-block h-2.5 w-2.5 rounded-full bg-emerald-700"
+                              aria-label="Existem novos cadastros"
+                              title="Existem novos cadastros"
+                            />
+                          ) : null}
+                        </a>
+                      </Link>
+                    </DropdownMenuItem>
                   ) : null}
                   <DropdownMenuItem
                     onClick={() => logout()}

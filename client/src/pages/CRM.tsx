@@ -728,7 +728,7 @@ export default function CRM() {
                 }`}
                 onClick={() => setStatusSelected(status.value)}
               >
-                <CardContent className="flex h-full items-center p-6">
+                <CardContent className="flex h-full items-center">
                   <div className="flex items-center gap-3">
                     <div className={`w-3 h-3 rounded-full ${status.color}`} />
                     <div className="flex-1">

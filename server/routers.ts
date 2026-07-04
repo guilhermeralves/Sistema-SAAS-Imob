@@ -8,6 +8,11 @@ import {
 } from "@shared/contract-variables";
 import { buildRentalProposalReferenceCode } from "@shared/contract-reference";
 import {
+  ATTENDANCE_QUEUE_LIMITS,
+  ATTENDANCE_QUEUE_ORDER_STRATEGIES,
+  DEFAULT_ATTENDANCE_QUEUE_RULES,
+} from "@shared/roleta";
+import {
   buildBoletoDueDate,
   buildRentalBoletoSchedule,
   calculateBoletoTotal,
@@ -26,6 +31,12 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { sendWelcomeEmail } from "./_core/email";
 import { ENV } from "./_core/env";
 import { hashPassword, verifyPassword } from "./_core/passwords";
+import {
+  distributeLeadToRoleta,
+  notifyBrokerLeadAssigned,
+  notifyQueueLeft,
+  notifyQueuePositions,
+} from "./_core/roleta";
 import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
 import {
@@ -50,42 +61,6 @@ const pushSubscriptionSchema = z.object({
   }),
   userAgent: z.string().max(255).optional(),
 });
-
-/**
- * Notifica o corretor responsável de que um novo lead foi direcionado a ele.
- * Nunca lança: push é um canal best-effort e não pode quebrar o fluxo do lead.
- */
-async function notifyBrokerLeadAssigned(
-  brokerUserId: number,
-  leadName: string | null | undefined,
-  leadId: number
-) {
-  const title = "Novo Lead";
-  const body = leadName
-    ? `O Lead ${leadName} foi direcionado para o seu Atendimento`
-    : "Um novo Lead foi direcionado para o seu Atendimento";
-  const url = "/crm";
-
-  // Persiste no histórico primeiro (alimenta o sino mesmo se o push falhar).
-  try {
-    const { createUserNotification } = await import("./db");
-    await createUserNotification({ userId: brokerUserId, title, body, url });
-  } catch (error) {
-    console.warn("[notify] Falha ao salvar histórico de notificação:", error);
-  }
-
-  try {
-    const { sendPushToUser } = await import("./_core/push");
-    await sendPushToUser(brokerUserId, {
-      title,
-      body,
-      url,
-      tag: `lead-${leadId}`,
-    });
-  } catch (error) {
-    console.warn("[push] Falha ao notificar corretor do lead:", error);
-  }
-}
 
 /**
  * Notifica (somente push) um usuário de que uma tarefa/evento foi atribuída a
@@ -2357,6 +2332,274 @@ async function getAdminUserWithFlags(adminUserId: number, userId: number) {
   };
 }
 
+const queueOrderStrategySchema = z.enum(
+  ATTENDANCE_QUEUE_ORDER_STRATEGIES as unknown as [string, ...string[]]
+);
+
+const queueTimeoutSchema = z
+  .number()
+  .int()
+  .min(ATTENDANCE_QUEUE_LIMITS.timeoutMinutesMin)
+  .max(ATTENDANCE_QUEUE_LIMITS.timeoutMinutesMax);
+
+const createQueueSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(ATTENDANCE_QUEUE_LIMITS.nameMin)
+    .max(ATTENDANCE_QUEUE_LIMITS.nameMax),
+  description: z
+    .string()
+    .trim()
+    .max(ATTENDANCE_QUEUE_LIMITS.descriptionMax)
+    .optional()
+    .nullable(),
+  isActive: z.boolean().optional(),
+  isDefault: z.boolean().optional(),
+  orderStrategy: queueOrderStrategySchema.optional(),
+  assignmentTimeoutMinutes: queueTimeoutSchema.optional(),
+  attendanceTimeoutMinutes: queueTimeoutSchema.optional(),
+  businessHoursOnly: z.boolean().optional(),
+});
+
+const updateQueueSchema = createQueueSchema.partial().extend({
+  id: z.number().int().positive(),
+});
+
+const queueIdSchema = z.object({
+  queueId: z.number().int().positive(),
+});
+
+const setQueueMemberSchema = z.object({
+  queueId: z.number().int().positive(),
+  userId: z.number().int().positive(),
+  canJoin: z.boolean(),
+});
+
+const removeQueueMemberSchema = z.object({
+  queueId: z.number().int().positive(),
+  userId: z.number().int().positive(),
+});
+
+const boolToInt = (value: boolean | undefined) =>
+  value === undefined ? undefined : value ? 1 : 0;
+
+/**
+ * Router da Roleta de Atendimentos.
+ *
+ * - Endpoints `adminProcedure`: admin configura filas (regras/tempo) e concede
+ *   permissões aos corretores.
+ * - Endpoints `staffProcedure` (corretor + admin): o corretor vê as filas que
+ *   pode acessar e entra/sai delas.
+ *
+ * A distribuição automática de leads e o push de posição serão adicionados nas
+ * próximas partes; aqui montamos apenas a base de dados e o controle de fila.
+ */
+const roletaRouter = router({
+  // -------- Admin: gestão de filas --------
+  queues: adminProcedure.query(async () => {
+    const { getAttendanceQueues } = await import("./db");
+    return await getAttendanceQueues();
+  }),
+
+  queueById: adminProcedure.input(idSchema).query(async ({ input }) => {
+    const {
+      getAttendanceQueueById,
+      getAttendanceQueueMembers,
+      getAttendanceQueueParticipants,
+    } = await import("./db");
+    const queue = await getAttendanceQueueById(input.id);
+    if (!queue) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Fila não encontrada" });
+    }
+    const [members, participants] = await Promise.all([
+      getAttendanceQueueMembers(input.id),
+      getAttendanceQueueParticipants(input.id),
+    ]);
+    return { queue, members, participants };
+  }),
+
+  createQueue: adminProcedure
+    .input(createQueueSchema)
+    .mutation(async ({ ctx, input }) => {
+      const { createAttendanceQueue } = await import("./db");
+      return await createAttendanceQueue({
+        name: input.name,
+        description: input.description ?? null,
+        isActive: boolToInt(input.isActive) ?? 1,
+        isDefault: boolToInt(input.isDefault) ?? 0,
+        orderStrategy:
+          (input.orderStrategy as "round_robin" | "manual" | undefined) ??
+          DEFAULT_ATTENDANCE_QUEUE_RULES.orderStrategy,
+        assignmentTimeoutMinutes:
+          input.assignmentTimeoutMinutes ??
+          DEFAULT_ATTENDANCE_QUEUE_RULES.assignmentTimeoutMinutes,
+        attendanceTimeoutMinutes:
+          input.attendanceTimeoutMinutes ??
+          DEFAULT_ATTENDANCE_QUEUE_RULES.attendanceTimeoutMinutes,
+        businessHoursOnly:
+          boolToInt(input.businessHoursOnly) ??
+          (DEFAULT_ATTENDANCE_QUEUE_RULES.businessHoursOnly ? 1 : 0),
+        createdByUserId: ctx.user.id,
+      });
+    }),
+
+  updateQueue: adminProcedure
+    .input(updateQueueSchema)
+    .mutation(async ({ input }) => {
+      const { getAttendanceQueueById, updateAttendanceQueue } = await import(
+        "./db"
+      );
+      const existing = await getAttendanceQueueById(input.id);
+      if (!existing) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Fila não encontrada",
+        });
+      }
+      const updated = await updateAttendanceQueue(input.id, {
+        name: input.name,
+        description: input.description === undefined ? undefined : input.description ?? null,
+        isActive: boolToInt(input.isActive),
+        isDefault: boolToInt(input.isDefault),
+        orderStrategy: input.orderStrategy as
+          | "round_robin"
+          | "manual"
+          | undefined,
+        assignmentTimeoutMinutes: input.assignmentTimeoutMinutes,
+        attendanceTimeoutMinutes: input.attendanceTimeoutMinutes,
+        businessHoursOnly: boolToInt(input.businessHoursOnly),
+      });
+      return updated;
+    }),
+
+  deleteQueue: adminProcedure.input(idSchema).mutation(async ({ input }) => {
+    const { deleteAttendanceQueue } = await import("./db");
+    await deleteAttendanceQueue(input.id);
+    return { ok: true };
+  }),
+
+  // -------- Admin: permissões dos corretores --------
+  members: adminProcedure.input(queueIdSchema).query(async ({ input }) => {
+    const { getAttendanceQueueMembers } = await import("./db");
+    return await getAttendanceQueueMembers(input.queueId);
+  }),
+
+  setMember: adminProcedure
+    .input(setQueueMemberSchema)
+    .mutation(async ({ ctx, input }) => {
+      const {
+        getAttendanceQueueById,
+        getUserById,
+        setAttendanceQueueMember,
+      } = await import("./db");
+      const queue = await getAttendanceQueueById(input.queueId);
+      if (!queue) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Fila não encontrada",
+        });
+      }
+      const target = await getUserById(input.userId);
+      if (!target || target.role !== "corretor" || target.isActive !== 1) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Selecione um corretor ativo",
+        });
+      }
+      return await setAttendanceQueueMember({
+        queueId: input.queueId,
+        userId: input.userId,
+        canJoin: input.canJoin,
+        createdByUserId: ctx.user.id,
+      });
+    }),
+
+  removeMember: adminProcedure
+    .input(removeQueueMemberSchema)
+    .mutation(async ({ input }) => {
+      const { removeAttendanceQueueMember } = await import("./db");
+      await removeAttendanceQueueMember(input.queueId, input.userId);
+      return { ok: true };
+    }),
+
+  participants: adminProcedure
+    .input(queueIdSchema)
+    .query(async ({ input }) => {
+      const { getAttendanceQueueParticipants } = await import("./db");
+      return await getAttendanceQueueParticipants(input.queueId);
+    }),
+
+  // -------- Corretor (e admin): participação nas filas --------
+  myQueues: staffProcedure.query(async ({ ctx }) => {
+    const {
+      getActiveAttendanceQueues,
+      getJoinableQueuesForUser,
+      getAttendanceQueueParticipants,
+    } = await import("./db");
+
+    const isAdmin = ctx.user.role === "administrativo";
+    const queues = isAdmin
+      ? await getActiveAttendanceQueues()
+      : await getJoinableQueuesForUser(ctx.user.id);
+
+    return await Promise.all(
+      queues.map(async queue => {
+        const participants = await getAttendanceQueueParticipants(queue.id);
+        const index = participants.findIndex(p => p.userId === ctx.user.id);
+        return {
+          queue,
+          participantsCount: participants.length,
+          isParticipating: index >= 0,
+          // Posição amigável na fila (1 = próximo a receber). null se fora.
+          position: index >= 0 ? index + 1 : null,
+        };
+      })
+    );
+  }),
+
+  join: staffProcedure.input(queueIdSchema).mutation(async ({ ctx, input }) => {
+    const {
+      getAttendanceQueueById,
+      getAttendanceQueueMember,
+      joinAttendanceQueue,
+    } = await import("./db");
+
+    const queue = await getAttendanceQueueById(input.queueId);
+    if (!queue || queue.isActive !== 1) {
+      throw new TRPCError({
+        code: "NOT_FOUND",
+        message: "Fila indisponível",
+      });
+    }
+
+    // Admin pode entrar em qualquer fila ativa; corretor precisa de permissão.
+    if (ctx.user.role !== "administrativo") {
+      const member = await getAttendanceQueueMember(input.queueId, ctx.user.id);
+      if (!member || member.canJoin !== 1) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Você não tem permissão para acessar esta fila",
+        });
+      }
+    }
+
+    const participant = await joinAttendanceQueue(input.queueId, ctx.user.id);
+    // Atualiza o push de posição de todos (o novo entra no fim da fila).
+    await notifyQueuePositions(input.queueId);
+    return participant;
+  }),
+
+  leave: staffProcedure.input(queueIdSchema).mutation(async ({ ctx, input }) => {
+    const { leaveAttendanceQueue } = await import("./db");
+    await leaveAttendanceQueue(input.queueId, ctx.user.id);
+    // Libera o push fixo de quem saiu e reordena os demais.
+    await notifyQueueLeft(input.queueId, ctx.user.id);
+    await notifyQueuePositions(input.queueId);
+    return { ok: true };
+  }),
+});
+
 export const appRouter = router({
   system: systemRouter,
   notifications: router({
@@ -3467,6 +3710,14 @@ export const appRouter = router({
               createdLeadId
             );
           }
+        } else if (payload.status === "novo") {
+          // Lead sem responsável (site/cliente): a roleta distribui ao próximo
+          // corretor da fila padrão. Se não houver fila/participante disponível,
+          // o SLA de leads cuida do lead como fallback.
+          await distributeLeadToRoleta({
+            id: createdLeadId,
+            nome: payload.nome ?? null,
+          });
         }
       }
 
@@ -3789,12 +4040,15 @@ export const appRouter = router({
         getAllTaskItemsWithRelations,
         getTaskItemsForUserWithRelations,
         purgeCompletedTaskItemsOlderThan,
+        getViewedTaskIdsForUser,
       } = await import("./db");
       await purgeCompletedTaskItemsOlderThan(30);
       const taskItems =
         ctx.user.role === "administrativo"
           ? await getAllTaskItemsWithRelations()
           : await getTaskItemsForUserWithRelations(ctx.user.id);
+
+      const viewedIds = await getViewedTaskIdsForUser(ctx.user.id);
 
       const assignedItems = taskItems.filter(taskItem =>
         taskItem.assignees.some(assignee => assignee.id === ctx.user.id)
@@ -3805,12 +4059,45 @@ export const appRouter = router({
       const assignedOverdueCount = assignedOpenItems.filter(
         taskItem => getComputedTaskStatus(taskItem) === "atrasado"
       ).length;
+      // Não vistos = atribuídos, em aberto e que o usuário ainda não abriu.
+      const assignedUnseenCount = assignedOpenItems.filter(
+        taskItem => !viewedIds.has(taskItem.id)
+      ).length;
 
       return {
         assignedOpenCount: assignedOpenItems.length,
+        assignedUnseenCount,
         assignedOverdueCount,
         totalVisibleCount: taskItems.length,
       };
+    }),
+    markTaskViewed: staffProcedure
+      .input(z.object({ taskId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        const { markTaskItemViewed } = await import("./db");
+        await markTaskItemViewed(input.taskId, ctx.user.id);
+        return { ok: true } as const;
+      }),
+    // Marca todas as tarefas/eventos atribuídos e em aberto como vistos (zera o badge).
+    markAllViewed: staffProcedure.mutation(async ({ ctx }) => {
+      const {
+        getAllTaskItemsWithRelations,
+        getTaskItemsForUserWithRelations,
+        markTaskItemViewed,
+      } = await import("./db");
+      const taskItems =
+        ctx.user.role === "administrativo"
+          ? await getAllTaskItemsWithRelations()
+          : await getTaskItemsForUserWithRelations(ctx.user.id);
+      const assignedOpen = taskItems.filter(
+        taskItem =>
+          taskItem.assignees.some(assignee => assignee.id === ctx.user.id) &&
+          getComputedTaskStatus(taskItem) !== "concluida"
+      );
+      for (const taskItem of assignedOpen) {
+        await markTaskItemViewed(taskItem.id, ctx.user.id);
+      }
+      return { ok: true, count: assignedOpen.length } as const;
     }),
     create: staffProcedure
       .input(createTaskItemSchema)
@@ -6034,6 +6321,113 @@ export const appRouter = router({
         }
         return { success: true } as const;
       }),
+    // Selfie de validacao de uma parte (admin visualiza).
+    inspectionSelfie: adminProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          party: z.enum(["tenant", "owner"]),
+        })
+      )
+      .query(async ({ input }) => {
+        const { getRentalProposalInspectionSelfie } = await import("./db");
+        const selfie = await getRentalProposalInspectionSelfie(
+          input.id,
+          input.party
+        );
+        return selfie ? { dataUrl: selfie } : null;
+      }),
+    // Resolve o token do link de validacao (usado pela pagina do cliente).
+    inspectionValidationByToken: clientProcedure
+      .input(z.object({ token: z.string().min(1).max(60) }))
+      .query(async ({ input }) => {
+        const {
+          getRentalProposalInspectionByToken,
+          getRentalProposalById,
+        } = await import("./db");
+        const resolved = await getRentalProposalInspectionByToken(input.token);
+        if (!resolved) return { found: false as const };
+
+        const { inspection, party } = resolved;
+        const proposal = await getRentalProposalById(inspection.rentalProposalId);
+        const alreadyValidated =
+          party === "tenant"
+            ? Boolean(inspection.tenantValidatedAt)
+            : Boolean(inspection.ownerValidatedAt);
+
+        return {
+          found: true as const,
+          party,
+          partyLabel: party === "tenant" ? "Locatário" : "Proprietário",
+          propertyLabel: proposal
+            ? getRentalProposalPropertyLabel(proposal)
+            : "Imóvel da locação",
+          referenceCode: proposal?.referenceCode ?? null,
+          alreadyValidated,
+          laudoAvailable: Boolean(inspection.laudoFileName),
+          canValidate:
+            Boolean(inspection.laudoFileName) &&
+            proposal?.currentStep === "vistoria_pendente",
+        };
+      }),
+    // Cliente logado envia a selfie e valida (por token).
+    submitInspectionValidation: clientProcedure
+      .input(
+        z.object({
+          token: z.string().min(1).max(60),
+          selfie: z.string().min(1).max(14_000_000),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const {
+          getRentalProposalInspectionByToken,
+          getRentalProposalById,
+          upsertRentalProposalInspection,
+        } = await import("./db");
+        const resolved = await getRentalProposalInspectionByToken(input.token);
+        if (!resolved) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Link de validação inválido.",
+          });
+        }
+
+        const { inspection, party } = resolved;
+        const proposal = await getRentalProposalById(
+          inspection.rentalProposalId
+        );
+        if (!proposal || proposal.currentStep !== "vistoria_pendente") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Esta validação não está mais disponível.",
+          });
+        }
+        if (!inspection.laudoFileName) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              "O laudo da vistoria ainda não foi anexado. Tente novamente mais tarde.",
+          });
+        }
+
+        const now = new Date();
+        await upsertRentalProposalInspection(inspection.rentalProposalId, {
+          ...(party === "tenant"
+            ? {
+                tenantValidatedAt: now,
+                tenantValidatedByUserId: ctx.user.id,
+                tenantSelfieData: input.selfie,
+              }
+            : {
+                ownerValidatedAt: now,
+                ownerValidatedByUserId: ctx.user.id,
+                ownerSelfieData: input.selfie,
+              }),
+        });
+
+        await maybeAdvanceAfterInspection(inspection.rentalProposalId);
+        return { success: true, party } as const;
+      }),
     delete: adminProcedure.input(idSchema).mutation(async ({ input }) => {
       const { deleteRentalProposal, getRentalProposalById } = await import(
         "./db"
@@ -6802,6 +7196,7 @@ export const appRouter = router({
         return await updateUserRole(input.id, input.role);
       }),
   }),
+  roleta: roletaRouter,
 });
 
 export type AppRouter = typeof appRouter;

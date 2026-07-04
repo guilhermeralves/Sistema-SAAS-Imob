@@ -93,11 +93,38 @@
 - [x] Vistoria e laudo
   - tabela `rentalProposalInspections` (1 por proposta), card "Vistoria e laudo"
   - vistoriador = contato externo (nome/telefone/e-mail); notifica por link wa.me (sem push/API)
-  - fluxo: solicitar vistoria → anexar laudo → validar locatário + proprietário → avança `entrega_chaves_pendente`
-  - mutations `inspection`/`requestInspection`/`uploadInspectionLaudo`/`setInspectionValidation` + `inspectionLaudo`
+  - fluxo: solicitar vistoria → anexar laudo → validação do locatário + proprietário → avança `entrega_chaves_pendente`
+  - VALIDAÇÃO COM SELFIE: locatário e proprietário validam LOGADOS como usuário cliente,
+    cada um por um LINK COM TOKEN (`/validar-vistoria/:token`); quem não for cliente é levado ao login/registro.
+    Captura selfie (`SelfieCapture`, getUserMedia) guardada no processo (`tenant/ownerSelfieData`).
+    Admin envia os links (copiar/WhatsApp) e vê a selfie de cada parte.
+  - endpoints cliente: `inspectionValidationByToken` + `submitInspectionValidation`; admin: `inspectionSelfie`
+  - endereço completo do imóvel vai na mensagem wa.me ao vistoriador
   - PENDENTE (melhoria): e-mail automático ao vistoriador; agendamento (scheduledAt na UI)
 - [ ] Entrega de chaves + e-mail de boas-vindas
 - [ ] Conversão em locação ativa (sai de Propostas → Locações Ativas)
+
+## Roleta de Atendimentos (distribuição automática de leads)
+- [x] Parte 1 — Fundação de dados + backend
+  - tabelas `attendanceQueues` (filas/regras), `attendanceQueueMembers` (permissão do corretor),
+    `attendanceQueueParticipants` (fila ativa com posição do rodízio) — schema + `manual-db-sync` patch `2026-07-04_attendance_roulette` (APLICADO no banco)
+  - contratos em `shared/roleta.ts` (estratégias de ordem, limites, regras padrão)
+  - helpers em `server/db.ts` (CRUD de filas, permissões, join/leave com reposicionamento)
+  - router tRPC `roleta` (admin: filas/permissões; corretor via `staffProcedure`: `myQueues`/`join`/`leave`)
+- [x] Parte 2 — UI da página (visão admin x corretor) + push fixo com posição atualizando (tag por fila)
+  - `client/src/pages/RoletaAtendimentos.tsx`: seção "Minhas filas" (entrar/sair + posição ao vivo, refetch 15s)
+    e painel admin (criar fila com regras, ativar/padrão/excluir, liberar acesso por corretor via switch)
+  - push de posição em `server/routers.ts` (`notifyQueuePositions`/`notifyQueueLeft`) com `tag` `roleta-fila-{id}`;
+    `PushMessage` ganhou `silent`/`renotify`/`requireInteraction` e `sw.js` repassa esses flags (sticky que atualiza)
+- [x] Parte 3 — Distribuição automática de leads (round-robin real + rotação + "Agora é sua vez"), integrado ao SLA
+  - serviço `server/_core/roleta.ts` (`distributeLeadToRoleta`): pega o 1º da fila padrão, atribui o lead,
+    reposiciona o corretor para o fim (`rotateAttendanceQueueParticipantToBack`), notifica (novo lead + posições)
+  - horário comercial extraído p/ `server/_core/businessHours.ts` (usado pelo SLA e pela roleta)
+  - gatilhos: criação de lead sem responsável (`leads.create`) + tick do SLA (`leadSla.ts`) distribui pendentes;
+    timeout de atendimento (40min) redireciona ao próximo da fila
+  - fallback: sem fila padrão / fora do horário / fila vazia → lead segue no fluxo de SLA existente
+  - notificações de push da roleta movidas p/ o serviço (sem import circular com `routers.ts`)
+- [ ] Parte 4 — Config avançada de regras e filas customizadas (admin UI)
 
 ## Melhorias Futuras
 - [ ] Relatórios em PDF (contratos, documentos)

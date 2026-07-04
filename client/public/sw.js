@@ -23,11 +23,40 @@ self.addEventListener("push", event => {
     icon: "/icons/icon-192.png",
     badge: "/icons/icon-192.png",
     tag: data.tag || undefined,
-    renotify: Boolean(data.tag),
+    // Por padrão reavisa quando há tag; a roleta pode pedir silent/renotify
+    // explícitos para atualizar a posição sem incomodar a cada mudança.
+    renotify:
+      typeof data.renotify === "boolean" ? data.renotify : Boolean(data.tag),
+    silent: Boolean(data.silent),
+    // Mantém a notificação fixa na bandeja (ex.: posição na roleta) até o
+    // usuário interagir. Suporte varia por plataforma (melhor no Android).
+    requireInteraction: Boolean(data.requireInteraction),
     data: { url: data.url || "/" },
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
+});
+
+/* Permite que a página peça para fechar notificações já visualizadas.
+   Ex.: ao abrir a tela de Tarefas e Eventos, fechamos as notificações
+   pendentes de tarefas/eventos (tag "task-...") da bandeja do dispositivo. */
+self.addEventListener("message", event => {
+  const data = event.data || {};
+  if (data.type !== "clear-notifications") return;
+
+  event.waitUntil(
+    self.registration.getNotifications().then(notifications => {
+      for (const notification of notifications) {
+        const tag = notification.tag || "";
+        const matches = data.tag
+          ? tag === data.tag
+          : data.tagPrefix
+            ? tag.startsWith(data.tagPrefix)
+            : true;
+        if (matches) notification.close();
+      }
+    })
+  );
 });
 
 self.addEventListener("notificationclick", event => {

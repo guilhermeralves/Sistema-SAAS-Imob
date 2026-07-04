@@ -148,7 +148,7 @@ export default function Servicos() {
                   key={item.title}
                   className="rounded-[28px] border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(241,245,243,0.88))] shadow-[0_20px_50px_-34px_rgba(15,23,42,0.32)]"
                 >
-                  <CardContent className="p-5">
+                  <CardContent>
                     <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
                       <item.icon className="h-5 w-5" />
                     </div>
@@ -160,7 +160,7 @@ export default function Servicos() {
             </div>
 
             <Card className="mt-4 rounded-[28px] border-transparent bg-[linear-gradient(135deg,#4e7b66,#628b78_55%,#7aa18b)] text-white shadow-[0_25px_60px_-35px_rgba(15,23,42,0.6)]">
-                <CardContent className="p-6">
+                <CardContent>
                   <p className="text-xs uppercase tracking-[0.2em] text-white/70">
                     Processo digital
                   </p>
@@ -196,7 +196,7 @@ export default function Servicos() {
                   key={servico.title}
                   className="rounded-[30px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_30px_90px_-42px_rgba(15,23,42,0.5)]"
                 >
-                  <CardContent className="p-6 md:p-7">
+                  <CardContent>
                     <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
                       <servico.icon className="h-5 w-5" />
                     </div>
@@ -229,7 +229,7 @@ export default function Servicos() {
         <section className="pt-14 md:pt-18">
           <div className="container">
             <Card className="rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
-              <CardContent className="p-6 md:p-8">
+              <CardContent>
                 <div className="mb-8 max-w-2xl">
                   <p className="mb-3 inline-flex rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-800">
                     Fluxo digital
@@ -248,7 +248,7 @@ export default function Servicos() {
                       key={etapa.numero}
                       className="rounded-[28px] border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(240,245,242,0.88))] shadow-[0_18px_40px_-30px_rgba(15,23,42,0.32)]"
                     >
-                      <CardContent className="p-5">
+                      <CardContent>
                         <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950 text-sm font-semibold text-white">
                           {etapa.numero}
                         </div>

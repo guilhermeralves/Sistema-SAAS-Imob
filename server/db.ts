@@ -1,7 +1,13 @@
-import { and, desc, eq, inArray, isNull, lt, ne, notInArray, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, ne, notInArray, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import {
   adminUserViews,
+  attendanceQueues,
+  attendanceQueueMembers,
+  attendanceQueueParticipants,
+  InsertAttendanceQueue,
+  InsertAttendanceQueueMember,
+  InsertAttendanceQueueParticipant,
   InsertContract,
   InsertAdminUserView,
   InsertCondominium,
@@ -56,6 +62,7 @@ import {
   taskItemAssignments,
   taskItemNotes,
   taskItemTemplates,
+  taskItemViews,
   taskItems,
   propertyDocuments,
   propertyKeyStatusRequests,
@@ -1405,6 +1412,7 @@ export async function getLeadsForSlaProcessing() {
   return await db
     .select({
       id: leads.id,
+      nome: leads.nome,
       status: leads.status,
       idResponsavel: leads.idResponsavel,
       assignmentCycleStartedAt: leads.assignmentCycleStartedAt,
@@ -1620,6 +1628,29 @@ export async function getAllTaskItemsWithRelations() {
     .from(taskItems)
     .orderBy(desc(taskItems.updatedAt));
   return await enrichTaskItemsWithRelations(rows);
+}
+
+// Marca uma tarefa/evento como visualizada por um usuario (idempotente).
+export async function markTaskItemViewed(taskId: number, userId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .insert(taskItemViews)
+    .values({ taskId, userId })
+    .onConflictDoNothing();
+}
+
+// Retorna o conjunto de ids de tarefas/eventos ja vistos por um usuario.
+export async function getViewedTaskIdsForUser(
+  userId: number
+): Promise<Set<number>> {
+  const db = await getDb();
+  if (!db) return new Set();
+  const rows = await db
+    .select({ taskId: taskItemViews.taskId })
+    .from(taskItemViews)
+    .where(eq(taskItemViews.userId, userId));
+  return new Set(rows.map(row => row.taskId));
 }
 
 export async function getTaskItemsForUserWithRelations(userId: number) {
@@ -2753,6 +2784,10 @@ const rentalInspectionColumns = {
   laudoFileName: rentalProposalInspections.laudoFileName,
   tenantValidatedAt: rentalProposalInspections.tenantValidatedAt,
   ownerValidatedAt: rentalProposalInspections.ownerValidatedAt,
+  tenantValidatedByUserId: rentalProposalInspections.tenantValidatedByUserId,
+  ownerValidatedByUserId: rentalProposalInspections.ownerValidatedByUserId,
+  tenantValidationToken: rentalProposalInspections.tenantValidationToken,
+  ownerValidationToken: rentalProposalInspections.ownerValidationToken,
   notes: rentalProposalInspections.notes,
 } as const;
 
@@ -2820,12 +2855,73 @@ export async function upsertRentalProposalInspection(
   return created;
 }
 
+function generateInspectionToken() {
+  return `${Date.now().toString(36)}${Math.random()
+    .toString(36)
+    .slice(2, 12)}`;
+}
+
+// Garante o registro de vistoria e que ambos os tokens de validacao existam.
 export async function ensureRentalProposalInspection(rentalProposalId: number) {
   const existing = await getRentalProposalInspection(rentalProposalId);
   if (!existing) {
-    await upsertRentalProposalInspection(rentalProposalId, {});
+    await upsertRentalProposalInspection(rentalProposalId, {
+      tenantValidationToken: generateInspectionToken(),
+      ownerValidationToken: generateInspectionToken(),
+    });
+  } else if (!existing.tenantValidationToken || !existing.ownerValidationToken) {
+    await upsertRentalProposalInspection(rentalProposalId, {
+      ...(existing.tenantValidationToken
+        ? {}
+        : { tenantValidationToken: generateInspectionToken() }),
+      ...(existing.ownerValidationToken
+        ? {}
+        : { ownerValidationToken: generateInspectionToken() }),
+    });
   }
   return await getRentalProposalInspection(rentalProposalId);
+}
+
+// Resolve um token de validacao -> registro completo + a parte (tenant/owner).
+export async function getRentalProposalInspectionByToken(token: string) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const [row] = await db
+    .select()
+    .from(rentalProposalInspections)
+    .where(
+      or(
+        eq(rentalProposalInspections.tenantValidationToken, token),
+        eq(rentalProposalInspections.ownerValidationToken, token)
+      )
+    )
+    .limit(1);
+
+  if (!row) return null;
+  const party: "tenant" | "owner" =
+    row.tenantValidationToken === token ? "tenant" : "owner";
+  return { inspection: row, party };
+}
+
+// Selfie de uma parte (data URL base64), baixada sob demanda.
+export async function getRentalProposalInspectionSelfie(
+  rentalProposalId: number,
+  party: "tenant" | "owner"
+) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const [row] = await db
+    .select({
+      tenantSelfieData: rentalProposalInspections.tenantSelfieData,
+      ownerSelfieData: rentalProposalInspections.ownerSelfieData,
+    })
+    .from(rentalProposalInspections)
+    .where(eq(rentalProposalInspections.rentalProposalId, rentalProposalId))
+    .limit(1);
+  if (!row) return null;
+  return party === "tenant" ? row.tenantSelfieData : row.ownerSelfieData;
 }
 
 export async function updateRentalProposalBoleto(
@@ -3256,5 +3352,332 @@ export async function markUserNotificationRead(id: number, userId: number) {
     .set({ isRead: 1 })
     .where(
       and(eq(userNotifications.id, id), eq(userNotifications.userId, userId))
+    );
+}
+
+/* ------------------------------------------------------------------ *
+ * Roleta de Atendimentos — filas, permissões e participantes.
+ * ------------------------------------------------------------------ */
+
+export async function getAttendanceQueues() {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
+    .select()
+    .from(attendanceQueues)
+    .orderBy(desc(attendanceQueues.isDefault), asc(attendanceQueues.name));
+}
+
+export async function getActiveAttendanceQueues() {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
+    .select()
+    .from(attendanceQueues)
+    .where(eq(attendanceQueues.isActive, 1))
+    .orderBy(desc(attendanceQueues.isDefault), asc(attendanceQueues.name));
+}
+
+export async function getAttendanceQueueById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(attendanceQueues)
+    .where(eq(attendanceQueues.id, id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getDefaultAttendanceQueue() {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(attendanceQueues)
+    .where(
+      and(eq(attendanceQueues.isDefault, 1), eq(attendanceQueues.isActive, 1))
+    )
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function createAttendanceQueue(data: InsertAttendanceQueue) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Garante uma única fila padrão: se esta entra como padrão, zera as demais.
+  if (data.isDefault) {
+    await db
+      .update(attendanceQueues)
+      .set({ isDefault: 0, updatedAt: new Date() });
+  }
+  const rows = await db.insert(attendanceQueues).values(data).returning();
+  return rows[0];
+}
+
+export async function updateAttendanceQueue(
+  id: number,
+  data: Partial<InsertAttendanceQueue>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (data.isDefault) {
+    await db
+      .update(attendanceQueues)
+      .set({ isDefault: 0, updatedAt: new Date() })
+      .where(ne(attendanceQueues.id, id));
+  }
+  const rows = await db
+    .update(attendanceQueues)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(attendanceQueues.id, id))
+    .returning();
+  return rows[0] ?? null;
+}
+
+export async function deleteAttendanceQueue(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .delete(attendanceQueueParticipants)
+    .where(eq(attendanceQueueParticipants.queueId, id));
+  await db
+    .delete(attendanceQueueMembers)
+    .where(eq(attendanceQueueMembers.queueId, id));
+  await db.delete(attendanceQueues).where(eq(attendanceQueues.id, id));
+}
+
+export async function getAttendanceQueueMembers(queueId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
+    .select()
+    .from(attendanceQueueMembers)
+    .where(eq(attendanceQueueMembers.queueId, queueId));
+}
+
+/** Filas em que o corretor tem permissão de entrar (canJoin = 1). */
+export async function getJoinableQueuesForUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
+    .select({ queue: attendanceQueues })
+    .from(attendanceQueueMembers)
+    .innerJoin(
+      attendanceQueues,
+      eq(attendanceQueues.id, attendanceQueueMembers.queueId)
+    )
+    .where(
+      and(
+        eq(attendanceQueueMembers.userId, userId),
+        eq(attendanceQueueMembers.canJoin, 1),
+        eq(attendanceQueues.isActive, 1)
+      )
+    )
+    .then(rows => rows.map(row => row.queue));
+}
+
+export async function getAttendanceQueueMember(queueId: number, userId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(attendanceQueueMembers)
+    .where(
+      and(
+        eq(attendanceQueueMembers.queueId, queueId),
+        eq(attendanceQueueMembers.userId, userId)
+      )
+    )
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** Concede/atualiza a permissão de um corretor numa fila (upsert por par). */
+export async function setAttendanceQueueMember(input: {
+  queueId: number;
+  userId: number;
+  canJoin: boolean;
+  createdByUserId: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existing = await getAttendanceQueueMember(input.queueId, input.userId);
+  if (existing) {
+    const rows = await db
+      .update(attendanceQueueMembers)
+      .set({ canJoin: input.canJoin ? 1 : 0, updatedAt: new Date() })
+      .where(eq(attendanceQueueMembers.id, existing.id))
+      .returning();
+    return rows[0];
+  }
+  const values: InsertAttendanceQueueMember = {
+    queueId: input.queueId,
+    userId: input.userId,
+    canJoin: input.canJoin ? 1 : 0,
+    createdByUserId: input.createdByUserId,
+  };
+  const rows = await db
+    .insert(attendanceQueueMembers)
+    .values(values)
+    .returning();
+  return rows[0];
+}
+
+export async function removeAttendanceQueueMember(
+  queueId: number,
+  userId: number
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .delete(attendanceQueueMembers)
+    .where(
+      and(
+        eq(attendanceQueueMembers.queueId, queueId),
+        eq(attendanceQueueMembers.userId, userId)
+      )
+    );
+  // Ao perder a permissão, também sai da fila ativa.
+  await db
+    .delete(attendanceQueueParticipants)
+    .where(
+      and(
+        eq(attendanceQueueParticipants.queueId, queueId),
+        eq(attendanceQueueParticipants.userId, userId)
+      )
+    );
+}
+
+/** Participantes ativos da fila, ordenados pela posição do rodízio. */
+export async function getAttendanceQueueParticipants(queueId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
+    .select()
+    .from(attendanceQueueParticipants)
+    .where(
+      and(
+        eq(attendanceQueueParticipants.queueId, queueId),
+        eq(attendanceQueueParticipants.isActive, 1)
+      )
+    )
+    .orderBy(asc(attendanceQueueParticipants.position));
+}
+
+export async function getAttendanceQueueParticipant(
+  queueId: number,
+  userId: number
+) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select()
+    .from(attendanceQueueParticipants)
+    .where(
+      and(
+        eq(attendanceQueueParticipants.queueId, queueId),
+        eq(attendanceQueueParticipants.userId, userId)
+      )
+    )
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** Participações ativas do corretor (em quais filas ele está agora). */
+export async function getActiveParticipationsForUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
+    .select()
+    .from(attendanceQueueParticipants)
+    .where(
+      and(
+        eq(attendanceQueueParticipants.userId, userId),
+        eq(attendanceQueueParticipants.isActive, 1)
+      )
+    );
+}
+
+/**
+ * Coloca o corretor no fim da fila (maior position + 1). Se já existir registro
+ * (inclusive inativo por ter saído antes), reativa e reposiciona no fim.
+ */
+export async function joinAttendanceQueue(queueId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const active = await getAttendanceQueueParticipants(queueId);
+  const nextPosition =
+    active.reduce((max, row) => Math.max(max, row.position), 0) + 1;
+
+  const existing = await getAttendanceQueueParticipant(queueId, userId);
+  if (existing) {
+    const rows = await db
+      .update(attendanceQueueParticipants)
+      .set({
+        isActive: 1,
+        position: existing.isActive ? existing.position : nextPosition,
+        joinedAt: existing.isActive ? existing.joinedAt : new Date(),
+        leftAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(attendanceQueueParticipants.id, existing.id))
+      .returning();
+    return rows[0];
+  }
+
+  const values: InsertAttendanceQueueParticipant = {
+    queueId,
+    userId,
+    position: nextPosition,
+    isActive: 1,
+  };
+  const rows = await db
+    .insert(attendanceQueueParticipants)
+    .values(values)
+    .returning();
+  return rows[0];
+}
+
+/** Marca o corretor como fora da fila, preservando o histórico. */
+export async function leaveAttendanceQueue(queueId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(attendanceQueueParticipants)
+    .set({ isActive: 0, leftAt: new Date(), updatedAt: new Date() })
+    .where(
+      and(
+        eq(attendanceQueueParticipants.queueId, queueId),
+        eq(attendanceQueueParticipants.userId, userId)
+      )
+    );
+}
+
+/**
+ * Envia o corretor para o fim da fila (maior position + 1) e registra o
+ * `lastAssignedAt`. Usado no round-robin após ele receber um lead.
+ */
+export async function rotateAttendanceQueueParticipantToBack(
+  queueId: number,
+  userId: number
+) {
+  const db = await getDb();
+  if (!db) return;
+  const active = await getAttendanceQueueParticipants(queueId);
+  const maxPosition = active.reduce((max, row) => Math.max(max, row.position), 0);
+  await db
+    .update(attendanceQueueParticipants)
+    .set({
+      position: maxPosition + 1,
+      lastAssignedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(attendanceQueueParticipants.queueId, queueId),
+        eq(attendanceQueueParticipants.userId, userId)
+      )
     );
 }

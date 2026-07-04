@@ -64,6 +64,9 @@ export const users = pgTable("users", {
   lastSignedIn: timestamp("lastSignedIn", { mode: "date" })
     .defaultNow()
     .notNull(),
+  // Última vez que o usuário abriu a tela de Tarefas e Eventos. Usado para o
+  // badge do calendário contar apenas tarefas/eventos novos (ainda não vistos).
+  tasksSeenAt: timestamp("tasksSeenAt", { mode: "date" }),
 });
 
 export type User = typeof users.$inferSelect;
@@ -544,6 +547,30 @@ export type TaskItemAssignment = typeof taskItemAssignments.$inferSelect;
 export type InsertTaskItemAssignment = typeof taskItemAssignments.$inferInsert;
 
 /**
+ * Marca quais tarefas/eventos cada usuario ja abriu (visualizou os detalhes).
+ * Usado para o badge do calendario contar apenas os itens ainda nao vistos e
+ * decrementar um a um conforme o usuario abre cada tarefa.
+ */
+export const taskItemViews = pgTable(
+  "taskItemViews",
+  {
+    id: serial("id").primaryKey(),
+    taskId: integer("taskId").notNull(),
+    userId: integer("userId").notNull(),
+    viewedAt: timestamp("viewedAt", { mode: "date" }).defaultNow().notNull(),
+  },
+  table => [
+    uniqueIndex("taskItemViews_taskId_userId_idx").on(
+      table.taskId,
+      table.userId
+    ),
+  ]
+);
+
+export type TaskItemView = typeof taskItemViews.$inferSelect;
+export type InsertTaskItemView = typeof taskItemViews.$inferInsert;
+
+/**
  * Observacoes em texto para tarefas/eventos
  */
 export const taskItemNotes = pgTable("taskItemNotes", {
@@ -964,6 +991,15 @@ export const rentalProposalInspections = pgTable("rentalProposalInspections", {
   laudoContentType: varchar("laudoContentType", { length: 120 }),
   tenantValidatedAt: timestamp("tenantValidatedAt", { mode: "date" }),
   ownerValidatedAt: timestamp("ownerValidatedAt", { mode: "date" }),
+  // Selfie (data URL base64) capturada no app por cada parte ao validar.
+  tenantSelfieData: text("tenantSelfieData"),
+  ownerSelfieData: text("ownerSelfieData"),
+  // Usuario cliente logado que realizou cada validacao.
+  tenantValidatedByUserId: integer("tenantValidatedByUserId"),
+  ownerValidatedByUserId: integer("ownerValidatedByUserId"),
+  // Tokens dos links de validacao (um por parte) enviados ao locatario/proprietario.
+  tenantValidationToken: varchar("tenantValidationToken", { length: 40 }),
+  ownerValidationToken: varchar("ownerValidationToken", { length: 40 }),
   notes: text("notes"),
   createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
@@ -1009,3 +1045,104 @@ export const documents = pgTable("documents", {
 
 export type Document = typeof documents.$inferSelect;
 export type InsertDocument = typeof documents.$inferInsert;
+
+/**
+ * Filas da Roleta de Atendimentos.
+ *
+ * Cada fila é uma "roleta" com suas regras de ordem e tempo. Corretores com
+ * permissão (attendanceQueueMembers) podem entrar na fila; quem está ativo vira
+ * participante (attendanceQueueParticipants) e recebe leads em rodízio.
+ *
+ * `tenantId` fica reservado (nullable) para o futuro multi-imobiliária: hoje o
+ * piloto AFG opera como tenant único, então permanece nulo.
+ */
+export const attendanceQueues = pgTable("attendanceQueues", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenantId"),
+  name: varchar("name", { length: 120 }).notNull(),
+  description: text("description"),
+  isActive: integer("isActive").default(1).notNull(),
+  // Marca a "roleta padrão" que recebe os leads quando nenhuma fila específica
+  // é indicada. Só uma fila deve ficar como padrão por tenant.
+  isDefault: integer("isDefault").default(0).notNull(),
+  orderStrategy: varchar("orderStrategy", { length: 20 })
+    .$type<"round_robin" | "manual">()
+    .default("round_robin")
+    .notNull(),
+  // Minutos para o corretor da vez receber antes de a roleta pular para o
+  // próximo. Espelha o SLA de direcionamento já existente em leadSla.ts.
+  assignmentTimeoutMinutes: integer("assignmentTimeoutMinutes")
+    .default(15)
+    .notNull(),
+  // Minutos para atender após receber o lead antes de devolvê-lo à fila.
+  attendanceTimeoutMinutes: integer("attendanceTimeoutMinutes")
+    .default(40)
+    .notNull(),
+  // 1 = a roleta só roda em horário comercial (regra de leadSla.ts).
+  businessHoursOnly: integer("businessHoursOnly").default(1).notNull(),
+  createdByUserId: integer("createdByUserId").notNull(),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export type AttendanceQueue = typeof attendanceQueues.$inferSelect;
+export type InsertAttendanceQueue = typeof attendanceQueues.$inferInsert;
+
+/**
+ * Permissão de acesso de um corretor a uma fila. Quem tem `canJoin = 1` pode
+ * entrar/sair da fila; o admin concede ou revoga. Uma linha por (fila, usuário).
+ */
+export const attendanceQueueMembers = pgTable(
+  "attendanceQueueMembers",
+  {
+    id: serial("id").primaryKey(),
+    queueId: integer("queueId").notNull(),
+    userId: integer("userId").notNull(),
+    canJoin: integer("canJoin").default(1).notNull(),
+    createdByUserId: integer("createdByUserId"),
+    createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+  },
+  table => [
+    uniqueIndex("attendanceQueueMembers_queueId_userId_idx").on(
+      table.queueId,
+      table.userId
+    ),
+  ]
+);
+
+export type AttendanceQueueMember = typeof attendanceQueueMembers.$inferSelect;
+export type InsertAttendanceQueueMember =
+  typeof attendanceQueueMembers.$inferInsert;
+
+/**
+ * Participação ativa de um corretor numa fila. `position` define a ordem do
+ * rodízio (menor = mais perto de receber); ao receber um lead o corretor volta
+ * para o fim (maior position). `isActive = 0` significa que ele saiu da fila mas
+ * mantemos o histórico. Uma linha por (fila, usuário).
+ */
+export const attendanceQueueParticipants = pgTable(
+  "attendanceQueueParticipants",
+  {
+    id: serial("id").primaryKey(),
+    queueId: integer("queueId").notNull(),
+    userId: integer("userId").notNull(),
+    position: integer("position").default(0).notNull(),
+    isActive: integer("isActive").default(1).notNull(),
+    joinedAt: timestamp("joinedAt", { mode: "date" }).defaultNow().notNull(),
+    leftAt: timestamp("leftAt", { mode: "date" }),
+    lastAssignedAt: timestamp("lastAssignedAt", { mode: "date" }),
+    updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+  },
+  table => [
+    uniqueIndex("attendanceQueueParticipants_queueId_userId_idx").on(
+      table.queueId,
+      table.userId
+    ),
+  ]
+);
+
+export type AttendanceQueueParticipant =
+  typeof attendanceQueueParticipants.$inferSelect;
+export type InsertAttendanceQueueParticipant =
+  typeof attendanceQueueParticipants.$inferInsert;

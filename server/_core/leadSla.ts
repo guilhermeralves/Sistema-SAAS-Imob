@@ -1,76 +1,12 @@
 import { createLeadInteraction, getLeadsForSlaProcessing, updateLead } from "../db";
+import { addBusinessMinutes } from "./businessHours";
+import { distributeLeadToRoleta } from "./roleta";
 
-const BUSINESS_TIMEZONE = "America/Sao_Paulo";
 const ASSIGNMENT_TIMEOUT_MINUTES = 15;
 const ATTENDANCE_TIMEOUT_MINUTES = 40;
 const SCHEDULER_INTERVAL_MS = 60 * 1000;
 
-type Weekday = "Sun" | "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat";
-
 let processing = false;
-
-function getSaoPauloWeekdayAndTime(date: Date) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: BUSINESS_TIMEZONE,
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(date);
-
-  const weekday = parts.find(part => part.type === "weekday")?.value as Weekday | undefined;
-  const hour = Number(parts.find(part => part.type === "hour")?.value ?? "0");
-  const minute = Number(parts.find(part => part.type === "minute")?.value ?? "0");
-
-  return {
-    weekday: weekday ?? "Sun",
-    hour,
-    minute,
-  };
-}
-
-function isBusinessTime(date: Date) {
-  const { weekday, hour, minute } = getSaoPauloWeekdayAndTime(date);
-  const totalMinutes = hour * 60 + minute;
-
-  if (weekday === "Mon" || weekday === "Tue" || weekday === "Wed" || weekday === "Thu" || weekday === "Fri") {
-    return totalMinutes >= 9 * 60 && totalMinutes < 18 * 60;
-  }
-
-  if (weekday === "Sat") {
-    return totalMinutes >= 9 * 60 && totalMinutes < 13 * 60;
-  }
-
-  return false;
-}
-
-function findNextBusinessMinute(fromDate: Date) {
-  const cursor = new Date(fromDate.getTime());
-  for (let i = 0; i < 60 * 24 * 10; i += 1) {
-    if (isBusinessTime(cursor)) {
-      return cursor;
-    }
-    cursor.setMinutes(cursor.getMinutes() + 1, 0, 0);
-  }
-
-  return cursor;
-}
-
-function addBusinessMinutes(startDate: Date, minutes: number) {
-  const cursor = isBusinessTime(startDate)
-    ? new Date(startDate.getTime())
-    : findNextBusinessMinute(startDate);
-
-  let remaining = Math.max(0, minutes);
-  while (remaining > 0) {
-    cursor.setMinutes(cursor.getMinutes() + 1, 0, 0);
-    if (isBusinessTime(cursor)) {
-      remaining -= 1;
-    }
-  }
-
-  return cursor;
-}
 
 async function processLeadAssignmentWindow(now: Date, lead: Awaited<ReturnType<typeof getLeadsForSlaProcessing>>[number]) {
   const cycleStart = lead.assignmentCycleStartedAt ?? lead.createdAt;
@@ -119,6 +55,11 @@ async function processLeadAttendanceWindow(now: Date, lead: Awaited<ReturnType<t
     message:
       "Lead não atendido em 40 minutos úteis após direcionamento. Responsável removido automaticamente para redirecionamento.",
   });
+
+  // Redireciona imediatamente ao próximo corretor da roleta (round-robin).
+  // Se não houver fila/participante, o lead volta a "novo" e o ciclo de SLA
+  // segue como fallback na próxima passada.
+  await distributeLeadToRoleta({ id: lead.id, nome: lead.nome });
 }
 
 export async function processLeadSlaTick() {
@@ -135,6 +76,15 @@ export async function processLeadSlaTick() {
       }
 
       if (!lead.idResponsavel) {
+        // Tenta distribuir pela roleta a cada passada; se conseguir, o lead
+        // ganha responsável e o SLA de direcionamento não precisa disparar.
+        const assignedTo = await distributeLeadToRoleta({
+          id: lead.id,
+          nome: lead.nome,
+        });
+        if (assignedTo) {
+          continue;
+        }
         await processLeadAssignmentWindow(now, lead);
         continue;
       }

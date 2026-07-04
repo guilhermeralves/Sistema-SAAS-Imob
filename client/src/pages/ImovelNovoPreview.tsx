@@ -397,7 +397,7 @@ export default function ImovelNovoPreview() {
 
             <div className="space-y-6">
               <Card className="rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
-                <CardContent className="space-y-6 p-6 md:p-7">
+                <CardContent className="space-y-6">
                   <div>
                     <h1 className="mb-3 text-3xl font-semibold tracking-tight text-slate-950">
                       {draft.titulo}

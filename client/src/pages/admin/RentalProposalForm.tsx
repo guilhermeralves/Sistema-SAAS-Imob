@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatCpf, isValidCpf, normalizeCpf } from "@/lib/cpf";
 import { buildContractReferenceFooter } from "@shared/contract-reference";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeftRight, CheckCircle2, ChevronDown, ChevronUp, Download, FileSignature, FileText, Home, MessageCircle, Pencil, Plus, Receipt, RotateCw, Save, Send, ShieldCheck, Trash2, WandSparkles, X } from "lucide-react";
+import { ArrowLeftRight, Camera, CheckCircle2, ChevronDown, ChevronUp, Download, FileSignature, FileText, Home, Link2, MessageCircle, Pencil, Plus, Receipt, RotateCw, Save, Send, ShieldCheck, Trash2, WandSparkles, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 
@@ -199,6 +199,7 @@ type UserOption = {
   name: string | null;
   email: string | null;
   cpf?: string | null;
+  phone?: string | null;
 };
 
 type ContractTemplateOption = {
@@ -286,6 +287,8 @@ type InspectionOption = {
   laudoFileName: string | null;
   tenantValidatedAt: Date | string | null;
   ownerValidatedAt: Date | string | null;
+  tenantValidationToken?: string | null;
+  ownerValidationToken?: string | null;
   notes: string | null;
 };
 
@@ -365,6 +368,26 @@ const VISTORIA_OR_LATER_STEPS = new Set([
 
 // Etapas posteriores à vistoria (para marcar o card como concluído).
 const APOS_VISTORIA_STEPS = new Set(["entrega_chaves_pendente", "ativo"]);
+
+// Monta um link de WhatsApp para um número, escolhendo a melhor URL por
+// plataforma: no celular usa wa.me (abre o app); no desktop usa
+// web.whatsapp.com/send direto (evita a página intermediária api.whatsapp.com
+// que reabre o WhatsApp Web do zero). Retorna "" se não houver número.
+function buildWhatsappLink(
+  rawPhone: string | null | undefined,
+  text: string
+): string {
+  const digits = (rawPhone ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+  const number = digits.startsWith("55") ? digits : `55${digits}`;
+  const encoded = encodeURIComponent(text);
+  const isMobile =
+    typeof navigator !== "undefined" &&
+    /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+  return isMobile
+    ? `https://wa.me/${number}?text=${encoded}`
+    : `https://web.whatsapp.com/send?phone=${number}&text=${encoded}`;
+}
 
 // Monta o endereço completo do imóvel a partir do contexto da proposta.
 function buildPropertyAddress(
@@ -1720,12 +1743,20 @@ function RentalInspectionPanel({
   record,
   referenceCode,
   propertyAddress,
+  tenantPhone,
+  ownerPhone,
+  tenantName,
+  ownerName,
   onChanged,
 }: {
   proposalId: number;
   record: InspectionOption | null;
   referenceCode: string | null;
   propertyAddress: string;
+  tenantPhone: string | null;
+  ownerPhone: string | null;
+  tenantName: string | null;
+  ownerName: string | null;
   onChanged: () => Promise<void> | void;
 }) {
   const utils = trpc.useUtils();
@@ -1735,6 +1766,10 @@ function RentalInspectionPanel({
   const [laudoFile, setLaudoFile] = useState<File | null>(null);
   const [laudoNotes, setLaudoNotes] = useState(record?.notes ?? "");
   const [downloading, setDownloading] = useState(false);
+  const [selfieView, setSelfieView] = useState<{
+    party: "tenant" | "owner";
+    dataUrl: string;
+  } | null>(null);
 
   useEffect(() => {
     setName(record?.inspectorName ?? "");
@@ -1847,53 +1882,127 @@ function RentalInspectionPanel({
     }
   };
 
-  const phoneDigits = (record?.inspectorPhone ?? phone).replace(/\D/g, "");
-  const waNumber = phoneDigits
-    ? phoneDigits.startsWith("55")
-      ? phoneDigits
-      : `55${phoneDigits}`
-    : "";
-  const waMessage = encodeURIComponent(
+  const inspectorWaMessage =
     `Ola${record?.inspectorName ? `, ${record.inspectorName}` : ""}! ` +
-      `Temos uma solicitacao de vistoria de imovel${
-        referenceCode ? ` (${referenceCode})` : ""
-      }.` +
-      (propertyAddress ? ` Endereco do imovel: ${propertyAddress}.` : "") +
-      ` Podemos agendar?`
+    `Temos uma solicitacao de vistoria de imovel${
+      referenceCode ? ` (${referenceCode})` : ""
+    }.` +
+    (propertyAddress ? ` Endereco do imovel: ${propertyAddress}.` : "") +
+    ` Podemos agendar?`;
+  const waLink = buildWhatsappLink(
+    record?.inspectorPhone ?? phone,
+    inspectorWaMessage
   );
-  const waLink = waNumber ? `https://wa.me/${waNumber}?text=${waMessage}` : "";
 
-  const ValidationButton = ({
+  const validationBaseUrl =
+    typeof window !== "undefined" ? window.location.origin : "";
+
+  const handleViewSelfie = async (party: "tenant" | "owner") => {
+    try {
+      const res = await utils.rentalProposals.inspectionSelfie.fetch({
+        id: proposalId,
+        party,
+      });
+      if (!res?.dataUrl) {
+        toast.error("Selfie não encontrada.");
+        return;
+      }
+      setSelfieView({ party, dataUrl: res.dataUrl });
+    } catch {
+      toast.error("Não foi possível carregar a selfie.");
+    }
+  };
+
+  const PartyValidationRow = ({
     party,
     label,
+    name,
     validated,
+    validatedAt,
+    token,
+    phone,
   }: {
     party: "tenant" | "owner";
     label: string;
+    name: string | null;
     validated: boolean;
-  }) => (
-    <Button
-      type="button"
-      variant={validated ? "outline" : "default"}
-      size="sm"
-      className={
-        validated
-          ? "gap-2 rounded-full border-emerald-200 bg-emerald-50 text-emerald-800"
-          : "gap-2 rounded-full bg-emerald-700 text-white hover:bg-emerald-800"
-      }
-      disabled={busy || !hasLaudo}
-      onClick={() =>
-        validationMutation.mutate({
-          id: proposalId,
-          party,
-          validated: !validated,
-        })
-      }
-    >
-      <CheckCircle2 className="h-4 w-4" />
-      {validated ? `${label} validou ✓` : `Marcar: ${label} validou`}
-    </Button>
-  );
+    validatedAt: Date | string | null | undefined;
+    token: string | null | undefined;
+    phone: string | null;
+  }) => {
+    const link = token ? `${validationBaseUrl}/validar-vistoria/${token}` : "";
+    const waLink = buildWhatsappLink(
+      phone,
+      `Ola ${name?.trim() || label}! Para validar o documento de vistoria com o estado do imóvel${
+        referenceCode ? ` (${referenceCode})` : ""
+      }, acesse o link e tire uma selfie: ${link}`
+    );
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-3">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-slate-900">{label}</p>
+          {validated ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+              <CheckCircle2 className="h-3.5 w-3.5" /> {"Validado"}
+            </span>
+          ) : (
+            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+              {"Pendente"}
+            </span>
+          )}
+        </div>
+        {validated ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {validatedAt ? (
+              <span className="text-xs text-slate-500">
+                {`Validado em ${new Date(validatedAt).toLocaleString("pt-BR")}`}
+              </span>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2 rounded-full bg-white"
+              onClick={() => handleViewSelfie(party)}
+            >
+              <Camera className="h-4 w-4" />
+              {"Ver selfie"}
+            </Button>
+          </div>
+        ) : (
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2 rounded-full bg-white"
+              disabled={!link}
+              onClick={() => {
+                navigator.clipboard
+                  ?.writeText(link)
+                  .then(() => toast.success("Link copiado."))
+                  .catch(() => toast.error("Não foi possível copiar."));
+              }}
+            >
+              <Link2 className="h-4 w-4" />
+              {"Copiar link"}
+            </Button>
+            {link && waLink ? (
+              <a
+                href={waLink}
+                target="afgWhatsApp"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+              >
+                <MessageCircle className="h-4 w-4" />
+                {"Enviar por WhatsApp"}
+              </a>
+            ) : null}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-4">
@@ -1955,7 +2064,7 @@ function RentalInspectionPanel({
           {requested && waLink ? (
             <a
               href={waLink}
-              target="_blank"
+              target="afgWhatsApp"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
             >
@@ -2033,27 +2142,62 @@ function RentalInspectionPanel({
         </div>
       ) : null}
 
-      {/* 3) Validação do estado do imóvel */}
+      {/* 3) Validação do estado do imóvel (locatário e proprietário, com selfie) */}
       {hasLaudo ? (
         <div className="rounded-2xl border border-slate-200 bg-white/85 p-4">
           <p className="mb-1 text-sm font-semibold text-slate-900">
             {"3. Validação do estado do imóvel"}
           </p>
           <p className="mb-3 text-xs text-slate-500">
-            {"Confirme a validação do laudo pelo locatário e pelo proprietário."}
+            {"Envie o link para o locatário e o proprietário. Cada um valida no app (logado) com uma selfie."}
           </p>
-          <div className="flex flex-wrap gap-2">
-            <ValidationButton
+          <div className="grid gap-2 sm:grid-cols-2">
+            <PartyValidationRow
               party="tenant"
               label="Locatário"
+              name={tenantName}
               validated={tenantValidated}
+              validatedAt={record?.tenantValidatedAt}
+              token={record?.tenantValidationToken}
+              phone={tenantPhone}
             />
-            <ValidationButton
+            <PartyValidationRow
               party="owner"
               label="Proprietário"
+              name={ownerName}
               validated={ownerValidated}
+              validatedAt={record?.ownerValidatedAt}
+              token={record?.ownerValidationToken}
+              phone={ownerPhone}
             />
           </div>
+
+          {selfieView ? (
+            <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-slate-900">
+                  {selfieView.party === "tenant"
+                    ? "Selfie do locatário"
+                    : "Selfie do proprietário"}
+                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-full text-slate-500"
+                  onClick={() => setSelfieView(null)}
+                  aria-label="Fechar selfie"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <img
+                src={selfieView.dataUrl}
+                alt={"Selfie de validação"}
+                className="mx-auto max-h-72 w-auto rounded-lg border border-slate-200"
+              />
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -3791,6 +3935,10 @@ export default function RentalProposalForm({
               record={inspection}
               referenceCode={initialProposal.referenceCode ?? null}
               propertyAddress={buildPropertyAddress(initialProposal.property)}
+              tenantPhone={initialProposal.tenant?.phone ?? null}
+              ownerPhone={initialProposal.owners?.[0]?.phone ?? null}
+              tenantName={initialProposal.tenant?.name ?? null}
+              ownerName={initialProposal.owners?.[0]?.name ?? null}
               onChanged={invalidateInspection}
             />
             {vistoriaCompleted ? (

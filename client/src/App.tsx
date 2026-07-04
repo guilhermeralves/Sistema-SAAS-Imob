@@ -18,6 +18,7 @@ import Servicos from "./pages/Servicos";
 import Contato from "./pages/Contato";
 import ImovelDetalhes from "./pages/ImovelDetalhes";
 import AreaCliente from "./pages/AreaCliente";
+import ValidarVistoria from "./pages/ValidarVistoria";
 import CRM from "./pages/CRM";
 import MeusImoveis from "./pages/MeusImoveis";
 import Admin, { AdminModule } from "./pages/Admin";
@@ -109,6 +110,9 @@ function Router() {
       <Route path={"/register"} component={Register} />
       <Route path={"/area-cliente"}>
         <ProtectedRoute component={AreaCliente} roles={["cliente"]} />
+      </Route>
+      <Route path={"/validar-vistoria/:token"}>
+        <ProtectedRoute component={ValidarVistoria} roles={["cliente"]} />
       </Route>
       <Route path={"/minha-ficha"}>
         <ProtectedRoute

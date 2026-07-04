@@ -663,7 +663,7 @@ export default function Lancamentos() {
           </div>
 
           <Card className="mb-8 rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)] backdrop-blur">
-            <CardContent className="p-6 md:p-7">
+            <CardContent>
               <div
                 className={`grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-12 ${
                   showFilters ? "" : "hidden md:grid"
@@ -836,7 +836,7 @@ export default function Lancamentos() {
                   className="overflow-hidden rounded-[28px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)]"
                 >
                   <div className="h-56 animate-pulse bg-muted" />
-                  <CardContent className="p-5">
+                  <CardContent>
                     <div className="mb-3 h-4 animate-pulse rounded bg-muted" />
                     <div className="mb-5 h-3 w-2/3 animate-pulse rounded bg-muted" />
                     <div className="h-8 w-28 animate-pulse rounded bg-muted" />
@@ -868,7 +868,7 @@ export default function Lancamentos() {
                     ) : null}
                   </div>
 
-                  <CardContent className="p-5">
+                  <CardContent>
                     <p className="mb-2 text-xs font-medium uppercase tracking-[0.16em] text-emerald-800">
                       {lancamento.construtora || "Construtora sob consulta"}
                     </p>

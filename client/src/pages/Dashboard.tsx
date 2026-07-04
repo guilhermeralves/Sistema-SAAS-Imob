@@ -221,7 +221,7 @@ function MetricCard({
 
   return (
     <Card className="rounded-[28px] border-white/70 bg-white/90 shadow-[0_20px_50px_-30px_rgba(15,23,42,0.45)] backdrop-blur">
-      <CardContent className="flex items-start justify-between gap-4 p-6">
+      <CardContent className="flex items-start justify-between gap-4">
         <div className="space-y-2">
           <p className="text-sm font-medium text-muted-foreground">{title}</p>
           <p className="text-3xl font-semibold tracking-tight text-slate-950">{value}</p>
@@ -475,7 +475,7 @@ export default function Dashboard() {
         <div className="container py-8 md:py-10">
           <div className="space-y-6">
             <Card className="overflow-hidden rounded-[36px] border border-white/70 bg-white/90 shadow-[0_24px_80px_-42px_rgba(15,23,42,0.5)]">
-              <CardContent className="grid gap-8 p-6 md:p-8 xl:grid-cols-[1.2fr_0.9fr] xl:items-center">
+              <CardContent className="grid gap-8 xl:grid-cols-[1.2fr_0.9fr] xl:items-center">
                 <div className="space-y-5">
                   <div className="flex items-center gap-4">
                     <div className="hidden h-16 w-16 items-center justify-center rounded-[24px] bg-emerald-700/10 text-emerald-800 md:flex">
@@ -547,7 +547,7 @@ export default function Dashboard() {
                 <MetricCard title="Contratos Ativos" value={String(adminMetrics.activeContractsCount)} description="Contratos de locação ativos no momento" icon={FileCheck2} />
                 <MetricCard title="Contratos Concluídos" value={String(adminMetrics.completedContractsCount)} description="Contratos encerrados dentro da janela selecionada" icon={Briefcase} accent="warning" />
                 <Card className="rounded-[28px] border-transparent bg-[linear-gradient(135deg,#4e7b66,#628b78_55%,#7aa18b)] text-white shadow-[0_25px_60px_-35px_rgba(15,23,42,0.6)]">
-                  <CardContent className="flex h-full flex-col justify-between p-6">
+                  <CardContent className="flex h-full flex-col justify-between">
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <p className="text-sm font-medium text-white/80">Balanço Financeiro</p>
@@ -576,7 +576,7 @@ export default function Dashboard() {
                 <MetricCard title="Imóveis Ativos" value={String(brokerMetrics.activePropertiesCount)} description="Imóveis com status ativo sob sua gestão" icon={Building2} accent="success" />
                 <MetricCard title="Carteira de Imóveis" value={String(brokerMetrics.managedPropertiesCount)} description="Total de imóveis vinculados ao seu perfil" icon={LayoutDashboard} />
                 <Card className="rounded-[28px] border-transparent bg-[linear-gradient(135deg,#4e7b66,#628b78_55%,#7aa18b)] text-white shadow-[0_25px_60px_-35px_rgba(15,23,42,0.6)]">
-                  <CardContent className="flex h-full flex-col justify-between p-6">
+                  <CardContent className="flex h-full flex-col justify-between">
                     <div className="flex items-start justify-between gap-4">
                       <div>
                         <p className="text-sm font-medium text-white/80">Balanço Financeiro</p>

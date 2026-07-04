@@ -200,7 +200,7 @@ export default function Home() {
                   key={service.title}
                   className="rounded-[28px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)] transition-transform duration-300 hover:-translate-y-1 hover:shadow-[0_30px_90px_-42px_rgba(15,23,42,0.5)]"
                 >
-                  <CardContent className="p-6">
+                  <CardContent>
                     <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
                       <service.icon className="h-5 w-5" />
                     </div>
@@ -254,7 +254,7 @@ export default function Home() {
                     className="overflow-hidden rounded-[28px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)]"
                   >
                     <div className="h-56 animate-pulse bg-muted" />
-                    <CardContent className="p-5">
+                    <CardContent>
                       <div className="mb-3 h-4 animate-pulse rounded bg-muted" />
                       <div className="h-3 w-2/3 animate-pulse rounded bg-muted" />
                     </CardContent>
@@ -283,7 +283,7 @@ export default function Home() {
                         </div>
                       </div>
 
-                      <CardContent className="p-5">
+                      <CardContent>
                         <div className="mb-3 flex items-start justify-between gap-3">
                           <div>
                             <h3 className="text-xl font-semibold leading-7 text-slate-950 line-clamp-2">
@@ -350,7 +350,7 @@ export default function Home() {
           <section className="pt-14 md:pt-18">
             <div className="container">
               <Card className="overflow-hidden rounded-[34px] border-emerald-100/70 bg-[linear-gradient(135deg,rgba(239,248,243,0.98),rgba(255,255,255,0.95))] shadow-[0_26px_80px_-42px_rgba(15,23,42,0.46)]">
-                <CardContent className="grid gap-8 p-7 md:grid-cols-[1.1fr_0.9fr] md:p-10">
+                <CardContent className="grid gap-8 md:grid-cols-[1.1fr_0.9fr]">
                   <div>
                     <p className="mb-3 inline-flex rounded-full border border-emerald-100 bg-white/70 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-800">
                       Captação de imóveis

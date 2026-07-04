@@ -130,7 +130,7 @@ export default function AreaCliente() {
         </div>
 
         <Card className="mb-6 border-dashed">
-          <CardContent className="flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between">
+          <CardContent className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 className="text-lg font-semibold">{"Ficha do Usu\u00E1rio"}</h2>
               <p className="text-sm text-muted-foreground">

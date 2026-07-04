@@ -30,6 +30,12 @@ export type PushMessage = {
   body: string;
   url?: string;
   tag?: string;
+  /** Atualiza silenciosamente (sem som/vibração) — usado no push de posição da roleta. */
+  silent?: boolean;
+  /** Reavisa (som/vibração) mesmo reutilizando a mesma tag. */
+  renotify?: boolean;
+  /** Mantém a notificação fixa até o usuário interagir (sticky). */
+  requireInteraction?: boolean;
 };
 
 /**

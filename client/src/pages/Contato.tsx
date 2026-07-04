@@ -259,7 +259,7 @@ export default function Contato() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <Card className="rounded-[28px] border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(241,245,243,0.88))] shadow-[0_20px_50px_-34px_rgba(15,23,42,0.32)]">
-                <CardContent className="p-5">
+                <CardContent>
                   <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
                     <MessageCircle className="h-5 w-5" />
                   </div>
@@ -271,7 +271,7 @@ export default function Contato() {
               </Card>
 
               <Card className="rounded-[28px] border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(241,245,243,0.88))] shadow-[0_20px_50px_-34px_rgba(15,23,42,0.32)]">
-                <CardContent className="p-5">
+                <CardContent>
                   <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
                     <Send className="h-5 w-5" />
                   </div>
@@ -283,7 +283,7 @@ export default function Contato() {
               </Card>
 
               <Card className="rounded-[28px] border-transparent bg-[linear-gradient(135deg,#4e7b66,#628b78_55%,#7aa18b)] text-white shadow-[0_25px_60px_-35px_rgba(15,23,42,0.6)] sm:col-span-2">
-                <CardContent className="p-6">
+                <CardContent>
                   <p className="text-xs uppercase tracking-[0.2em] text-white/70">
                     Disponibilidade
                   </p>

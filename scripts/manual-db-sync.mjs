@@ -323,6 +323,88 @@ const patches = [
       );`,
     ],
   },
+  {
+    id: "2026-06-28_rental_inspection_selfie_validation",
+    description:
+      "Validacao de vistoria com selfie por locatario/proprietario (tokens + selfies)",
+    statements: [
+      `ALTER TABLE "rentalProposalInspections" ADD COLUMN IF NOT EXISTS "tenantSelfieData" text;`,
+      `ALTER TABLE "rentalProposalInspections" ADD COLUMN IF NOT EXISTS "ownerSelfieData" text;`,
+      `ALTER TABLE "rentalProposalInspections" ADD COLUMN IF NOT EXISTS "tenantValidatedByUserId" integer;`,
+      `ALTER TABLE "rentalProposalInspections" ADD COLUMN IF NOT EXISTS "ownerValidatedByUserId" integer;`,
+      `ALTER TABLE "rentalProposalInspections" ADD COLUMN IF NOT EXISTS "tenantValidationToken" varchar(40);`,
+      `ALTER TABLE "rentalProposalInspections" ADD COLUMN IF NOT EXISTS "ownerValidationToken" varchar(40);`,
+    ],
+  },
+  {
+    id: "2026-06-28_users_tasks_seen_at",
+    description:
+      "Marca da ultima visualizacao da tela de Tarefas e Eventos (badge de novos)",
+    statements: [
+      `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "tasksSeenAt" timestamp;`,
+    ],
+  },
+  {
+    id: "2026-06-28_task_item_views",
+    description:
+      "Registra quais tarefas/eventos cada usuario ja abriu (badge por-tarefa)",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS "taskItemViews" (
+        "id" serial PRIMARY KEY NOT NULL,
+        "taskId" integer NOT NULL,
+        "userId" integer NOT NULL,
+        "viewedAt" timestamp DEFAULT now() NOT NULL
+      );`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "taskItemViews_taskId_userId_idx" ON "taskItemViews" ("taskId", "userId");`,
+    ],
+  },
+  {
+    id: "2026-07-04_attendance_roulette",
+    description:
+      "Cria tabelas da Roleta de Atendimentos: filas, permissoes de corretores e participantes",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS "attendanceQueues" (
+        "id" serial PRIMARY KEY NOT NULL,
+        "tenantId" integer,
+        "name" varchar(120) NOT NULL,
+        "description" text,
+        "isActive" integer DEFAULT 1 NOT NULL,
+        "isDefault" integer DEFAULT 0 NOT NULL,
+        "orderStrategy" varchar(20) DEFAULT 'round_robin' NOT NULL,
+        "assignmentTimeoutMinutes" integer DEFAULT 15 NOT NULL,
+        "attendanceTimeoutMinutes" integer DEFAULT 40 NOT NULL,
+        "businessHoursOnly" integer DEFAULT 1 NOT NULL,
+        "createdByUserId" integer NOT NULL,
+        "createdAt" timestamp DEFAULT now() NOT NULL,
+        "updatedAt" timestamp DEFAULT now() NOT NULL
+      );`,
+
+      `CREATE TABLE IF NOT EXISTS "attendanceQueueMembers" (
+        "id" serial PRIMARY KEY NOT NULL,
+        "queueId" integer NOT NULL,
+        "userId" integer NOT NULL,
+        "canJoin" integer DEFAULT 1 NOT NULL,
+        "createdByUserId" integer,
+        "createdAt" timestamp DEFAULT now() NOT NULL,
+        "updatedAt" timestamp DEFAULT now() NOT NULL
+      );`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "attendanceQueueMembers_queueId_userId_idx" ON "attendanceQueueMembers" ("queueId", "userId");`,
+
+      `CREATE TABLE IF NOT EXISTS "attendanceQueueParticipants" (
+        "id" serial PRIMARY KEY NOT NULL,
+        "queueId" integer NOT NULL,
+        "userId" integer NOT NULL,
+        "position" integer DEFAULT 0 NOT NULL,
+        "isActive" integer DEFAULT 1 NOT NULL,
+        "joinedAt" timestamp DEFAULT now() NOT NULL,
+        "leftAt" timestamp,
+        "lastAssignedAt" timestamp,
+        "updatedAt" timestamp DEFAULT now() NOT NULL
+      );`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "attendanceQueueParticipants_queueId_userId_idx" ON "attendanceQueueParticipants" ("queueId", "userId");`,
+      `CREATE INDEX IF NOT EXISTS "attendanceQueueParticipants_queueId_idx" ON "attendanceQueueParticipants" ("queueId");`,
+    ],
+  },
 ];
 
 async function ensureManualMigrationsTable(client) {

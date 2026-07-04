@@ -1553,7 +1553,7 @@ export default function Imoveis() {
 
           {/* Filtros */}
           <Card className="mb-8 rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)] backdrop-blur">
-            <CardContent className="p-6 md:p-7">
+            <CardContent>
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-950">
                   <SlidersHorizontal className="h-5 w-5" />
@@ -1796,7 +1796,7 @@ export default function Imoveis() {
                   className="overflow-hidden rounded-[28px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)]"
                 >
                   <div className="h-56 bg-muted animate-pulse" />
-                  <CardContent className="p-5">
+                  <CardContent>
                     <div className="mb-3 h-4 rounded bg-muted animate-pulse" />
                     <div className="mb-5 h-3 w-2/3 rounded bg-muted animate-pulse" />
                     <div className="h-8 w-28 rounded bg-muted animate-pulse" />
@@ -1831,7 +1831,7 @@ export default function Imoveis() {
                         </div>
                       )}
                     </div>
-                    <CardContent className="p-5">
+                    <CardContent>
                       <h3 className="mb-2 line-clamp-1 text-lg font-semibold text-slate-950">
                         {imovel.titulo}
                       </h3>

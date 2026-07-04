@@ -1145,7 +1145,7 @@ export default function ImovelDetalhes() {
 
           {isEditingProperty && canManageProperty ? (
             <Card className="rounded-[32px] border-white/70 bg-white/95 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
-              <CardContent className="space-y-6 p-5 md:p-7">
+              <CardContent className="space-y-6">
                 <div className="flex flex-col gap-3 border-b border-slate-200/80 pb-5 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-800">
@@ -1493,7 +1493,7 @@ export default function ImovelDetalhes() {
             </Card>
 
             <Card className="rounded-[32px] border-transparent bg-[linear-gradient(135deg,#4e7b66,#628b78_55%,#7aa18b)] text-white shadow-[0_25px_60px_-35px_rgba(15,23,42,0.6)]">
-              <CardContent className="space-y-4 p-6">
+              <CardContent className="space-y-4">
                 <div>
                   <p className="mb-1 text-xs uppercase tracking-[0.2em] text-white/70">
                     {imovel.finalidade === "locacao" ? "Valor da locacao" : "Valor do imóvel"}
@@ -1547,7 +1547,7 @@ export default function ImovelDetalhes() {
 
           <div className="space-y-6">
             <Card className="rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
-              <CardContent className="space-y-6 p-6 md:p-7">
+              <CardContent className="space-y-6">
                 <div>
                   <div className="mb-3 flex items-start justify-between gap-3">
                     <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -1643,7 +1643,7 @@ export default function ImovelDetalhes() {
             </Card>
 
             <Card className="rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
-              <CardContent className="space-y-4 p-6 md:p-7">
+              <CardContent className="space-y-4">
                 <div>
                   <p className="inline-flex rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-800">
                     Observacoes do imovel
@@ -1657,7 +1657,7 @@ export default function ImovelDetalhes() {
 
             {imovel.latitude && imovel.longitude ? (
               <Card className="rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
-                <CardContent className="p-6 md:p-7">
+                <CardContent>
                   <h3 className="mb-4 flex items-center gap-2 text-2xl font-semibold tracking-tight text-slate-950">
                     <MapPin className="h-5 w-5 text-emerald-700" />
                     Localizacao
@@ -1671,7 +1671,7 @@ export default function ImovelDetalhes() {
 
             {shouldShowVinculosCard ? (
               <Card className="rounded-[32px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">
-                <CardContent className="space-y-5 p-6 md:p-7">
+                <CardContent className="space-y-5">
                   <div>
                     <p className="inline-flex rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-800">
                       Vinculos do imovel

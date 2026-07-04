@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "../../../server/routers";
 import Layout from "@/components/Layout";
@@ -9,6 +9,12 @@ import { formatStoredDateTime } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,10 +30,13 @@ import {
   AlertTriangle,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Clock3,
   Loader2,
+  MoreHorizontal,
   PlayCircle,
   Plus,
   Search,
@@ -287,6 +296,20 @@ function TaskColumn({
   );
 }
 
+// Pede ao service worker para fechar notificações push já visualizadas da
+// bandeja do dispositivo. `tag` fecha uma específica; `tagPrefix` fecha o grupo.
+function clearPushNotifications(opts: { tag?: string; tagPrefix?: string }) {
+  if (typeof navigator === "undefined" || !navigator.serviceWorker) return;
+  navigator.serviceWorker.ready
+    .then(registration => {
+      registration.active?.postMessage({
+        type: "clear-notifications",
+        ...opts,
+      });
+    })
+    .catch(() => {});
+}
+
 export default function TarefasEventos() {
   const { user, loading, isAuthenticated } = useAuth();
   const utils = trpc.useUtils();
@@ -294,6 +317,31 @@ export default function TarefasEventos() {
   const isAdmin = user?.role === "administrativo";
   const currentDate = useMemo(() => new Date(), []);
   const currentYear = currentDate.getFullYear();
+
+  const markTaskViewed = trpc.tasks.markTaskViewed.useMutation();
+
+  // Contador de "notificações não lidas" = tarefas/eventos atribuídos e em
+  // aberto que este usuário ainda não abriu (mesmo número do badge).
+  const { data: taskSummary } = trpc.tasks.summary.useQuery(undefined, {
+    enabled: isAuthenticated && isStaff,
+  });
+  const unreadTasksCount = taskSummary?.assignedUnseenCount ?? 0;
+  const markAllTasksViewed = trpc.tasks.markAllViewed.useMutation({
+    onSuccess: async () => {
+      toast.success("Notificações marcadas como lidas.");
+      await utils.tasks.summary.invalidate();
+    },
+    onError: error =>
+      toast.error(error.message || "Não foi possível marcar como lidas."),
+  });
+
+  // Ao abrir a tela, apenas fecha as notificações push já vistas (bandeja do
+  // dispositivo). O badge do calendário NÃO zera aqui — ele decrementa um a um
+  // conforme o usuário abre os detalhes de cada tarefa/evento.
+  useEffect(() => {
+    if (!isAuthenticated || !isStaff) return;
+    clearPushNotifications({ tagPrefix: "task-" });
+  }, [isAuthenticated, isStaff]);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -308,6 +356,8 @@ export default function TarefasEventos() {
   const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
   const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
   const [isTemplateSectionExpandedMobile, setIsTemplateSectionExpandedMobile] = useState(false);
+  // Card de "Modelos de registro" separado da busca, colapsado por padrão.
+  const [showTemplatesCard, setShowTemplatesCard] = useState(false);
   const [isPendingColumnExpandedMobile, setIsPendingColumnExpandedMobile] = useState(false);
   const [isInProgressColumnExpandedMobile, setIsInProgressColumnExpandedMobile] = useState(false);
   const [isOverdueColumnExpandedMobile, setIsOverdueColumnExpandedMobile] = useState(false);
@@ -583,6 +633,13 @@ export default function TarefasEventos() {
 
   const openDetailsDialog = (taskItem: TaskItem) => {
     setSelectedTaskId(taskItem.id);
+    // Ao abrir os detalhes: fecha a notificação push e marca a tarefa como vista
+    // (decrementa o badge do calendário para este usuário).
+    clearPushNotifications({ tag: `task-${taskItem.id}` });
+    markTaskViewed.mutate(
+      { taskId: taskItem.id },
+      { onSuccess: () => utils.tasks.summary.invalidate() }
+    );
     setTaskForm({
       title: taskItem.title,
       kind: taskItem.kind,
@@ -968,8 +1025,36 @@ export default function TarefasEventos() {
           </div>
 
           <div className="mb-8 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="space-y-5">
             <Card className={SURFACE_CARD_CLASS}>
-              <CardContent className="space-y-4 p-6 md:p-7">
+              <CardContent className="space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-sm font-semibold text-slate-900">
+                    Buscar e filtrar
+                  </p>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="-mt-1 h-8 w-8 shrink-0 rounded-full text-slate-500 hover:bg-slate-100"
+                        aria-label="Ações de notificações"
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        disabled={
+                          markAllTasksViewed.isPending || unreadTasksCount === 0
+                        }
+                        onClick={() => markAllTasksViewed.mutate()}
+                      >
+                        Marcar Notificações como Lidas ({unreadTasksCount})
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                   <Input
@@ -1026,33 +1111,35 @@ export default function TarefasEventos() {
                   </Button>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200/80 bg-white/70 p-4">
-                  <div className="mb-3 flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">Personalizar Registro</p>
-                      <p className="text-xs text-slate-600">
-                        Crie modelos por tipo e setor para agilizar novos registros.
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="rounded-full md:hidden"
-                      onClick={() =>
-                        setIsTemplateSectionExpandedMobile(current => !current)
-                      }
-                    >
-                      {isTemplateSectionExpandedMobile ? "Recolher" : "Expandir"}
-                    </Button>
-                  </div>
+              </CardContent>
+            </Card>
 
-                  <div
-                    className={cn(
-                      isTemplateSectionExpandedMobile ? "block" : "hidden",
-                      "md:block"
-                    )}
-                  >
+            <Card className={SURFACE_CARD_CLASS}>
+              <CardHeader className="pb-3">
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between gap-3 text-left"
+                  onClick={() => setShowTemplatesCard(current => !current)}
+                  aria-expanded={showTemplatesCard}
+                >
+                  <div>
+                    <CardTitle className="text-base text-slate-900">
+                      Modelos de registro
+                    </CardTitle>
+                    <p className="mt-1 text-xs font-normal text-slate-600">
+                      Crie modelos por tipo e setor para agilizar novos
+                      registros.
+                    </p>
+                  </div>
+                  {showTemplatesCard ? (
+                    <ChevronUp className="h-5 w-5 shrink-0 text-slate-500" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 shrink-0 text-slate-500" />
+                  )}
+                </button>
+              </CardHeader>
+              {showTemplatesCard ? (
+                <CardContent className="pt-0">
                     {isAdmin ? (
                       <div className="space-y-3">
                       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -1183,10 +1270,10 @@ export default function TarefasEventos() {
                       </div>
                       </div>
                     ) : null}
-                  </div>
-                </div>
-              </CardContent>
+                </CardContent>
+              ) : null}
             </Card>
+            </div>
 
             <Card className={SURFACE_CARD_CLASS}>
               <CardHeader>
@@ -1565,7 +1652,7 @@ export default function TarefasEventos() {
 
               <div className="space-y-6">
                 <Card className="rounded-[28px] border-white/80 bg-white/90 shadow-[0_20px_50px_-34px_rgba(15,23,42,0.32)]">
-                  <CardContent className="space-y-4 p-5">
+                  <CardContent className="space-y-4">
                     {!canEditSelectedTask ? (
                       <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-3 text-sm text-amber-900">
                         Visualizacao somente leitura: apenas o criador ou um usuario administrativo pode alterar.
