@@ -19,7 +19,7 @@ export async function createContext(opts: CreateExpressContextOptions) {
     user = null;
   }
 
-  const license = user ? await loadLicenseStateForUser() : null;
+  const license = user ? await loadLicenseStateForUser(user.role) : null;
 
   return {
     req: opts.req,

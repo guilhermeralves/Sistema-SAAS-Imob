@@ -28,16 +28,31 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatStoredDate } from "@/lib/date";
+import { lookupCep } from "@/lib/cep";
 import { trpc } from "@/lib/trpc";
 import {
+  AlertTriangle,
   ArrowLeft,
   CheckCircle2,
+  Loader2,
   PauseCircle,
   PlayCircle,
+  Trash2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams, useLocation } from "wouter";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 function centavosToBRL(cents: number) {
   return (cents / 100).toLocaleString("pt-BR", {
@@ -187,10 +202,17 @@ export default function SuperAdminLicencaDetalhes() {
     nome: "",
     email: "",
     telefone: "",
+    cnpj: "",
+    creciPj: "",
+    cep: "",
+    endereco: "",
+    numero: "",
+    complemento: "",
+    bairro: "",
     cidade: "",
     estado: "",
-    cnpj: "",
   });
+  const [cepLoading, setCepLoading] = useState(false);
   const [editLicense, setEditLicense] = useState({
     valorReais: "0,00",
     gracePeriodDays: 7,
@@ -202,9 +224,15 @@ export default function SuperAdminLicencaDetalhes() {
       nome: data.tenant.nome ?? "",
       email: data.tenant.email ?? "",
       telefone: data.tenant.telefone ?? "",
+      cnpj: data.tenant.cnpj ?? "",
+      creciPj: data.tenant.creciPj ?? "",
+      cep: data.tenant.cep ?? "",
+      endereco: data.tenant.endereco ?? "",
+      numero: data.tenant.numero ?? "",
+      complemento: data.tenant.complemento ?? "",
+      bairro: data.tenant.bairro ?? "",
       cidade: data.tenant.cidade ?? "",
       estado: data.tenant.estado ?? "",
-      cnpj: data.tenant.cnpj ?? "",
     });
     if (data.license) {
       setEditLicense({
@@ -250,6 +278,57 @@ export default function SuperAdminLicencaDetalhes() {
     },
     onError: e => toast.error(e.message),
   });
+  const inativar = trpc.licencas.superAdmin.inativar.useMutation({
+    onSuccess: () => {
+      toast.success("Licença inativada.");
+      setLocation("/super-admin/licencas");
+    },
+    onError: e => toast.error(e.message),
+  });
+  const reativarTenant = trpc.licencas.superAdmin.reativarTenant.useMutation({
+    onSuccess: () => {
+      toast.success("Imobiliária reativada.");
+      refetch();
+    },
+    onError: e => toast.error(e.message),
+  });
+
+  const handleCepBlur = async () => {
+    const digits = editTenant.cep.replace(/\D/g, "");
+    if (digits.length !== 8) return;
+    setCepLoading(true);
+    try {
+      const result = await lookupCep(digits);
+      if (result.status === "success") {
+        setEditTenant(s => ({
+          ...s,
+          endereco: result.data.endereco || s.endereco,
+          bairro: result.data.bairro || s.bairro,
+          cidade: result.data.cidade || s.cidade,
+          estado: result.data.estado || s.estado,
+        }));
+      } else if (result.status === "not_found") {
+        toast.error("CEP não encontrado.");
+      } else {
+        toast.error("Serviço de CEP indisponível.");
+      }
+    } finally {
+      setCepLoading(false);
+    }
+  };
+
+  function formatActivationDuration(days: number) {
+    if (days <= 0) return "Menos de 1 dia";
+    const years = Math.floor(days / 365);
+    const months = Math.floor((days % 365) / 30);
+    const rest = (days % 365) % 30;
+    const parts: string[] = [];
+    if (years > 0) parts.push(`${years} ano${years > 1 ? "s" : ""}`);
+    if (months > 0) parts.push(`${months} m${months > 1 ? "eses" : "ês"}`);
+    if (rest > 0 && years === 0)
+      parts.push(`${rest} dia${rest > 1 ? "s" : ""}`);
+    return parts.join(", ") || `${days} dias`;
+  }
 
   if (isLoading) {
     return (
@@ -300,16 +379,60 @@ export default function SuperAdminLicencaDetalhes() {
               {t.estado ? `/${t.estado}` : ""}
             </p>
           </div>
-          {l ? (
-            <div className="flex items-center gap-2">
-              <StatusBadge status={data.effectiveStatus ?? l.status} />
+          <div className="flex items-center gap-2">
+            {l ? <StatusBadge status={data.effectiveStatus ?? l.status} /> : null}
+            {t.isActive === 1 && l ? (
               <PagamentoDialog
                 tenantId={tenantId}
                 valorSugerido={l.valorCentavos}
                 onDone={refetch}
               />
-            </div>
-          ) : null}
+            ) : null}
+            {t.isActive === 1 ? (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950"
+                    title="Inativar licença"
+                    aria-label="Inativar licença"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5 text-red-600" />
+                      Inativar licença de {t.nome}?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      O registro fica no banco (soft-delete). Para vê-lo, use
+                      o filtro "Mostrar inativas" na lista. Não é possível
+                      operar o sistema enquanto a licença está inativada.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => inativar.mutate({ tenantId })}
+                      className="bg-red-600 hover:bg-red-700 text-white"
+                    >
+                      Inativar
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            ) : (
+              <Button
+                onClick={() => reativarTenant.mutate({ tenantId })}
+                disabled={reativarTenant.isPending}
+              >
+                <CheckCircle2 className="mr-2 h-4 w-4" /> Reativar imobiliária
+              </Button>
+            )}
+          </div>
         </div>
 
         {l ? (
@@ -370,6 +493,24 @@ export default function SuperAdminLicencaDetalhes() {
                       : "—"}
                   </div>
                 </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">
+                    Primeiro pagamento
+                  </div>
+                  <div className="mt-1 font-medium">
+                    {data.firstPaidAt
+                      ? new Date(data.firstPaidAt).toLocaleDateString("pt-BR")
+                      : "Sem pagamentos ainda"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">
+                    Tempo de licença
+                  </div>
+                  <div className="mt-1 font-medium">
+                    {formatActivationDuration(data.activationDays ?? 0)}
+                  </div>
+                </div>
               </div>
 
               <div className="mt-6 flex flex-wrap gap-2">
@@ -423,6 +564,16 @@ export default function SuperAdminLicencaDetalhes() {
                 />
               </div>
               <div>
+                <Label>CRECI-PJ</Label>
+                <Input
+                  value={editTenant.creciPj}
+                  onChange={e =>
+                    setEditTenant(s => ({ ...s, creciPj: e.target.value }))
+                  }
+                  placeholder="ex: J-56842"
+                />
+              </div>
+              <div>
                 <Label>E-mail</Label>
                 <Input
                   value={editTenant.email}
@@ -437,6 +588,61 @@ export default function SuperAdminLicencaDetalhes() {
                   value={editTenant.telefone}
                   onChange={e =>
                     setEditTenant(s => ({ ...s, telefone: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <Label>
+                  CEP
+                  {cepLoading ? (
+                    <Loader2 className="ml-2 inline h-3 w-3 animate-spin" />
+                  ) : null}
+                </Label>
+                <Input
+                  value={editTenant.cep}
+                  onChange={e =>
+                    setEditTenant(s => ({ ...s, cep: e.target.value }))
+                  }
+                  onBlur={handleCepBlur}
+                  placeholder="00000-000"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <Label>Endereço</Label>
+                <Input
+                  value={editTenant.endereco}
+                  onChange={e =>
+                    setEditTenant(s => ({ ...s, endereco: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <Label>Número</Label>
+                <Input
+                  value={editTenant.numero}
+                  onChange={e =>
+                    setEditTenant(s => ({ ...s, numero: e.target.value }))
+                  }
+                />
+              </div>
+              <div>
+                <Label>Complemento</Label>
+                <Input
+                  value={editTenant.complemento}
+                  onChange={e =>
+                    setEditTenant(s => ({
+                      ...s,
+                      complemento: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div>
+                <Label>Bairro</Label>
+                <Input
+                  value={editTenant.bairro}
+                  onChange={e =>
+                    setEditTenant(s => ({ ...s, bairro: e.target.value }))
                   }
                 />
               </div>
@@ -469,11 +675,17 @@ export default function SuperAdminLicencaDetalhes() {
                   salvarTenant.mutate({
                     tenantId,
                     nome: editTenant.nome,
+                    cnpj: editTenant.cnpj || null,
+                    creciPj: editTenant.creciPj || null,
                     email: editTenant.email || null,
                     telefone: editTenant.telefone || null,
+                    cep: editTenant.cep || null,
+                    endereco: editTenant.endereco || null,
+                    numero: editTenant.numero || null,
+                    complemento: editTenant.complemento || null,
+                    bairro: editTenant.bairro || null,
                     cidade: editTenant.cidade || null,
                     estado: editTenant.estado || null,
-                    cnpj: editTenant.cnpj || null,
                   })
                 }
                 disabled={salvarTenant.isPending}

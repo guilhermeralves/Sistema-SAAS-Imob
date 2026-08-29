@@ -464,6 +464,20 @@ const patches = [
          AND NOT EXISTS (SELECT 1 FROM "licenses" l WHERE l."tenantId" = t.id);`,
     ],
   },
+  {
+    id: "2026-08-29_tenants_endereco_e_softdelete",
+    description:
+      "Adiciona CEP/endereço/CRECI-PJ e inactivatedAt em tenants (soft-delete)",
+    statements: [
+      `ALTER TABLE "tenants" ADD COLUMN IF NOT EXISTS "creciPj" varchar(32);`,
+      `ALTER TABLE "tenants" ADD COLUMN IF NOT EXISTS "cep" varchar(10);`,
+      `ALTER TABLE "tenants" ADD COLUMN IF NOT EXISTS "endereco" varchar(255);`,
+      `ALTER TABLE "tenants" ADD COLUMN IF NOT EXISTS "numero" varchar(20);`,
+      `ALTER TABLE "tenants" ADD COLUMN IF NOT EXISTS "complemento" varchar(120);`,
+      `ALTER TABLE "tenants" ADD COLUMN IF NOT EXISTS "bairro" varchar(100);`,
+      `ALTER TABLE "tenants" ADD COLUMN IF NOT EXISTS "inactivatedAt" timestamp;`,
+    ],
+  },
 ];
 
 async function ensureManualMigrationsTable(client) {

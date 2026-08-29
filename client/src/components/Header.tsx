@@ -90,17 +90,9 @@ export default function Header() {
     { href: "/financeiro", label: "Financeiro", icon: CircleDollarSign },
   ];
 
-  const superAdminMenuItems = [
-    {
-      href: "/super-admin/licencas",
-      label: "Licen\u00e7as",
-      icon: CircleDollarSign,
-    },
-  ];
-
   const getMenuItems = () => {
     if (isAuthenticated && user?.role === "super_admin") {
-      return [...superAdminMenuItems];
+      return [];
     }
 
     const dashboardItem = {
@@ -144,8 +136,6 @@ export default function Header() {
         items.push(
           ...adminMenuItems.filter(item => item.href !== "/admin/users")
         );
-      } else if (user.role === "super_admin") {
-        items.push(...superAdminMenuItems);
       }
     }
 
@@ -192,7 +182,7 @@ export default function Header() {
       <div
         className={
           isSuperAdmin
-            ? "container flex h-20 items-center justify-between"
+            ? "container flex h-16 items-center justify-between"
             : "container flex h-15 items-center justify-between"
         }
       >
@@ -203,7 +193,7 @@ export default function Header() {
                 src={brandLogo}
                 className={
                   isSuperAdmin
-                    ? "h-16 w-auto object-contain md:h-20"
+                    ? "h-12 w-auto object-contain md:h-14"
                     : "h-15 w-15 object-contain"
                 }
               />
@@ -282,7 +272,20 @@ export default function Header() {
                       Papel: {ROLE_LABELS[user.role]}
                     </p>
                   </div>
-                  {!isRootAdmin ? (
+                  {isSuperAdmin ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link href="/super-admin/licencas">
+                          <a className="flex items-center gap-2">
+                            <CircleDollarSign className="h-4 w-4" />
+                            Licenças
+                          </a>
+                        </Link>
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
+                  {!isRootAdmin && !isSuperAdmin ? (
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild>

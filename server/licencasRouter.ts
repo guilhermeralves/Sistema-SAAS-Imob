@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import {
   licensePayments,
@@ -32,8 +32,14 @@ const tenantInputSchema = z.object({
     .regex(/^[a-z0-9-]+$/, "Slug deve conter apenas letras minúsculas, números e hífens"),
   nome: z.string().min(2).max(200),
   cnpj: z.string().max(18).optional().nullable(),
+  creciPj: z.string().max(32).optional().nullable(),
   email: z.string().email().max(320).optional().nullable(),
   telefone: z.string().max(20).optional().nullable(),
+  cep: z.string().max(10).optional().nullable(),
+  endereco: z.string().max(255).optional().nullable(),
+  numero: z.string().max(20).optional().nullable(),
+  complemento: z.string().max(120).optional().nullable(),
+  bairro: z.string().max(100).optional().nullable(),
   cidade: z.string().max(100).optional().nullable(),
   estado: z.string().length(2).optional().nullable(),
 });
@@ -54,7 +60,13 @@ async function loadTenantSummary(tenantId: number) {
     .limit(1);
 
   if (!license) {
-    return { tenant, license: null, effectiveStatus: null };
+    return {
+      tenant,
+      license: null,
+      effectiveStatus: null,
+      firstPaidAt: null,
+      activationDays: 0,
+    };
   }
 
   const effective = computeEffectiveStatus(license);
@@ -66,12 +78,29 @@ async function loadTenantSummary(tenantId: number) {
     license.status = effective.status;
   }
 
+  const [firstPayment] = await db
+    .select({ paidAt: licensePayments.paidAt })
+    .from(licensePayments)
+    .where(eq(licensePayments.tenantId, tenantId))
+    .orderBy(asc(licensePayments.paidAt))
+    .limit(1);
+
+  const activationStart = firstPayment?.paidAt ?? license.createdAt;
+  const activationDays = Math.max(
+    0,
+    Math.floor(
+      (Date.now() - new Date(activationStart).getTime()) / (1000 * 60 * 60 * 24)
+    )
+  );
+
   return {
     tenant,
     license,
     effectiveStatus: effective.status,
     daysUntilDue: effective.daysUntilDue,
     daysOverdue: effective.daysOverdue,
+    firstPaidAt: firstPayment?.paidAt ?? null,
+    activationDays,
   };
 }
 
@@ -105,17 +134,34 @@ export const licencasRouter = router({
   }),
 
   superAdmin: router({
-    listar: superAdminProcedure.query(async () => {
-      const db = await requireDb();
-      const rows = await db
-        .select()
-        .from(tenants)
-        .orderBy(desc(tenants.createdAt));
-      const summaries = await Promise.all(
-        rows.map(t => loadTenantSummary(t.id))
-      );
-      return summaries.filter(Boolean);
-    }),
+    listar: superAdminProcedure
+      .input(
+        z
+          .object({
+            incluirInativas: z.boolean().default(false),
+            somenteInativas: z.boolean().default(false),
+          })
+          .default({ incluirInativas: false, somenteInativas: false })
+      )
+      .query(async ({ input }) => {
+        const db = await requireDb();
+        const where = input.somenteInativas
+          ? eq(tenants.isActive, 0)
+          : input.incluirInativas
+            ? undefined
+            : eq(tenants.isActive, 1);
+        const rows = where
+          ? await db
+              .select()
+              .from(tenants)
+              .where(where)
+              .orderBy(desc(tenants.createdAt))
+          : await db.select().from(tenants).orderBy(desc(tenants.createdAt));
+        const summaries = await Promise.all(
+          rows.map(t => loadTenantSummary(t.id))
+        );
+        return summaries.filter(Boolean);
+      }),
 
     obter: superAdminProcedure
       .input(tenantIdSchema)
@@ -304,6 +350,45 @@ export const licencasRouter = router({
           .from(licensePayments)
           .where(eq(licensePayments.tenantId, input.tenantId))
           .orderBy(desc(licensePayments.paidAt));
+      }),
+
+    /**
+     * Soft-delete: marca tenant como inativo. Licença é automaticamente
+     * suspensa para não permitir mais mutations, e o registro segue no
+     * banco (audit trail). Para reativar, use `reativarTenant`.
+     */
+    inativar: superAdminProcedure
+      .input(tenantIdSchema)
+      .mutation(async ({ input }) => {
+        const db = await requireDb();
+        await db
+          .update(tenants)
+          .set({
+            isActive: 0,
+            inactivatedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(tenants.id, input.tenantId));
+        await db
+          .update(licenses)
+          .set({ status: "suspended", updatedAt: new Date() })
+          .where(eq(licenses.tenantId, input.tenantId));
+        return await loadTenantSummary(input.tenantId);
+      }),
+
+    reativarTenant: superAdminProcedure
+      .input(tenantIdSchema)
+      .mutation(async ({ input }) => {
+        const db = await requireDb();
+        await db
+          .update(tenants)
+          .set({
+            isActive: 1,
+            inactivatedAt: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(tenants.id, input.tenantId));
+        return await loadTenantSummary(input.tenantId);
       }),
   }),
 });

@@ -331,7 +331,11 @@ function PagamentoDialog({
 export default function SuperAdminLicencas() {
   const utils = trpc.useUtils();
   const [, setLocation] = useLocation();
-  const { data, isLoading } = trpc.licencas.superAdmin.listar.useQuery();
+  const [somenteInativas, setSomenteInativas] = useState(false);
+  const { data, isLoading } = trpc.licencas.superAdmin.listar.useQuery({
+    incluirInativas: false,
+    somenteInativas,
+  });
 
   const suspender = trpc.licencas.superAdmin.suspender.useMutation({
     onSuccess: () => {
@@ -350,6 +354,14 @@ export default function SuperAdminLicencas() {
 
   const refetch = () => utils.licencas.superAdmin.listar.invalidate();
 
+  const reativarTenant = trpc.licencas.superAdmin.reativarTenant.useMutation({
+    onSuccess: () => {
+      toast.success("Imobiliária reativada.");
+      utils.licencas.superAdmin.listar.invalidate();
+    },
+    onError: e => toast.error(e.message),
+  });
+
   return (
     <Layout>
       <div className="mx-auto max-w-7xl space-y-4 p-4 md:p-6">
@@ -361,14 +373,27 @@ export default function SuperAdminLicencas() {
               plataforma NOXILON.
             </p>
           </div>
-          <NovoTenantDialog onCreated={refetch} />
+          <div className="flex items-center gap-2">
+            <Button
+              variant={somenteInativas ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSomenteInativas(v => !v)}
+            >
+              {somenteInativas ? "Mostrar ativas" : "Mostrar inativas"}
+            </Button>
+            <NovoTenantDialog onCreated={refetch} />
+          </div>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Imobiliárias</CardTitle>
+            <CardTitle>
+              Imobiliárias {somenteInativas ? "(inativas)" : ""}
+            </CardTitle>
             <CardDescription>
-              Estado atual da licença de cada tenant.
+              {somenteInativas
+                ? "Exibindo somente licenças inativadas (soft-delete)."
+                : "Estado atual da licença de cada tenant."}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -430,35 +455,56 @@ export default function SuperAdminLicencas() {
                             onClick={e => e.stopPropagation()}
                           >
                             <div className="flex justify-end gap-2">
-                              <PagamentoDialog
-                                tenantId={row.tenant.id}
-                                valorSugerido={row.license.valorCentavos}
-                                onDone={refetch}
-                              />
-                              {row.effectiveStatus === "suspended" ? (
+                              {somenteInativas ? (
                                 <Button
                                   size="sm"
-                                  variant="outline"
                                   onClick={() =>
-                                    reativar.mutate({ tenantId: row.tenant.id })
+                                    reativarTenant.mutate({
+                                      tenantId: row.tenant.id,
+                                    })
                                   }
-                                  disabled={reativar.isPending}
+                                  disabled={reativarTenant.isPending}
                                 >
                                   <CheckCircle2 className="mr-1 h-4 w-4" />
                                   Reativar
                                 </Button>
                               ) : (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() =>
-                                    suspender.mutate({ tenantId: row.tenant.id })
-                                  }
-                                  disabled={suspender.isPending}
-                                >
-                                  <PauseCircle className="mr-1 h-4 w-4" />
-                                  Suspender
-                                </Button>
+                                <>
+                                  <PagamentoDialog
+                                    tenantId={row.tenant.id}
+                                    valorSugerido={row.license.valorCentavos}
+                                    onDone={refetch}
+                                  />
+                                  {row.effectiveStatus === "suspended" ? (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() =>
+                                        reativar.mutate({
+                                          tenantId: row.tenant.id,
+                                        })
+                                      }
+                                      disabled={reativar.isPending}
+                                    >
+                                      <CheckCircle2 className="mr-1 h-4 w-4" />
+                                      Reativar
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() =>
+                                        suspender.mutate({
+                                          tenantId: row.tenant.id,
+                                        })
+                                      }
+                                      disabled={suspender.isPending}
+                                    >
+                                      <PauseCircle className="mr-1 h-4 w-4" />
+                                      Suspender
+                                    </Button>
+                                  )}
+                                </>
                               )}
                             </div>
                           </TableCell>

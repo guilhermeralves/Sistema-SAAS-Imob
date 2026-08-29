@@ -1156,11 +1156,20 @@ export const tenants = pgTable("tenants", {
   slug: varchar("slug", { length: 64 }).notNull().unique(),
   nome: varchar("nome", { length: 200 }).notNull(),
   cnpj: varchar("cnpj", { length: 18 }),
+  creciPj: varchar("creciPj", { length: 32 }),
   email: varchar("email", { length: 320 }),
   telefone: varchar("telefone", { length: 20 }),
+  cep: varchar("cep", { length: 10 }),
+  endereco: varchar("endereco", { length: 255 }),
+  numero: varchar("numero", { length: 20 }),
+  complemento: varchar("complemento", { length: 120 }),
+  bairro: varchar("bairro", { length: 100 }),
   cidade: varchar("cidade", { length: 100 }),
   estado: varchar("estado", { length: 2 }),
+  /** 1 = ativo, 0 = inativado (soft-delete). Registros inativos ficam
+   * ocultos por padrão na lista, aparecem só com filtro. */
   isActive: integer("isActive").default(1).notNull(),
+  inactivatedAt: timestamp("inactivatedAt", { mode: "date" }),
   createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
 });

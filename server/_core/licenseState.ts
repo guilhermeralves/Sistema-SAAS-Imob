@@ -46,8 +46,13 @@ export function computeEffectiveStatus(license: License): {
 /**
  * Fase 1 monotenant: sempre retorna o tenant AFG (slug='afg').
  * Fase 2 (multi-tenant): passar a resolver a partir de user.tenantId.
+ * Super-admin (NOXILON) opera fora do escopo de tenant e nunca tem licença.
  */
-export async function loadLicenseStateForUser(): Promise<LicenseState | null> {
+export async function loadLicenseStateForUser(
+  role?: string
+): Promise<LicenseState | null> {
+  if (role === "super_admin") return null;
+
   const db = await getDb();
   if (!db) return null;
 
