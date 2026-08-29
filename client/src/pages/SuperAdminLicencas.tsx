@@ -32,6 +32,7 @@ import { formatStoredDate } from "@/lib/date";
 import { AlertCircle, CheckCircle2, PauseCircle, Plus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useLocation } from "wouter";
 
 function centavosToBRL(cents: number) {
   return (cents / 100).toLocaleString("pt-BR", {
@@ -329,6 +330,7 @@ function PagamentoDialog({
 
 export default function SuperAdminLicencas() {
   const utils = trpc.useUtils();
+  const [, setLocation] = useLocation();
   const { data, isLoading } = trpc.licencas.superAdmin.listar.useQuery();
 
   const suspender = trpc.licencas.superAdmin.suspender.useMutation({
@@ -395,8 +397,14 @@ export default function SuperAdminLicencas() {
                           : row.effectiveStatus === "suspended"
                             ? "—"
                             : `Vencida há ${row.daysOverdue}d`;
+                      const goToDetail = () =>
+                        setLocation(`/super-admin/licencas/${row.tenant.id}`);
                       return (
-                        <TableRow key={row.tenant.id}>
+                        <TableRow
+                          key={row.tenant.id}
+                          onClick={goToDetail}
+                          className="cursor-pointer transition-colors hover:bg-muted/50"
+                        >
                           <TableCell>
                             <div className="font-medium">{row.tenant.nome}</div>
                             <div className="text-xs text-muted-foreground">
@@ -417,7 +425,10 @@ export default function SuperAdminLicencas() {
                           <TableCell>
                             {centavosToBRL(row.license.valorCentavos)}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell
+                            className="text-right"
+                            onClick={e => e.stopPropagation()}
+                          >
                             <div className="flex justify-end gap-2">
                               <PagamentoDialog
                                 tenantId={row.tenant.id}

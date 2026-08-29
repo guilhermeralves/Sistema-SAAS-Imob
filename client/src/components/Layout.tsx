@@ -34,7 +34,12 @@ export default function Layout({ children, hideFooter = false, mainClassName }: 
     encodeURIComponent("Olá! Gostaria de mais informações.");
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div
+      className={cn(
+        "flex min-h-dvh flex-col",
+        user?.role === "super_admin" && "theme-noxilon"
+      )}
+    >
       <Header />
       <LicenseBanner />
       <main className={cn("min-h-0 flex-1", mainClassName)}>{children}</main>

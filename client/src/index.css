@@ -176,6 +176,23 @@
   }
 }
 
+/**
+ * Tema Noxilon — aplicado no Layout quando o usuário é super_admin.
+ * Sobrescreve --primary e --ring para o navy da logotipo Noxilon (#101070),
+ * mantendo o restante da paleta.
+ */
+.theme-noxilon {
+  --primary: #101070;
+  --primary-foreground: #ffffff;
+  --ring: #101070;
+  --sidebar-primary: #101070;
+  --sidebar-primary-foreground: #ffffff;
+}
+
+.theme-noxilon .noxilon-accent {
+  color: #101070;
+}
+
 @layer utilities {
   .scrollbar-hidden {
     -ms-overflow-style: none;
