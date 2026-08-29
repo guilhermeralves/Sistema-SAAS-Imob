@@ -27,7 +27,9 @@ export default function ProtectedRoute({
     }
 
     if (roles && !roles.includes(user.role)) {
-      setLocation(fallbackPath);
+      const target =
+        user.role === "super_admin" ? "/super-admin/licencas" : fallbackPath;
+      setLocation(target);
     }
   }, [fallbackPath, isAuthenticated, loading, location, roles, setLocation, user]);
 

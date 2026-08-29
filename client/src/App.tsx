@@ -46,7 +46,9 @@ function RootEntryRoute() {
     if (loading) return;
     if (!isAuthenticated || !user) return;
 
-    if (user.role === "administrativo" || user.role === "corretor") {
+    if (user.role === "super_admin") {
+      setLocation("/super-admin/licencas");
+    } else if (user.role === "administrativo" || user.role === "corretor") {
       setLocation("/dashboard");
     }
   }, [isAuthenticated, loading, setLocation, user]);
@@ -58,7 +60,9 @@ function RootEntryRoute() {
   if (
     isAuthenticated &&
     user &&
-    (user.role === "administrativo" || user.role === "corretor")
+    (user.role === "administrativo" ||
+      user.role === "corretor" ||
+      user.role === "super_admin")
   ) {
     return null;
   }
@@ -82,6 +86,21 @@ function LegacyTrilhasDesenvolvimentoRoute() {
   useEffect(() => {
     setLocation("/evolucao-profissional");
   }, [setLocation]);
+
+  return null;
+}
+
+function SuperAdminRouteGuard() {
+  const { user, loading, isAuthenticated } = useAuth();
+  const [location, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (loading) return;
+    if (!isAuthenticated || user?.role !== "super_admin") return;
+    if (location === "/login" || location === "/register") return;
+    if (location.startsWith("/super-admin")) return;
+    setLocation("/super-admin/licencas");
+  }, [isAuthenticated, loading, location, setLocation, user]);
 
   return null;
 }
@@ -256,6 +275,7 @@ function App() {
       <ThemeProvider defaultTheme="light" switchable>
         <TooltipProvider>
           <ScrollToTopOnRouteChange />
+          <SuperAdminRouteGuard />
           <MobileKeyboardDismiss />
           <Toaster
             richColors

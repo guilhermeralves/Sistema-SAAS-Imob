@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { APP_LOGO, getLoginUrl, getRegisterUrl } from "@/const";
+import { APP_LOGO, APP_LOGO_NOXILON, getLoginUrl, getRegisterUrl } from "@/const";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -46,7 +46,13 @@ export default function Header() {
   const isRootAdmin =
     user?.role === "administrativo" && user?.registrationSource === "bootstrap";
   const isStaff = user?.role === "administrativo" || user?.role === "corretor";
-  const brandHref = isStaff ? "/dashboard" : "/";
+  const isSuperAdmin = user?.role === "super_admin";
+  const brandHref = isSuperAdmin
+    ? "/super-admin/licencas"
+    : isStaff
+      ? "/dashboard"
+      : "/";
+  const brandLogo = isSuperAdmin ? APP_LOGO_NOXILON : APP_LOGO;
 
   const { data: hasNewUsers } = trpc.admin.hasNewUsers.useQuery(undefined, {
     enabled: isAuthenticated && user?.role === "administrativo",
@@ -93,6 +99,10 @@ export default function Header() {
   ];
 
   const getMenuItems = () => {
+    if (isAuthenticated && user?.role === "super_admin") {
+      return [...superAdminMenuItems];
+    }
+
     const dashboardItem = {
       href: "/dashboard",
       label: "Dashboard",
@@ -183,7 +193,7 @@ export default function Header() {
         <Link href={brandHref}>
           <a className="flex items-center gap-3 transition-opacity hover:opacity-80">
             {APP_LOGO ? (
-              <img src={APP_LOGO} className="h-15 w-15 object-contain" />
+              <img src={brandLogo} className="h-15 w-15 object-contain" />
             ) : null}
           </a>
         </Link>

@@ -7,6 +7,8 @@ export const APP_LOGO = "/Logo AFG.png";
 
 export const APP_LOGO2 = "/Logo AFG Azul.png";
 
+export const APP_LOGO_NOXILON = "/Logo Noxilon.png";
+
 function getCurrentPath() {
   if (typeof window === "undefined") {
     return "/";

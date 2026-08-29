@@ -1,5 +1,6 @@
 import { Link } from "wouter";
 import { APP_LOGO2, APP_TITLE, APP_VERSION } from "@/const";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { Mail, MapPin, Facebook, Instagram, Linkedin } from "lucide-react";
 
 /**
@@ -36,6 +37,29 @@ const quickLinks = [
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === "super_admin";
+
+  if (isSuperAdmin) {
+    return (
+      <footer className="mt-auto overflow-hidden border-t">
+        <div className="relative w-full border-t border-slate-500/45 bg-[linear-gradient(135deg,#474c54,#585e68_45%,#707988)]">
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 opacity-25 bg-[repeating-linear-gradient(135deg,rgba(255,255,255,0.2)_0px,rgba(255,255,255,0.2)_1px,transparent_1px,transparent_8px)]"
+          />
+          <div className="container py-5 text-center text-sm text-slate-100">
+            <p className="text-slate-50">
+              © {currentYear} Noxilon - Todos os direitos reservados.
+            </p>
+            <p className="mt-4 text-slate-50">
+              Created by <span className="font-bold text-slate-50">Noxilon®</span>
+            </p>
+          </div>
+        </div>
+      </footer>
+    );
+  }
 
   return (
     <footer className="mt-auto overflow-hidden border-t bg-muted/50">
