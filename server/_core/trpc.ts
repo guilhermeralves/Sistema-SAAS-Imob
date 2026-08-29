@@ -51,9 +51,49 @@ const requireRoles = (roles: AppRole[]) =>
     });
   });
 
-export const protectedProcedure = t.procedure.use(requireUser);
+/**
+ * Guard aplicado em toda procedure autenticada. Só bloqueia **mutations**
+ * quando a licença do tenant está em readonly ou suspended.
+ * Queries continuam funcionando (os dados ficam visíveis).
+ * Super-admin sempre passa (precisa poder reativar mesmo licença bloqueada).
+ */
+const licenseWriteGuard = t.middleware(async opts => {
+  const { ctx, type, next } = opts;
+
+  if (type !== "mutation") return next();
+  if (ctx.user?.role === "super_admin") return next();
+
+  const state = ctx.license;
+  if (!state) return next();
+
+  if (state.effectiveStatus === "readonly") {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message:
+        "Sistema em modo somente-leitura: licença vencida há " +
+        state.daysOverdue +
+        " dias. Contate o suporte NOXILON para regularizar.",
+    });
+  }
+
+  if (state.effectiveStatus === "suspended") {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "Licença suspensa. Contate o suporte NOXILON.",
+    });
+  }
+
+  return next();
+});
+
+export const protectedProcedure = t.procedure
+  .use(requireUser)
+  .use(licenseWriteGuard);
 export const roleProcedure = (...roles: AppRole[]) =>
   protectedProcedure.use(requireRoles(roles));
 export const adminProcedure = roleProcedure("administrativo");
 export const staffProcedure = roleProcedure("administrativo", "corretor");
 export const clientProcedure = roleProcedure("cliente");
+export const superAdminProcedure = t.procedure
+  .use(requireUser)
+  .use(requireRoles(["super_admin"]));

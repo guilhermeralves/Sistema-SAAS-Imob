@@ -3,6 +3,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
 import Header from "./Header";
 import Footer from "./Footer";
+import LicenseBanner from "./LicenseBanner";
 import { cn } from "@/lib/utils";
 
 /**
@@ -35,6 +36,7 @@ export default function Layout({ children, hideFooter = false, mainClassName }: 
   return (
     <div className="flex min-h-dvh flex-col">
       <Header />
+      <LicenseBanner />
       <main className={cn("min-h-0 flex-1", mainClassName)}>{children}</main>
       {!hideFooter ? <Footer /> : null}
       {shouldShowWhatsappShortcut ? (

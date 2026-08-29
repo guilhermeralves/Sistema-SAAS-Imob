@@ -84,6 +84,14 @@ export default function Header() {
     { href: "/financeiro", label: "Financeiro", icon: CircleDollarSign },
   ];
 
+  const superAdminMenuItems = [
+    {
+      href: "/super-admin/licencas",
+      label: "Licen\u00e7as",
+      icon: CircleDollarSign,
+    },
+  ];
+
   const getMenuItems = () => {
     const dashboardItem = {
       href: "/dashboard",
@@ -126,6 +134,8 @@ export default function Header() {
         items.push(
           ...adminMenuItems.filter(item => item.href !== "/admin/users")
         );
+      } else if (user.role === "super_admin") {
+        items.push(...superAdminMenuItems);
       }
     }
 

@@ -405,6 +405,65 @@ const patches = [
       `CREATE INDEX IF NOT EXISTS "attendanceQueueParticipants_queueId_idx" ON "attendanceQueueParticipants" ("queueId");`,
     ],
   },
+  {
+    id: "2026-08-29_tenants_and_licenses",
+    description:
+      "Cria tenants, licenses e licensePayments; seed do tenant AFG e licença ativa",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS "tenants" (
+        "id" serial PRIMARY KEY NOT NULL,
+        "slug" varchar(64) NOT NULL,
+        "nome" varchar(200) NOT NULL,
+        "cnpj" varchar(18),
+        "email" varchar(320),
+        "telefone" varchar(20),
+        "cidade" varchar(100),
+        "estado" varchar(2),
+        "isActive" integer DEFAULT 1 NOT NULL,
+        "createdAt" timestamp DEFAULT now() NOT NULL,
+        "updatedAt" timestamp DEFAULT now() NOT NULL
+      );`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "tenants_slug_idx" ON "tenants" ("slug");`,
+
+      `CREATE TABLE IF NOT EXISTS "licenses" (
+        "id" serial PRIMARY KEY NOT NULL,
+        "tenantId" integer NOT NULL,
+        "status" varchar(20) DEFAULT 'active' NOT NULL,
+        "valorCentavos" integer DEFAULT 0 NOT NULL,
+        "dueDate" date NOT NULL,
+        "gracePeriodDays" integer DEFAULT 7 NOT NULL,
+        "lastPaidAt" timestamp,
+        "notes" text,
+        "createdAt" timestamp DEFAULT now() NOT NULL,
+        "updatedAt" timestamp DEFAULT now() NOT NULL
+      );`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "licenses_tenantId_idx" ON "licenses" ("tenantId");`,
+
+      `CREATE TABLE IF NOT EXISTS "licensePayments" (
+        "id" serial PRIMARY KEY NOT NULL,
+        "licenseId" integer NOT NULL,
+        "tenantId" integer NOT NULL,
+        "valorCentavos" integer NOT NULL,
+        "paidAt" timestamp NOT NULL,
+        "competenciaDe" date NOT NULL,
+        "competenciaAte" date NOT NULL,
+        "registradoPorUserId" integer,
+        "observacao" text,
+        "createdAt" timestamp DEFAULT now() NOT NULL
+      );`,
+      `CREATE INDEX IF NOT EXISTS "licensePayments_tenantId_idx" ON "licensePayments" ("tenantId");`,
+
+      `INSERT INTO "tenants" ("slug", "nome", "cidade", "estado")
+       SELECT 'afg', 'AFG Imóveis', 'Interior SP', 'SP'
+       WHERE NOT EXISTS (SELECT 1 FROM "tenants" WHERE "slug" = 'afg');`,
+
+      `INSERT INTO "licenses" ("tenantId", "status", "valorCentavos", "dueDate", "gracePeriodDays")
+       SELECT t.id, 'active', 0, (CURRENT_DATE + INTERVAL '30 days')::date, 7
+       FROM "tenants" t
+       WHERE t.slug = 'afg'
+         AND NOT EXISTS (SELECT 1 FROM "licenses" l WHERE l."tenantId" = t.id);`,
+    ],
+  },
 ];
 
 async function ensureManualMigrationsTable(client) {

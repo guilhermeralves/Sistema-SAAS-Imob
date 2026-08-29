@@ -36,6 +36,7 @@ import EvolucaoProfissional from "./pages/EvolucaoProfissional";
 import TarefasEventos from "./pages/TarefasEventos";
 import Condominios from "./pages/Condominios";
 import RoletaAtendimentos from "./pages/RoletaAtendimentos";
+import SuperAdminLicencas from "./pages/SuperAdminLicencas";
 
 function RootEntryRoute() {
   const { user, loading, isAuthenticated } = useAuth();
@@ -219,6 +220,12 @@ function Router() {
         <ProtectedRoute
           component={RoletaAtendimentos}
           roles={["corretor", "administrativo"]}
+        />
+      </Route>
+      <Route path={"/super-admin/licencas"}>
+        <ProtectedRoute
+          component={SuperAdminLicencas}
+          roles={["super_admin"]}
         />
       </Route>
       <Route path={"/404"} component={NotFound} />

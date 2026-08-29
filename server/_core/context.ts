@@ -1,4 +1,5 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
+import { loadLicenseStateForUser, type LicenseState } from "./licenseState";
 import { sdk } from "./sdk";
 import type { SafeUser } from "./users";
 
@@ -6,6 +7,7 @@ export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
   res: CreateExpressContextOptions["res"];
   user: SafeUser | null;
+  license: LicenseState | null;
 };
 
 export async function createContext(opts: CreateExpressContextOptions) {
@@ -17,9 +19,12 @@ export async function createContext(opts: CreateExpressContextOptions) {
     user = null;
   }
 
+  const license = user ? await loadLicenseStateForUser() : null;
+
   return {
     req: opts.req,
     res: opts.res,
     user,
+    license,
   };
 }

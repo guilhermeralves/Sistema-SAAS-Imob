@@ -55,7 +55,7 @@ export const users = pgTable("users", {
     .default("legacy")
     .notNull(),
   role: varchar("role", { length: 20 })
-    .$type<"cliente" | "corretor" | "administrativo">()
+    .$type<"cliente" | "corretor" | "administrativo" | "super_admin">()
     .default("cliente")
     .notNull(),
   isActive: integer("isActive").default(1).notNull(),
@@ -1146,3 +1146,72 @@ export type AttendanceQueueParticipant =
   typeof attendanceQueueParticipants.$inferSelect;
 export type InsertAttendanceQueueParticipant =
   typeof attendanceQueueParticipants.$inferInsert;
+
+/**
+ * Imobiliária cliente da plataforma (tenant). Fase 1 opera com 1 tenant
+ * (AFG); fase 2 (multi-tenant) reutiliza esta tabela como raiz de escopo.
+ */
+export const tenants = pgTable("tenants", {
+  id: serial("id").primaryKey(),
+  slug: varchar("slug", { length: 64 }).notNull().unique(),
+  nome: varchar("nome", { length: 200 }).notNull(),
+  cnpj: varchar("cnpj", { length: 18 }),
+  email: varchar("email", { length: 320 }),
+  telefone: varchar("telefone", { length: 20 }),
+  cidade: varchar("cidade", { length: 100 }),
+  estado: varchar("estado", { length: 2 }),
+  isActive: integer("isActive").default(1).notNull(),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export type Tenant = typeof tenants.$inferSelect;
+export type InsertTenant = typeof tenants.$inferInsert;
+
+/**
+ * Licença mensal da imobiliária. Estados:
+ *  - active: em dia (dueDate no futuro)
+ *  - grace: vencida há <= gracePeriodDays (ainda pode operar)
+ *  - readonly: vencida há > gracePeriodDays (sistema em leitura)
+ *  - suspended: bloqueio manual pelo super-admin
+ * Valor é armazenado em centavos (BRL).
+ */
+export const licenses = pgTable("licenses", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenantId").notNull().unique(),
+  status: varchar("status", { length: 20 })
+    .$type<"active" | "grace" | "readonly" | "suspended">()
+    .default("active")
+    .notNull(),
+  valorCentavos: integer("valorCentavos").default(0).notNull(),
+  dueDate: date("dueDate", { mode: "date" }).notNull(),
+  gracePeriodDays: integer("gracePeriodDays").default(7).notNull(),
+  lastPaidAt: timestamp("lastPaidAt", { mode: "date" }),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export type License = typeof licenses.$inferSelect;
+export type InsertLicense = typeof licenses.$inferInsert;
+
+/**
+ * Histórico de pagamentos/eventos da licença. Cada linha é uma "competência"
+ * (mês/ciclo) marcada como paga; usado para relatório e para auditar
+ * quem/quando renovou.
+ */
+export const licensePayments = pgTable("licensePayments", {
+  id: serial("id").primaryKey(),
+  licenseId: integer("licenseId").notNull(),
+  tenantId: integer("tenantId").notNull(),
+  valorCentavos: integer("valorCentavos").notNull(),
+  paidAt: timestamp("paidAt", { mode: "date" }).notNull(),
+  competenciaDe: date("competenciaDe", { mode: "date" }).notNull(),
+  competenciaAte: date("competenciaAte", { mode: "date" }).notNull(),
+  registradoPorUserId: integer("registradoPorUserId"),
+  observacao: text("observacao"),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export type LicensePayment = typeof licensePayments.$inferSelect;
+export type InsertLicensePayment = typeof licensePayments.$inferInsert;
