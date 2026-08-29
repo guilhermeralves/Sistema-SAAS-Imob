@@ -39,7 +39,7 @@ import {
   PlayCircle,
   Trash2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useLocation } from "wouter";
 import { toast } from "sonner";
 import {
@@ -53,6 +53,39 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+
+function tenantDraftKey(tenantId: number) {
+  return `super-admin:tenant:${tenantId}:tenant-draft`;
+}
+
+function licenseDraftKey(tenantId: number) {
+  return `super-admin:tenant:${tenantId}:license-draft`;
+}
+
+function safeLoadDraft<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+function safeSaveDraft(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // storage indisponível (modo privado, quota) — ignore
+  }
+}
+
+function safeClearDraft(key: string) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
+}
 
 function centavosToBRL(cents: number) {
   return (cents / 100).toLocaleString("pt-BR", {
@@ -213,6 +246,7 @@ export default function SuperAdminLicencaDetalhes() {
     estado: "",
   });
   const [cepLoading, setCepLoading] = useState(false);
+  const hydratedRef = useRef<number | null>(null);
   const [editLicense, setEditLicense] = useState({
     valorReais: "0,00",
     gracePeriodDays: 7,
@@ -220,29 +254,57 @@ export default function SuperAdminLicencaDetalhes() {
 
   useEffect(() => {
     if (!data?.tenant) return;
-    setEditTenant({
-      nome: data.tenant.nome ?? "",
-      email: data.tenant.email ?? "",
-      telefone: data.tenant.telefone ?? "",
-      cnpj: data.tenant.cnpj ?? "",
-      creciPj: data.tenant.creciPj ?? "",
-      cep: data.tenant.cep ?? "",
-      endereco: data.tenant.endereco ?? "",
-      numero: data.tenant.numero ?? "",
-      complemento: data.tenant.complemento ?? "",
-      bairro: data.tenant.bairro ?? "",
-      cidade: data.tenant.cidade ?? "",
-      estado: data.tenant.estado ?? "",
-    });
-    if (data.license) {
-      setEditLicense({
-        valorReais: (data.license.valorCentavos / 100)
-          .toFixed(2)
-          .replace(".", ","),
-        gracePeriodDays: data.license.gracePeriodDays,
+    if (hydratedRef.current === tenantId) return;
+    hydratedRef.current = tenantId;
+
+    const tenantDraft = safeLoadDraft<typeof editTenant>(
+      tenantDraftKey(tenantId)
+    );
+    if (tenantDraft) {
+      setEditTenant(tenantDraft);
+    } else {
+      setEditTenant({
+        nome: data.tenant.nome ?? "",
+        email: data.tenant.email ?? "",
+        telefone: data.tenant.telefone ?? "",
+        cnpj: data.tenant.cnpj ?? "",
+        creciPj: data.tenant.creciPj ?? "",
+        cep: data.tenant.cep ?? "",
+        endereco: data.tenant.endereco ?? "",
+        numero: data.tenant.numero ?? "",
+        complemento: data.tenant.complemento ?? "",
+        bairro: data.tenant.bairro ?? "",
+        cidade: data.tenant.cidade ?? "",
+        estado: data.tenant.estado ?? "",
       });
     }
-  }, [data?.tenant, data?.license]);
+
+    if (data.license) {
+      const licenseDraft = safeLoadDraft<typeof editLicense>(
+        licenseDraftKey(tenantId)
+      );
+      if (licenseDraft) {
+        setEditLicense(licenseDraft);
+      } else {
+        setEditLicense({
+          valorReais: (data.license.valorCentavos / 100)
+            .toFixed(2)
+            .replace(".", ","),
+          gracePeriodDays: data.license.gracePeriodDays,
+        });
+      }
+    }
+  }, [data?.tenant, data?.license, tenantId]);
+
+  useEffect(() => {
+    if (hydratedRef.current !== tenantId) return;
+    safeSaveDraft(tenantDraftKey(tenantId), editTenant);
+  }, [editTenant, tenantId]);
+
+  useEffect(() => {
+    if (hydratedRef.current !== tenantId) return;
+    safeSaveDraft(licenseDraftKey(tenantId), editLicense);
+  }, [editLicense, tenantId]);
 
   const refetch = () => {
     utils.licencas.superAdmin.obter.invalidate({ tenantId });
@@ -253,6 +315,7 @@ export default function SuperAdminLicencaDetalhes() {
   const salvarTenant = trpc.licencas.superAdmin.atualizarTenant.useMutation({
     onSuccess: () => {
       toast.success("Dados da imobiliária atualizados.");
+      safeClearDraft(tenantDraftKey(tenantId));
       refetch();
     },
     onError: e => toast.error(e.message),
@@ -260,6 +323,7 @@ export default function SuperAdminLicencaDetalhes() {
   const salvarLicenca = trpc.licencas.superAdmin.atualizarLicenca.useMutation({
     onSuccess: () => {
       toast.success("Licença atualizada.");
+      safeClearDraft(licenseDraftKey(tenantId));
       refetch();
     },
     onError: e => toast.error(e.message),
@@ -281,6 +345,8 @@ export default function SuperAdminLicencaDetalhes() {
   const inativar = trpc.licencas.superAdmin.inativar.useMutation({
     onSuccess: () => {
       toast.success("Licença inativada.");
+      safeClearDraft(tenantDraftKey(tenantId));
+      safeClearDraft(licenseDraftKey(tenantId));
       setLocation("/super-admin/licencas");
     },
     onError: e => toast.error(e.message),
