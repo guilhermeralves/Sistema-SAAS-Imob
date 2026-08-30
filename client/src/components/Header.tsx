@@ -51,8 +51,16 @@ export default function Header() {
   const [location, setLocation] = useLocation();
   const [hideForFooter, setHideForFooter] = useState(false);
 
+  // Rotas onde o header NÃO deve sumir ao chegar no rodapé.
+  const disableHideOnFooterRoutes = new Set(["/admin"]);
+  const shouldObserveFooter = !disableHideOnFooterRoutes.has(location);
+
   // Esconde o header quando o rodapé entra em cena (rolando até o final).
   useEffect(() => {
+    if (!shouldObserveFooter) {
+      setHideForFooter(false);
+      return;
+    }
     const footer = document.getElementById("site-footer");
     if (!footer) return;
     const observer = new IntersectionObserver(
@@ -65,7 +73,7 @@ export default function Header() {
     );
     observer.observe(footer);
     return () => observer.disconnect();
-  }, [location]);
+  }, [location, shouldObserveFooter]);
   const isRootAdmin =
     user?.role === "administrativo" && user?.registrationSource === "bootstrap";
   const isStaff = user?.role === "administrativo" || user?.role === "corretor";
