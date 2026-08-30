@@ -196,7 +196,7 @@ export default function Header() {
 
   return (
     <header
-      className={`sticky top-0 z-50 w-full border-b border-[#e5e3da] bg-[#f8f7f2]/92 backdrop-blur transition-transform duration-300 supports-[backdrop-filter]:bg-[#f8f7f2]/80 dark:border-white/10 dark:bg-[#111827]/92 dark:supports-[backdrop-filter]:bg-[#111827]/80 ${
+      className={`sticky top-0 z-50 w-full border-b border-[#e5e3da] bg-[#f8f7f2]/92 backdrop-blur transition-transform duration-300 supports-[backdrop-filter]:bg-[#f8f7f2]/80 dark:border-white/10 dark:bg-[#1e1e1e]/92 dark:supports-[backdrop-filter]:bg-[#1e1e1e]/80 ${
         hideForFooter
           ? "-translate-y-full pointer-events-none"
           : "translate-y-0"
@@ -462,7 +462,7 @@ export default function Header() {
       </div>
 
       {mobileMenuOpen ? (
-        <div className="border-t border-[#e5e3da] bg-[#f8f7f2] dark:border-white/10 dark:bg-[#111827] md:hidden">
+        <div className="border-t border-[#e5e3da] bg-[#f8f7f2] dark:border-white/10 dark:bg-[#1e1e1e] md:hidden">
           <nav className="container flex flex-col gap-2.5 py-4">
             {menuItems.map(item => (
               <Link key={item.href} href={item.href}>
