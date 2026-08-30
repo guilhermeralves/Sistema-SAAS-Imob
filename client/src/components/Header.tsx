@@ -305,16 +305,6 @@ export default function Header() {
                       </Link>
                     </DropdownMenuItem>
                   ) : null}
-                  {user.role === "administrativo" ? (
-                    <DropdownMenuItem asChild>
-                      <Link href="/admin/parametros">
-                        <a className="flex items-center gap-2">
-                          <Settings className="h-4 w-4" />
-                          Parâmetros do Sistema
-                        </a>
-                      </Link>
-                    </DropdownMenuItem>
-                  ) : null}
                   {isStaff ? (
                     <DropdownMenuItem asChild>
                       <Link href="/lancamentos">
@@ -384,6 +374,16 @@ export default function Header() {
                               title="Existem novos cadastros"
                             />
                           ) : null}
+                        </a>
+                      </Link>
+                    </DropdownMenuItem>
+                  ) : null}
+                  {user.role === "administrativo" ? (
+                    <DropdownMenuItem asChild>
+                      <Link href="/admin/parametros">
+                        <a className="flex items-center gap-2">
+                          <Settings className="h-4 w-4" />
+                          Parâmetros do Sistema
                         </a>
                       </Link>
                     </DropdownMenuItem>

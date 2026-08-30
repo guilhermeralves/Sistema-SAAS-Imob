@@ -1,24 +1,7 @@
 import { Link } from "wouter";
 import { APP_LOGO2, APP_TITLE, APP_VERSION } from "@/const";
-import { Mail, MapPin, Facebook, Instagram, Linkedin } from "lucide-react";
-
-/**
- * Footer Component
- * 
- * Rodapé do site com informações de contato e links úteis.
- * 
- * EDIÇÃO:
- * - Para alterar informações de contato: edite as constantes abaixo
- * - Para adicionar/remover redes sociais: edite socialLinks
- * - Para modificar links rápidos: edite quickLinks
- */
-
-// ========== ÁREA DE EDIÇÃO - INFORMAÇÕES DE CONTATO ==========
-const CONTACT_INFO = {
-  email: "contato@afg.com",
-  address: "Av. Cassiano Ricardo, 601 The One Office Tower - Jardim Aquarius - São José dos Campos/SP",
-  whatsapp: "5511999999999", // Formato: código do país + DDD + número
-};
+import { formatFullAddress, useSystemInfo } from "@/hooks/useSystemInfo";
+import { Mail, MapPin, Facebook, Instagram, Linkedin, Phone } from "lucide-react";
 
 const socialLinks = [
   { icon: Facebook, href: "https://facebook.com", label: "Facebook" },
@@ -32,10 +15,17 @@ const quickLinks = [
   { href: "/servicos", label: "Serviços" },
   { href: "/contato", label: "Contato" },
 ];
-// ========== FIM DA ÁREA DE EDIÇÃO ==========
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();
+  const info = useSystemInfo();
+
+  const nome = info?.nomeFantasia || APP_TITLE;
+  const email = info?.email || "";
+  const telefone = info?.telefone || "";
+  const endereco = info ? formatFullAddress(info) : "";
+  const cnpj = info?.cnpj || "";
+  const creciPj = info?.creciPj || "";
 
   return (
     <footer className="mt-auto overflow-hidden border-t bg-muted/50">
@@ -45,11 +35,11 @@ export default function Footer() {
           <div className="space-y-4">
             <div className="flex items-center gap-2">
               <img src={APP_LOGO2} className="h-32 w-32 text-primary" />
-              {/*<h3 className="text-lg font-bold">{APP_TITLE}</h3>*/}
             </div>
             <p className="text-sm text-muted-foreground">
-              Sua imobiliária de confiança. Facilitamos a compra, venda e locação de imóveis com
-              tecnologia e atendimento personalizado.
+              {nome
+                ? `${nome} — sua imobiliária de confiança. Facilitamos a compra, venda e locação de imóveis com tecnologia e atendimento personalizado.`
+                : "Sua imobiliária de confiança."}
             </p>
             {/* Redes Sociais */}
             <div className="flex gap-3">
@@ -86,17 +76,30 @@ export default function Footer() {
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Contato</h3>
             <div className="space-y-3">
-              <a
-                href={`mailto:${CONTACT_INFO.email}`}
-                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
-              >
-                <Mail className="h-4 w-4" />
-                {CONTACT_INFO.email}
-              </a>
-              <div className="flex items-start gap-2 text-sm text-muted-foreground">
-                <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                <span>{CONTACT_INFO.address}</span>
-              </div>
+              {email ? (
+                <a
+                  href={`mailto:${email}`}
+                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+                >
+                  <Mail className="h-4 w-4" />
+                  {email}
+                </a>
+              ) : null}
+              {telefone ? (
+                <a
+                  href={`tel:${telefone.replace(/\D/g, "")}`}
+                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+                >
+                  <Phone className="h-4 w-4" />
+                  {telefone}
+                </a>
+              ) : null}
+              {endereco ? (
+                <div className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  <span>{endereco}</span>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -110,13 +113,25 @@ export default function Footer() {
         />
         <div className="container py-5 text-center text-sm text-slate-100">
           <p className="text-slate-50">
-            © {currentYear} {APP_TITLE} - Todos os direitos reservados.
+            © {currentYear} {nome} - Todos os direitos reservados.
           </p>
-          <p className="mt-2 text-slate-50">
-            <span className="font-bold text-slate-50">CNPJ</span> 12.345.678/0001-99 / <span className="font-bold text-slate-50">CRECI/SP</span> J-56842 
-          </p>
+          {(cnpj || creciPj) ? (
+            <p className="mt-2 text-slate-50">
+              {cnpj ? (
+                <>
+                  <span className="font-bold text-slate-50">CNPJ</span> {cnpj}
+                </>
+              ) : null}
+              {cnpj && creciPj ? " / " : ""}
+              {creciPj ? (
+                <>
+                  <span className="font-bold text-slate-50">CRECI-PJ</span> {creciPj}
+                </>
+              ) : null}
+            </p>
+          ) : null}
           <p className="mt-4 text-slate-50">
-            Created by <span className="font-bold text-slate-50">Noxilon®</span> 
+            Created by <span className="font-bold text-slate-50">Noxilon®</span>
           </p>
           <p className="text-slate-200">Software Version {APP_VERSION}</p>
         </div>

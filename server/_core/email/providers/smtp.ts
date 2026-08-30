@@ -1,5 +1,6 @@
 import type { Transporter } from "nodemailer";
 import { ENV } from "../../env";
+import { resolveEmailFrom, resolveEmailReplyTo } from "../../systemParameters";
 import type { EmailMessage, EmailProvider } from "../types";
 
 export class SmtpEmailProvider implements EmailProvider {
@@ -10,13 +11,16 @@ export class SmtpEmailProvider implements EmailProvider {
       throw new Error("EMAIL_SMTP_HOST nao configurado");
     }
 
+    const from = await resolveEmailFrom();
+    const replyTo = message.replyTo || (await resolveEmailReplyTo());
+
     const result = await this.transporter.sendMail({
-      from: ENV.emailFrom,
+      from,
       to: message.to,
       subject: message.subject,
       html: message.html,
       text: message.text,
-      replyTo: message.replyTo || ENV.emailReplyTo || undefined,
+      replyTo,
     });
 
     return {

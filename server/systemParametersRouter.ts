@@ -5,7 +5,9 @@ import {
   type InsertSystemParameters,
 } from "../drizzle/schema";
 import { getDb } from "./db";
-import { adminProcedure, router } from "./_core/trpc";
+import { updateEnvFile } from "./_core/envFile";
+import { invalidateSystemParametersCache } from "./_core/systemParameters";
+import { adminProcedure, publicProcedure, router } from "./_core/trpc";
 
 const ROW_ID = 1;
 
@@ -73,6 +75,31 @@ async function loadRow() {
 }
 
 export const systemParametersRouter = router({
+  /**
+   * Subconjunto público dos parâmetros — apenas o que aparece em
+   * páginas visíveis sem login (rodapé, contato, whatsapp). Nunca
+   * expor dados bancários/PIX/comissões aqui.
+   */
+  publicInfo: publicProcedure.query(async () => {
+    const row = await loadRow();
+    if (!row) return null;
+    return {
+      nomeFantasia: row.imobNomeFantasia,
+      razaoSocial: row.imobRazaoSocial,
+      cnpj: row.imobCnpj,
+      creciPj: row.imobCreciPj,
+      telefone: row.imobTelefone,
+      email: row.imobEmail,
+      cep: row.imobCep,
+      endereco: row.imobEndereco,
+      numero: row.imobNumero,
+      complemento: row.imobComplemento,
+      bairro: row.imobBairro,
+      cidade: row.imobCidade,
+      estado: row.imobEstado,
+    };
+  }),
+
   get: adminProcedure.query(async () => {
     return await loadRow();
   }),
@@ -88,6 +115,35 @@ export const systemParametersRouter = router({
         .update(systemParameters)
         .set(updates)
         .where(eq(systemParameters.id, ROW_ID));
-      return await loadRow();
+      invalidateSystemParametersCache();
+
+      // Sync automático das chaves de .env que fazem sentido persistir.
+      // O runtime já lê do banco imediatamente (via systemParameters.ts);
+      // o .env serve para outros processos/scripts que dependem do env.
+      const fresh = await loadRow();
+      if (fresh) {
+        const emailFrom =
+          fresh.imobNomeFantasia && fresh.imobEmail
+            ? `${fresh.imobNomeFantasia} <${fresh.imobEmail}>`
+            : fresh.imobEmail ?? undefined;
+        const envUpdates: Record<string, string | null | undefined> = {
+          EMAIL_FROM: emailFrom,
+          EMAIL_REPLY_TO: fresh.imobEmail ?? undefined,
+          VAPID_SUBJECT: fresh.imobEmail
+            ? `mailto:${fresh.imobEmail}`
+            : undefined,
+          COMPANY_NAME: fresh.imobNomeFantasia ?? undefined,
+          COMPANY_CNPJ: fresh.imobCnpj ?? undefined,
+          COMPANY_CRECI_PJ: fresh.imobCreciPj ?? undefined,
+          COMPANY_PHONE: fresh.imobTelefone ?? undefined,
+        };
+        try {
+          await updateEnvFile(envUpdates);
+        } catch (err) {
+          console.warn("[systemParameters] sync .env falhou:", err);
+        }
+      }
+
+      return fresh;
     }),
 });

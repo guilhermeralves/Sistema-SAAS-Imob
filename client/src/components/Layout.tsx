@@ -3,6 +3,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
 import Header from "./Header";
 import Footer from "./Footer";
+import { toWhatsappDigits, useSystemInfo } from "@/hooks/useSystemInfo";
 import { cn } from "@/lib/utils";
 
 /**
@@ -26,10 +27,14 @@ export default function Layout({ children, hideFooter = false, mainClassName }: 
   const { user, isAuthenticated } = useAuth();
   const [location] = useLocation();
   const hideWhatsappShortcut = location === "/login" || location === "/register";
+  const info = useSystemInfo();
+  const whatsappDigits = toWhatsappDigits(info?.telefone);
   const shouldShowWhatsappShortcut =
-    !hideWhatsappShortcut && (!isAuthenticated || user?.role === "cliente");
+    !hideWhatsappShortcut &&
+    Boolean(whatsappDigits) &&
+    (!isAuthenticated || user?.role === "cliente");
   const whatsappHref =
-    "https://wa.me/5511999999999?text=" +
+    `https://wa.me/${whatsappDigits}?text=` +
     encodeURIComponent("Olá! Gostaria de mais informações.");
 
   return (
