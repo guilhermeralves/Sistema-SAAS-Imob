@@ -38,13 +38,13 @@ export default function Footer() {
               <img
                 src={APP_LOGO2}
                 alt="New Imob"
-                className="h-24 w-auto object-contain md:h-28 dark:hidden [filter:drop-shadow(0_1px_2px_rgba(0,0,0,0.25))_drop-shadow(0_3px_5px_rgba(0,0,0,0.12))]"
+                className="h-32 w-auto object-contain md:h-36 dark:hidden [filter:drop-shadow(0_1px_2px_rgba(0,0,0,0.25))_drop-shadow(0_3px_5px_rgba(0,0,0,0.12))]"
               />
               {/* Logo branca para modo escuro */}
               <img
                 src={APP_LOGO_WHITE}
                 alt="New Imob"
-                className="hidden h-24 w-auto object-contain md:h-28 dark:block [filter:drop-shadow(0_1px_2px_rgba(0,0,0,0.4))_drop-shadow(0_3px_6px_rgba(255,255,255,0.1))]"
+                className="hidden h-32 w-auto object-contain md:h-36 dark:block [filter:drop-shadow(0_1px_2px_rgba(0,0,0,0.4))_drop-shadow(0_3px_6px_rgba(255,255,255,0.1))]"
               />
             </div>
             <p className="text-sm text-muted-foreground">
