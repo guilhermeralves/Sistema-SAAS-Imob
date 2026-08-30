@@ -100,21 +100,17 @@ export default function Header() {
               item =>
                 item.href !== "/" &&
                 item.href !== "/contato" &&
-                item.href !== "/servicos" &&
-                item.href !== "/lancamentos"
+                item.href !== "/servicos"
             ),
           ]
         : isAuthenticated && user?.role === "corretor"
           ? [
               dashboardItem,
               ...publicMenuItems.filter(
-                item =>
-                  item.href !== "/" &&
-                  item.href !== "/contato" &&
-                  item.href !== "/lancamentos"
+                item => item.href !== "/" && item.href !== "/contato"
               ),
             ]
-          : [...publicMenuItems.filter(item => item.href !== "/lancamentos")];
+          : [...publicMenuItems];
 
     if (isAuthenticated && user) {
       if (user.role === "cliente") {
@@ -301,16 +297,6 @@ export default function Header() {
                         <a className="flex items-center gap-2">
                           <KeyRound className="h-4 w-4" />
                           Controle de Chaves
-                        </a>
-                      </Link>
-                    </DropdownMenuItem>
-                  ) : null}
-                  {isStaff ? (
-                    <DropdownMenuItem asChild>
-                      <Link href="/lancamentos">
-                        <a className="flex items-center gap-2">
-                          <Hammer className="h-4 w-4" />
-                          Lançamentos
                         </a>
                       </Link>
                     </DropdownMenuItem>
