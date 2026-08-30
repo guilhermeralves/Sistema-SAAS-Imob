@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { APP_LOGO, getLoginUrl, getRegisterUrl } from "@/const";
+import { APP_LOGO, APP_LOGO_WHITE, getLoginUrl, getRegisterUrl } from "@/const";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -166,16 +166,21 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-[#e5e3da] bg-[#f8f7f2]/92 backdrop-blur supports-[backdrop-filter]:bg-[#f8f7f2]/80 dark:border-white/10 dark:bg-[#111827]/92 dark:supports-[backdrop-filter]:bg-[#111827]/80">
-      <div className="container flex h-20 items-center justify-between">
+      <div className="container flex h-16 items-center justify-between">
         <Link href={brandHref}>
           <a className="flex items-center gap-3 transition-opacity hover:opacity-80">
-            {APP_LOGO ? (
-              <img
-                src={APP_LOGO}
-                alt="New Imob"
-                className="h-14 w-auto object-contain md:h-16"
-              />
-            ) : null}
+            {/* Logo preta para modo claro */}
+            <img
+              src={APP_LOGO}
+              alt="New Imob"
+              className="h-10 w-auto object-contain drop-shadow-sm dark:hidden md:h-11 [filter:drop-shadow(0_1px_1px_rgba(0,0,0,0.25))_drop-shadow(0_2px_3px_rgba(0,0,0,0.15))]"
+            />
+            {/* Logo branca para modo escuro */}
+            <img
+              src={APP_LOGO_WHITE}
+              alt="New Imob"
+              className="hidden h-10 w-auto object-contain md:h-11 dark:block [filter:drop-shadow(0_1px_1px_rgba(0,0,0,0.5))_drop-shadow(0_2px_4px_rgba(255,255,255,0.1))]"
+            />
           </a>
         </Link>
 

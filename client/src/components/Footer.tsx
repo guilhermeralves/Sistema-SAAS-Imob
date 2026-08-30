@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { APP_LOGO2, APP_TITLE, APP_VERSION } from "@/const";
+import { APP_LOGO2, APP_LOGO_WHITE, APP_TITLE, APP_VERSION } from "@/const";
 import { formatFullAddress, useSystemInfo } from "@/hooks/useSystemInfo";
 import { Mail, MapPin, Facebook, Instagram, Linkedin, Phone } from "lucide-react";
 
@@ -34,10 +34,17 @@ export default function Footer() {
           {/* Sobre a Empresa */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
+              {/* Logo preta para modo claro */}
               <img
                 src={APP_LOGO2}
                 alt="New Imob"
-                className="h-40 w-auto object-contain md:h-48"
+                className="h-24 w-auto object-contain md:h-28 dark:hidden [filter:drop-shadow(0_1px_2px_rgba(0,0,0,0.25))_drop-shadow(0_3px_5px_rgba(0,0,0,0.12))]"
+              />
+              {/* Logo branca para modo escuro */}
+              <img
+                src={APP_LOGO_WHITE}
+                alt="New Imob"
+                className="hidden h-24 w-auto object-contain md:h-28 dark:block [filter:drop-shadow(0_1px_2px_rgba(0,0,0,0.4))_drop-shadow(0_3px_6px_rgba(255,255,255,0.1))]"
               />
             </div>
             <p className="text-sm text-muted-foreground">
