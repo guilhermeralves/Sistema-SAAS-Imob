@@ -28,7 +28,10 @@ export default function Footer() {
   const creciPj = info?.creciPj || "";
 
   return (
-    <footer id="site-footer" className="mt-auto overflow-hidden border-t bg-muted/50">
+    <footer
+      id="site-footer"
+      className="mt-auto overflow-hidden border-t bg-muted/50 dark:bg-[#0a0a0a]"
+    >
       <div className="container pb-10 pt-12">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {/* Sobre a Empresa */}

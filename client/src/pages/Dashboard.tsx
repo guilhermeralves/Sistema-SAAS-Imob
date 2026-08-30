@@ -471,7 +471,7 @@ export default function Dashboard() {
 
   return (
     <Layout>
-      <div className="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.95),rgba(244,240,232,0.92)_45%,rgba(248,248,246,1)_100%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(30,41,59,0.94),rgba(15,23,42,0.92)_45%,rgba(2,6,23,1)_100%)]">
+      <div className="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.95),rgba(244,240,232,0.92)_45%,rgba(248,248,246,1)_100%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(48,48,48,0.94),rgba(38,38,38,0.92)_45%,rgba(24,24,24,1)_100%)]">
         <div className="container py-8 md:py-10">
           <div className="space-y-6">
             <Card className="overflow-hidden rounded-[36px] border border-white/70 bg-white/90 shadow-[0_24px_80px_-42px_rgba(15,23,42,0.5)]">
