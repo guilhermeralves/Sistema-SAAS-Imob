@@ -1,7 +1,12 @@
 import { Link, useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { APP_LOGO, APP_LOGO_WHITE, getLoginUrl, getRegisterUrl } from "@/const";
+import {
+  APP_LOGO,
+  APP_LOGO_WHITE_NO_IMOB,
+  getLoginUrl,
+  getRegisterUrl,
+} from "@/const";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -198,9 +203,10 @@ export default function Header() {
               alt="New Imob"
               className="h-10 w-auto object-contain drop-shadow-sm dark:hidden md:h-11 [filter:drop-shadow(0_1px_1px_rgba(0,0,0,0.25))_drop-shadow(0_2px_3px_rgba(0,0,0,0.15))]"
             />
-            {/* Logo branca para modo escuro */}
+            {/* Logo branca para modo escuro (versão sem "Imob", mesma
+                proporção da preta) */}
             <img
-              src={APP_LOGO_WHITE}
+              src={APP_LOGO_WHITE_NO_IMOB}
               alt="New Imob"
               className="hidden h-10 w-auto object-contain md:h-11 dark:block [filter:drop-shadow(0_1px_1px_rgba(0,0,0,0.5))_drop-shadow(0_2px_4px_rgba(255,255,255,0.1))]"
             />

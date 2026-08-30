@@ -9,8 +9,12 @@ export const APP_LOGO = "/LOGO-NEW-black-no-imob.png";
 /** Logo do rodapé — versão preta completa (ícone + "new" + "Imob"). */
 export const APP_LOGO2 = "/LOGO-NEW-black.png";
 
-/** Logo original branca (mantida para uso em fundos escuros no futuro). */
+/** Logo branca completa (com "Imob") — usada no rodapé em modo escuro. */
 export const APP_LOGO_WHITE = "/LOGO-NEW.png";
+
+/** Logo branca sem "Imob" — usada no cabeçalho em modo escuro para
+ * casar a proporção da preta (ambas 470×174, horizontais). */
+export const APP_LOGO_WHITE_NO_IMOB = "/LOGO-NEW-white-no-imob.png";
 
 export const APP_LOGO_NOXILON = "/Logo Noxilon.png";
 
