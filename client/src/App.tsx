@@ -38,6 +38,7 @@ import TarefasEventos from "./pages/TarefasEventos";
 import Condominios from "./pages/Condominios";
 import RoletaAtendimentos from "./pages/RoletaAtendimentos";
 import Ativar from "./pages/Ativar";
+import ParametrosDoSistema from "./pages/ParametrosDoSistema";
 
 function RootEntryRoute() {
   const { user, loading, isAuthenticated } = useAuth();
@@ -133,6 +134,9 @@ function Router() {
       </Route>
       <Route path={"/admin"}>
         <ProtectedRoute component={Admin} roles={["administrativo"]} />
+      </Route>
+      <Route path={"/admin/parametros"}>
+        <ProtectedRoute component={ParametrosDoSistema} roles={["administrativo"]} />
       </Route>
       <Route path={"/financeiro"}>
         <ProtectedRoute component={Financeiro} roles={["administrativo"]} />

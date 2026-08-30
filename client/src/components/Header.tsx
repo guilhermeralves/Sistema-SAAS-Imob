@@ -33,6 +33,7 @@ import {
   Moon,
   Phone,
   PlugZap,
+  Settings,
   Sun,
   User,
   Users,
@@ -300,6 +301,16 @@ export default function Header() {
                         <a className="flex items-center gap-2">
                           <KeyRound className="h-4 w-4" />
                           Controle de Chaves
+                        </a>
+                      </Link>
+                    </DropdownMenuItem>
+                  ) : null}
+                  {user.role === "administrativo" ? (
+                    <DropdownMenuItem asChild>
+                      <Link href="/admin/parametros">
+                        <a className="flex items-center gap-2">
+                          <Settings className="h-4 w-4" />
+                          Parâmetros do Sistema
                         </a>
                       </Link>
                     </DropdownMenuItem>

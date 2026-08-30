@@ -40,6 +40,7 @@ import {
 import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
 import { licenseActivationRouter } from "./licenseActivationRouter";
+import { systemParametersRouter } from "./systemParametersRouter";
 import {
   adminProcedure,
   clientProcedure,
@@ -7199,6 +7200,7 @@ export const appRouter = router({
   }),
   roleta: roletaRouter,
   license: licenseActivationRouter,
+  systemParameters: systemParametersRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -1210,6 +1210,68 @@ export type InsertLicense = typeof licenses.$inferInsert;
  * quem/quando renovou.
  */
 /**
+ * Parâmetros gerais do sistema (linha única). Guarda dados cadastrais
+ * da imobiliária, do corretor responsável, dados bancários e regras
+ * de comissão. Editado por administrativo via /admin/parametros.
+ *
+ * Percentuais são guardados em basis points (bps) — 500 = 5.00 %,
+ * 1250 = 12.50 % — para evitar problemas de arredondamento float.
+ */
+export const systemParameters = pgTable("systemParameters", {
+  id: serial("id").primaryKey(),
+  // ── 1. Imobiliária ────────────────────────────────────────────────
+  imobNomeFantasia: varchar("imobNomeFantasia", { length: 200 }),
+  imobRazaoSocial: varchar("imobRazaoSocial", { length: 200 }),
+  imobCnpj: varchar("imobCnpj", { length: 18 }),
+  imobCreciPj: varchar("imobCreciPj", { length: 32 }),
+  imobInscricaoEstadual: varchar("imobInscricaoEstadual", { length: 32 }),
+  imobTelefone: varchar("imobTelefone", { length: 20 }),
+  imobEmail: varchar("imobEmail", { length: 320 }),
+  imobCep: varchar("imobCep", { length: 10 }),
+  imobEndereco: varchar("imobEndereco", { length: 255 }),
+  imobNumero: varchar("imobNumero", { length: 20 }),
+  imobComplemento: varchar("imobComplemento", { length: 120 }),
+  imobBairro: varchar("imobBairro", { length: 100 }),
+  imobCidade: varchar("imobCidade", { length: 100 }),
+  imobEstado: varchar("imobEstado", { length: 2 }),
+  // ── 2. Corretor Responsável ───────────────────────────────────────
+  respNome: varchar("respNome", { length: 200 }),
+  respCpf: varchar("respCpf", { length: 14 }),
+  respCreci: varchar("respCreci", { length: 32 }),
+  respTelefone: varchar("respTelefone", { length: 20 }),
+  respEmail: varchar("respEmail", { length: 320 }),
+  // ── 3. Financeiras ────────────────────────────────────────────────
+  bancoNome: varchar("bancoNome", { length: 100 }),
+  bancoAgencia: varchar("bancoAgencia", { length: 20 }),
+  bancoConta: varchar("bancoConta", { length: 30 }),
+  bancoTipoConta: varchar("bancoTipoConta", { length: 10 }).$type<
+    "corrente" | "poupanca"
+  >(),
+  bancoTitular: varchar("bancoTitular", { length: 200 }),
+  bancoTitularDoc: varchar("bancoTitularDoc", { length: 18 }),
+  pixTipo: varchar("pixTipo", { length: 12 }).$type<
+    "cpf" | "cnpj" | "email" | "telefone" | "aleatoria"
+  >(),
+  pixChave: varchar("pixChave", { length: 100 }),
+  // ── 4. Comissões e Pagamentos (percentuais em basis points) ───────
+  comissaoVendaBps: integer("comissaoVendaBps").default(600).notNull(),
+  comissaoLocacaoBps: integer("comissaoLocacaoBps").default(1000).notNull(),
+  comissaoImobiliariaBps: integer("comissaoImobiliariaBps")
+    .default(5000)
+    .notNull(),
+  comissaoCorretorBps: integer("comissaoCorretorBps").default(5000).notNull(),
+  diaPagamentoCorretor: integer("diaPagamentoCorretor").default(10).notNull(),
+  metodoPagamentoCorretor: varchar("metodoPagamentoCorretor", { length: 10 })
+    .$type<"pix" | "ted" | "boleto">()
+    .default("pix")
+    .notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+  updatedByUserId: integer("updatedByUserId"),
+});
+export type SystemParameters = typeof systemParameters.$inferSelect;
+export type InsertSystemParameters = typeof systemParameters.$inferInsert;
+
+/**
  * Ativação da licença desta instalação (linha única).
  * A ativação inicial pede um `code` ao NOXILON Central e recebe de volta
  * um JWT (RS256) contendo tenantId/status/dueDate. Um scheduler faz
