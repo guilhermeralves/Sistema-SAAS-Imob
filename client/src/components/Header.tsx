@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { APP_LOGO, APP_LOGO_WHITE, getLoginUrl, getRegisterUrl } from "@/const";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,23 @@ export default function Header() {
   const { theme, toggleTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [location, setLocation] = useLocation();
+  const [hideForFooter, setHideForFooter] = useState(false);
+
+  // Esconde o header quando o rodapé entra em cena (rolando até o final).
+  useEffect(() => {
+    const footer = document.getElementById("site-footer");
+    if (!footer) return;
+    const observer = new IntersectionObserver(
+      entries => {
+        for (const entry of entries) {
+          setHideForFooter(entry.isIntersecting);
+        }
+      },
+      { root: null, threshold: 0.1 }
+    );
+    observer.observe(footer);
+    return () => observer.disconnect();
+  }, [location]);
   const isRootAdmin =
     user?.role === "administrativo" && user?.registrationSource === "bootstrap";
   const isStaff = user?.role === "administrativo" || user?.role === "corretor";
@@ -165,7 +182,13 @@ export default function Header() {
   };
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-[#e5e3da] bg-[#f8f7f2]/92 backdrop-blur supports-[backdrop-filter]:bg-[#f8f7f2]/80 dark:border-white/10 dark:bg-[#111827]/92 dark:supports-[backdrop-filter]:bg-[#111827]/80">
+    <header
+      className={`sticky top-0 z-50 w-full border-b border-[#e5e3da] bg-[#f8f7f2]/92 backdrop-blur transition-transform duration-300 supports-[backdrop-filter]:bg-[#f8f7f2]/80 dark:border-white/10 dark:bg-[#111827]/92 dark:supports-[backdrop-filter]:bg-[#111827]/80 ${
+        hideForFooter
+          ? "-translate-y-full pointer-events-none"
+          : "translate-y-0"
+      }`}
+    >
       <div className="container flex h-16 items-center justify-between">
         <Link href={brandHref}>
           <a className="flex items-center gap-3 transition-opacity hover:opacity-80">
