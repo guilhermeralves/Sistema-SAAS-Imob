@@ -166,11 +166,15 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-[#e5e3da] bg-[#f8f7f2]/92 backdrop-blur supports-[backdrop-filter]:bg-[#f8f7f2]/80 dark:border-white/10 dark:bg-[#111827]/92 dark:supports-[backdrop-filter]:bg-[#111827]/80">
-      <div className="container flex h-15 items-center justify-between">
+      <div className="container flex h-20 items-center justify-between">
         <Link href={brandHref}>
           <a className="flex items-center gap-3 transition-opacity hover:opacity-80">
             {APP_LOGO ? (
-              <img src={APP_LOGO} className="h-15 w-15 object-contain" />
+              <img
+                src={APP_LOGO}
+                alt="New Imob"
+                className="h-14 w-auto object-contain md:h-16"
+              />
             ) : null}
           </a>
         </Link>

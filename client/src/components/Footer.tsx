@@ -34,7 +34,11 @@ export default function Footer() {
           {/* Sobre a Empresa */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <img src={APP_LOGO2} className="h-32 w-32 text-primary" />
+              <img
+                src={APP_LOGO2}
+                alt="New Imob"
+                className="h-40 w-auto object-contain md:h-48"
+              />
             </div>
             <p className="text-sm text-muted-foreground">
               {nome

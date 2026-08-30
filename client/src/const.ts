@@ -3,9 +3,14 @@ export { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 export const APP_TITLE = import.meta.env.VITE_APP_TITLE || "App";
 export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "1.0.0";
 
-export const APP_LOGO = "/LOGO-NEW.png";
+/** Logo do cabeçalho — versão preta, sem a palavra "Imob", só o ícone + "new". */
+export const APP_LOGO = "/LOGO-NEW-black-no-imob.png";
 
-export const APP_LOGO2 = "/LOGO-NEW.png";
+/** Logo do rodapé — versão preta completa (ícone + "new" + "Imob"). */
+export const APP_LOGO2 = "/LOGO-NEW-black.png";
+
+/** Logo original branca (mantida para uso em fundos escuros no futuro). */
+export const APP_LOGO_WHITE = "/LOGO-NEW.png";
 
 export const APP_LOGO_NOXILON = "/Logo Noxilon.png";
 
