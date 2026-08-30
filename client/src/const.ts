@@ -3,9 +3,9 @@ export { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 export const APP_TITLE = import.meta.env.VITE_APP_TITLE || "App";
 export const APP_VERSION = import.meta.env.VITE_APP_VERSION || "1.0.0";
 
-export const APP_LOGO = "/Logo AFG.png";
+export const APP_LOGO = "/Logo New Imob.png";
 
-export const APP_LOGO2 = "/Logo AFG Azul.png";
+export const APP_LOGO2 = "/Logo New Imob.png";
 
 export const APP_LOGO_NOXILON = "/Logo Noxilon.png";
 
