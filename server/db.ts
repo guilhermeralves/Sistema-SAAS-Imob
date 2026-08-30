@@ -3240,7 +3240,7 @@ export async function getAllUsers() {
 
 export async function updateUserRole(
   id: number,
-  role: "cliente" | "corretor" | "administrativo" | "super_admin"
+  role: "cliente" | "corretor" | "administrativo"
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

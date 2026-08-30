@@ -16,6 +16,7 @@ import {
   type PropertyImageVariant,
 } from "./property-images";
 import { startLeadSlaScheduler } from "./leadSla";
+import { startLicenseHeartbeat } from "./licenseHeartbeat";
 import { serveStatic, setupVite } from "./vite";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -41,6 +42,7 @@ async function startServer() {
   await ensureBootstrapAdmin();
   await ensurePropertyUploadDir();
   startLeadSlaScheduler();
+  startLicenseHeartbeat();
 
   const app = express();
   const server = createServer(app);

@@ -55,7 +55,7 @@ export const users = pgTable("users", {
     .default("legacy")
     .notNull(),
   role: varchar("role", { length: 20 })
-    .$type<"cliente" | "corretor" | "administrativo" | "super_admin">()
+    .$type<"cliente" | "corretor" | "administrativo">()
     .default("cliente")
     .notNull(),
   isActive: integer("isActive").default(1).notNull(),
@@ -1209,6 +1209,35 @@ export type InsertLicense = typeof licenses.$inferInsert;
  * (mês/ciclo) marcada como paga; usado para relatório e para auditar
  * quem/quando renovou.
  */
+/**
+ * Ativação da licença desta instalação (linha única).
+ * A ativação inicial pede um `code` ao NOXILON Central e recebe de volta
+ * um JWT (RS256) contendo tenantId/status/dueDate. Um scheduler faz
+ * heartbeat periódico com o Central para renovar o token. Se a licença
+ * expirar (ou o central for inalcançável por N horas), o sistema entra
+ * em modo readonly (bloqueia mutations tRPC).
+ */
+export const licenseActivation = pgTable("licenseActivation", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenantId").notNull(),
+  tenantSlug: varchar("tenantSlug", { length: 64 }).notNull(),
+  tenantNome: varchar("tenantNome", { length: 200 }).notNull(),
+  activationCodeId: integer("activationCodeId").notNull(),
+  token: text("token").notNull(),
+  licenseStatus: varchar("licenseStatus", { length: 20 })
+    .$type<"active" | "grace" | "readonly" | "suspended">()
+    .default("active")
+    .notNull(),
+  dueDate: date("dueDate", { mode: "date" }),
+  tokenExpiresAt: timestamp("tokenExpiresAt", { mode: "date" }).notNull(),
+  activatedAt: timestamp("activatedAt", { mode: "date" }).defaultNow().notNull(),
+  lastHeartbeatAt: timestamp("lastHeartbeatAt", { mode: "date" }),
+  lastHeartbeatError: text("lastHeartbeatError"),
+  centralUrl: varchar("centralUrl", { length: 255 }).notNull(),
+});
+export type LicenseActivation = typeof licenseActivation.$inferSelect;
+export type InsertLicenseActivation = typeof licenseActivation.$inferInsert;
+
 export const licensePayments = pgTable("licensePayments", {
   id: serial("id").primaryKey(),
   licenseId: integer("licenseId").notNull(),

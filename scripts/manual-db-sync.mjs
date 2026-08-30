@@ -478,6 +478,28 @@ const patches = [
       `ALTER TABLE "tenants" ADD COLUMN IF NOT EXISTS "inactivatedAt" timestamp;`,
     ],
   },
+  {
+    id: "2026-08-30_license_activation_table",
+    description:
+      "Cria licenseActivation (linha única guardando token JWT do NOXILON Central)",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS "licenseActivation" (
+        "id" serial PRIMARY KEY NOT NULL,
+        "tenantId" integer NOT NULL,
+        "tenantSlug" varchar(64) NOT NULL,
+        "tenantNome" varchar(200) NOT NULL,
+        "activationCodeId" integer NOT NULL,
+        "token" text NOT NULL,
+        "licenseStatus" varchar(20) DEFAULT 'active' NOT NULL,
+        "dueDate" date,
+        "tokenExpiresAt" timestamp NOT NULL,
+        "activatedAt" timestamp DEFAULT now() NOT NULL,
+        "lastHeartbeatAt" timestamp,
+        "lastHeartbeatError" text,
+        "centralUrl" varchar(255) NOT NULL
+      );`,
+    ],
+  },
 ];
 
 async function ensureManualMigrationsTable(client) {

@@ -3,6 +3,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import MobileKeyboardDismiss from "@/components/MobileKeyboardDismiss";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import ActivationGate from "@/components/ActivationGate";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -36,8 +37,7 @@ import EvolucaoProfissional from "./pages/EvolucaoProfissional";
 import TarefasEventos from "./pages/TarefasEventos";
 import Condominios from "./pages/Condominios";
 import RoletaAtendimentos from "./pages/RoletaAtendimentos";
-import SuperAdminLicencas from "./pages/SuperAdminLicencas";
-import SuperAdminLicencaDetalhes from "./pages/SuperAdminLicencaDetalhes";
+import Ativar from "./pages/Ativar";
 
 function RootEntryRoute() {
   const { user, loading, isAuthenticated } = useAuth();
@@ -46,89 +46,55 @@ function RootEntryRoute() {
   useEffect(() => {
     if (loading) return;
     if (!isAuthenticated || !user) return;
-
-    if (user.role === "super_admin") {
-      setLocation("/super-admin/licencas");
-    } else if (user.role === "administrativo" || user.role === "corretor") {
+    if (user.role === "administrativo" || user.role === "corretor") {
       setLocation("/dashboard");
     }
   }, [isAuthenticated, loading, setLocation, user]);
 
-  if (loading) {
-    return null;
-  }
-
+  if (loading) return null;
   if (
     isAuthenticated &&
     user &&
-    (user.role === "administrativo" ||
-      user.role === "corretor" ||
-      user.role === "super_admin")
+    (user.role === "administrativo" || user.role === "corretor")
   ) {
     return null;
   }
-
   return <Home />;
 }
 
 function LegacyIntegracoesRoute() {
   const [, setLocation] = useLocation();
-
   useEffect(() => {
     setLocation("/integracoes");
   }, [setLocation]);
-
   return null;
 }
 
 function LegacyTrilhasDesenvolvimentoRoute() {
   const [, setLocation] = useLocation();
-
   useEffect(() => {
     setLocation("/evolucao-profissional");
   }, [setLocation]);
-
-  return null;
-}
-
-function SuperAdminRouteGuard() {
-  const { user, loading, isAuthenticated } = useAuth();
-  const [location, setLocation] = useLocation();
-
-  useEffect(() => {
-    if (loading) return;
-    if (!isAuthenticated || user?.role !== "super_admin") return;
-    if (location === "/login" || location === "/register") return;
-    if (location.startsWith("/super-admin")) return;
-    setLocation("/super-admin/licencas");
-  }, [isAuthenticated, loading, location, setLocation, user]);
-
   return null;
 }
 
 function Router() {
-  // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
       <Route path={"/"} component={RootEntryRoute} />
       <Route path={"/imoveis"} component={Imoveis} />
       <Route path={"/lancamentos"}>
-        <ProtectedRoute
-          component={Lancamentos}
-          roles={["corretor", "administrativo"]}
-        />
+        <ProtectedRoute component={Lancamentos} roles={["corretor", "administrativo"]} />
       </Route>
       <Route path={"/imoveis/novo/preview"}>
-        <ProtectedRoute
-          component={ImovelNovoPreview}
-          roles={["corretor", "administrativo"]}
-        />
+        <ProtectedRoute component={ImovelNovoPreview} roles={["corretor", "administrativo"]} />
       </Route>
       <Route path={"/imoveis/:id"} component={ImovelDetalhes} />
       <Route path={"/servicos"} component={Servicos} />
       <Route path={"/contato"} component={Contato} />
       <Route path={"/login"} component={Login} />
       <Route path={"/register"} component={Register} />
+      <Route path={"/ativar"} component={Ativar} />
       <Route path={"/area-cliente"}>
         <ProtectedRoute component={AreaCliente} roles={["cliente"]} />
       </Route>
@@ -136,55 +102,31 @@ function Router() {
         <ProtectedRoute component={ValidarVistoria} roles={["cliente"]} />
       </Route>
       <Route path={"/minha-ficha"}>
-        <ProtectedRoute
-          component={AdminUserDetails}
-          roles={["cliente", "corretor", "administrativo"]}
-        />
+        <ProtectedRoute component={AdminUserDetails} roles={["cliente", "corretor", "administrativo"]} />
       </Route>
       <Route path={"/dashboard"}>
-        <ProtectedRoute
-          component={Dashboard}
-          roles={["corretor", "administrativo"]}
-        />
+        <ProtectedRoute component={Dashboard} roles={["corretor", "administrativo"]} />
       </Route>
       <Route path={"/crm"}>
-        <ProtectedRoute
-          component={CRM}
-          roles={["corretor", "administrativo"]}
-        />
+        <ProtectedRoute component={CRM} roles={["corretor", "administrativo"]} />
       </Route>
       <Route path={"/meus-imoveis"}>
-        <ProtectedRoute
-          component={MeusImoveis}
-          roles={["corretor", "administrativo"]}
-        />
+        <ProtectedRoute component={MeusImoveis} roles={["corretor", "administrativo"]} />
       </Route>
       <Route path={"/admin/users"}>
         <ProtectedRoute component={AdminUsers} roles={["administrativo"]} />
       </Route>
       <Route path={"/admin/users/:id"}>
-        <ProtectedRoute
-          component={AdminUserDetails}
-          roles={["administrativo"]}
-        />
+        <ProtectedRoute component={AdminUserDetails} roles={["administrativo"]} />
       </Route>
       <Route path={"/admin/proprietarios/:id"}>
-        <ProtectedRoute
-          component={AdminUserDetails}
-          roles={["administrativo"]}
-        />
+        <ProtectedRoute component={AdminUserDetails} roles={["administrativo"]} />
       </Route>
       <Route path={"/admin/modulos/locacoes/nova"}>
-        <ProtectedRoute
-          component={AdminRentalProposalNew}
-          roles={["administrativo"]}
-        />
+        <ProtectedRoute component={AdminRentalProposalNew} roles={["administrativo"]} />
       </Route>
       <Route path={"/admin/modulos/locacoes/propostas/:id"}>
-        <ProtectedRoute
-          component={AdminRentalProposalDetails}
-          roles={["administrativo"]}
-        />
+        <ProtectedRoute component={AdminRentalProposalDetails} roles={["administrativo"]} />
       </Route>
       <Route path={"/admin/modulos/:module"}>
         <ProtectedRoute component={AdminModule} roles={["administrativo"]} />
@@ -198,64 +140,30 @@ function Router() {
       <Route path={"/integracoes"}>
         <ProtectedRoute component={Integracoes} roles={["administrativo"]} />
       </Route>
-      <Route
-        path={"/plataformas-integradas"}
-        component={LegacyIntegracoesRoute}
-      />
+      <Route path={"/plataformas-integradas"} component={LegacyIntegracoesRoute} />
       <Route path={"/controle-de-chaves"}>
-        <ProtectedRoute
-          component={ControleDeChaves}
-          roles={["administrativo"]}
-        />
+        <ProtectedRoute component={ControleDeChaves} roles={["administrativo"]} />
       </Route>
       <Route path={"/bonificacoes"}>
         <ProtectedRoute component={Bonificacoes} roles={["administrativo"]} />
       </Route>
       <Route path={"/evolucao-profissional"}>
-        <ProtectedRoute
-          component={EvolucaoProfissional}
-          roles={["corretor", "administrativo"]}
-        />
+        <ProtectedRoute component={EvolucaoProfissional} roles={["corretor", "administrativo"]} />
       </Route>
-      <Route
-        path={"/trilhas-desenvolvimento"}
-        component={LegacyTrilhasDesenvolvimentoRoute}
-      />
+      <Route path={"/trilhas-desenvolvimento"} component={LegacyTrilhasDesenvolvimentoRoute} />
       <Route path={"/automacao"}>
         <ProtectedRoute component={Automacao} roles={["administrativo"]} />
       </Route>
       <Route path={"/tarefas-eventos"}>
-        <ProtectedRoute
-          component={TarefasEventos}
-          roles={["corretor", "administrativo"]}
-        />
+        <ProtectedRoute component={TarefasEventos} roles={["corretor", "administrativo"]} />
       </Route>
       <Route path={"/condominios"}>
-        <ProtectedRoute
-          component={Condominios}
-          roles={["corretor", "administrativo"]}
-        />
+        <ProtectedRoute component={Condominios} roles={["corretor", "administrativo"]} />
       </Route>
       <Route path={"/roleta-atendimentos"}>
-        <ProtectedRoute
-          component={RoletaAtendimentos}
-          roles={["corretor", "administrativo"]}
-        />
-      </Route>
-      <Route path={"/super-admin/licencas"}>
-        <ProtectedRoute
-          component={SuperAdminLicencas}
-          roles={["super_admin"]}
-        />
-      </Route>
-      <Route path={"/super-admin/licencas/:tenantId"}>
-        <ProtectedRoute
-          component={SuperAdminLicencaDetalhes}
-          roles={["super_admin"]}
-        />
+        <ProtectedRoute component={RoletaAtendimentos} roles={["corretor", "administrativo"]} />
       </Route>
       <Route path={"/404"} component={NotFound} />
-      {/* Final fallback route */}
       <Route component={NotFound} />
     </Switch>
   );
@@ -263,18 +171,11 @@ function Router() {
 
 function ScrollToTopOnRouteChange() {
   const [location] = useLocation();
-
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [location]);
-
   return null;
 }
-
-// NOTE: About Theme
-// - First choose a default theme according to your design style (dark or light bg), than change color palette in index.css
-//   to keep consistent foreground/background color across components
-// - If you want to make theme switchable, pass `switchable` ThemeProvider and use `useTheme` hook
 
 function App() {
   return (
@@ -282,7 +183,7 @@ function App() {
       <ThemeProvider defaultTheme="light" switchable>
         <TooltipProvider>
           <ScrollToTopOnRouteChange />
-          <SuperAdminRouteGuard />
+          <ActivationGate />
           <MobileKeyboardDismiss />
           <Toaster
             richColors
@@ -295,7 +196,6 @@ function App() {
               },
             }}
           />
-
           <Router />
         </TooltipProvider>
       </ThemeProvider>

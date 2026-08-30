@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { APP_LOGO, APP_LOGO_NOXILON, getLoginUrl, getRegisterUrl } from "@/const";
+import { APP_LOGO, getLoginUrl, getRegisterUrl } from "@/const";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { useTheme } from "@/contexts/ThemeContext";
@@ -46,13 +46,7 @@ export default function Header() {
   const isRootAdmin =
     user?.role === "administrativo" && user?.registrationSource === "bootstrap";
   const isStaff = user?.role === "administrativo" || user?.role === "corretor";
-  const isSuperAdmin = user?.role === "super_admin";
-  const brandHref = isSuperAdmin
-    ? "/super-admin/licencas"
-    : isStaff
-      ? "/dashboard"
-      : "/";
-  const brandLogo = isSuperAdmin ? APP_LOGO_NOXILON : APP_LOGO;
+  const brandHref = isStaff ? "/dashboard" : "/";
 
   const { data: hasNewUsers } = trpc.admin.hasNewUsers.useQuery(undefined, {
     enabled: isAuthenticated && user?.role === "administrativo",
@@ -91,10 +85,6 @@ export default function Header() {
   ];
 
   const getMenuItems = () => {
-    if (isAuthenticated && user?.role === "super_admin") {
-      return [];
-    }
-
     const dashboardItem = {
       href: "/dashboard",
       label: "Dashboard",
@@ -179,24 +169,11 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-[#e5e3da] bg-[#f8f7f2]/92 backdrop-blur supports-[backdrop-filter]:bg-[#f8f7f2]/80 dark:border-white/10 dark:bg-[#111827]/92 dark:supports-[backdrop-filter]:bg-[#111827]/80">
-      <div
-        className={
-          isSuperAdmin
-            ? "container flex h-16 items-center justify-between"
-            : "container flex h-15 items-center justify-between"
-        }
-      >
+      <div className="container flex h-15 items-center justify-between">
         <Link href={brandHref}>
           <a className="flex items-center gap-3 transition-opacity hover:opacity-80">
             {APP_LOGO ? (
-              <img
-                src={brandLogo}
-                className={
-                  isSuperAdmin
-                    ? "h-12 w-auto object-contain md:h-14"
-                    : "h-15 w-15 object-contain"
-                }
-              />
+              <img src={APP_LOGO} className="h-15 w-15 object-contain" />
             ) : null}
           </a>
         </Link>
@@ -272,20 +249,7 @@ export default function Header() {
                       Papel: {ROLE_LABELS[user.role]}
                     </p>
                   </div>
-                  {isSuperAdmin ? (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild>
-                        <Link href="/super-admin/licencas">
-                          <a className="flex items-center gap-2">
-                            <CircleDollarSign className="h-4 w-4" />
-                            Licenças
-                          </a>
-                        </Link>
-                      </DropdownMenuItem>
-                    </>
-                  ) : null}
-                  {!isRootAdmin && !isSuperAdmin ? (
+                  {!isRootAdmin ? (
                     <>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild>

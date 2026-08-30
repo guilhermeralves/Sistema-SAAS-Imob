@@ -39,7 +39,7 @@ import {
 } from "./_core/roleta";
 import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
-import { licencasRouter } from "./licencasRouter";
+import { licenseActivationRouter } from "./licenseActivationRouter";
 import {
   adminProcedure,
   clientProcedure,
@@ -791,7 +791,7 @@ function getLeadStatusLabel(status: string | null | undefined) {
 }
 
 function isRootAdmin(user: {
-  role: "cliente" | "corretor" | "administrativo" | "super_admin";
+  role: "cliente" | "corretor" | "administrativo";
   openId?: string | null;
   registrationSource?: string | null;
   email?: string | null;
@@ -809,7 +809,7 @@ function isRootAdmin(user: {
 }
 
 function assertRootAdminProfileAccessible(user: {
-  role: "cliente" | "corretor" | "administrativo" | "super_admin";
+  role: "cliente" | "corretor" | "administrativo";
   openId?: string | null;
   registrationSource?: string | null;
   email?: string | null;
@@ -823,7 +823,7 @@ function assertRootAdminProfileAccessible(user: {
 }
 
 function assertRootAdminMutable(user: {
-  role: "cliente" | "corretor" | "administrativo" | "super_admin";
+  role: "cliente" | "corretor" | "administrativo";
   openId?: string | null;
   registrationSource?: string | null;
   email?: string | null;
@@ -899,7 +899,7 @@ async function ensurePropertyExists(id: number) {
 }
 
 async function ensurePropertyManagementAccess(
-  user: { id: number; role: "cliente" | "corretor" | "administrativo" | "super_admin" },
+  user: { id: number; role: "cliente" | "corretor" | "administrativo" },
   propertyId: number
 ) {
   const property = await ensurePropertyExists(propertyId);
@@ -922,7 +922,7 @@ async function ensurePropertyManagementAccess(
 }
 
 async function ensureLeadAccess(
-  user: { id: number; role: "cliente" | "corretor" | "administrativo" | "super_admin" },
+  user: { id: number; role: "cliente" | "corretor" | "administrativo" },
   leadId: number
 ) {
   const { getLeadById } = await import("./db");
@@ -2009,7 +2009,7 @@ async function assertValidAssignees(assigneeIds: number[]) {
 }
 
 async function ensureTaskAccess(
-  user: { id: number; role: "cliente" | "corretor" | "administrativo" | "super_admin" },
+  user: { id: number; role: "cliente" | "corretor" | "administrativo" },
   taskId: number
 ) {
   const { getTaskItemWithRelationsById } = await import("./db");
@@ -2040,7 +2040,7 @@ async function ensureTaskAccess(
 }
 
 async function ensureTaskEditAccess(
-  user: { id: number; role: "cliente" | "corretor" | "administrativo" | "super_admin" },
+  user: { id: number; role: "cliente" | "corretor" | "administrativo" },
   taskId: number
 ) {
   const task = await ensureTaskAccess(user, taskId);
@@ -7198,7 +7198,7 @@ export const appRouter = router({
       }),
   }),
   roleta: roletaRouter,
-  licencas: licencasRouter,
+  license: licenseActivationRouter,
 });
 
 export type AppRouter = typeof appRouter;
