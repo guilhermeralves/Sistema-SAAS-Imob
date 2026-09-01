@@ -101,8 +101,8 @@
   --accent-foreground: oklch(0.92 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
+  --border: oklch(1 0 0 / 6%);
+  --input: oklch(1 0 0 / 10%);
   --ring: oklch(0.488 0.243 264.376);
   --chart-1: var(--color-blue-300);
   --chart-2: var(--color-blue-500);
@@ -264,15 +264,26 @@
   /* bg-white/5, /10, /15, /20 (transparências muito baixas) ficam intactos
      — são overlays intencionais dentro de cards coloridos. */
 
+  /* Bordas de cards no modo escuro — mantidas discretas pra separar
+     apenas sutilmente o card do fundo. Cinza neutro (não slate) com
+     opacidade baixa. */
   .dark .border-white\/80,
-  .dark .border-white\/70,
-  .dark .border-white\/30,
-  .dark .border-white\/20 {
-    border-color: rgba(148, 163, 184, 0.34) !important;
+  .dark .border-white\/70 {
+    border-color: rgba(255, 255, 255, 0.08) !important;
   }
 
-  .dark .border-slate-200 {
-    border-color: rgba(148, 163, 184, 0.24) !important;
+  .dark .border-white\/30,
+  .dark .border-white\/25,
+  .dark .border-white\/20,
+  .dark .border-white\/15,
+  .dark .border-white\/10 {
+    border-color: rgba(255, 255, 255, 0.06) !important;
+  }
+
+  .dark .border-slate-200,
+  .dark .border-slate-100,
+  .dark .border-slate-300 {
+    border-color: rgba(255, 255, 255, 0.06) !important;
   }
 
   .dark .text-slate-950 {
