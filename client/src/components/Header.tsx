@@ -52,7 +52,7 @@ export default function Header() {
   const [hideForFooter, setHideForFooter] = useState(false);
 
   // Rotas onde o header NÃO deve sumir ao chegar no rodapé.
-  const disableHideOnFooterRoutes = new Set(["/admin"]);
+  const disableHideOnFooterRoutes = new Set(["/admin", "/admin/parametros"]);
   const shouldObserveFooter = !disableHideOnFooterRoutes.has(location);
 
   // Esconde o header quando o rodapé entra em cena (rolando até o final).
