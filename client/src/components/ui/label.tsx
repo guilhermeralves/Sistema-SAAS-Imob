@@ -11,7 +11,11 @@ function Label({
     <LabelPrimitive.Root
       data-slot="label"
       className={cn(
-        "flex items-center gap-2 text-sm leading-none font-medium select-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50",
+        // `mb-1.5` (6px) padroniza o espaço entre o rótulo e o
+        // elemento seguinte (Input/Select/Textarea) em todo o site.
+        // Se algum formulário quiser um espaçamento diferente, basta
+        // passar outra classe `mb-*` — tailwind-merge substitui.
+        "mb-1.5 flex items-center gap-2 text-sm leading-none font-medium select-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50",
         className
       )}
       {...props}
