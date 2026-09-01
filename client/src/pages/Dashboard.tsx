@@ -618,7 +618,7 @@ export default function Dashboard() {
                     </div>
                   </div>
 
-                  <div className="mt-6 h-[280px] rounded-[28px] bg-[linear-gradient(180deg,rgba(238,245,240,0.9),rgba(255,255,255,0.65))] p-4">
+                  <div className="mt-6 h-[280px] rounded-[28px] bg-[linear-gradient(180deg,rgba(238,245,240,0.9),rgba(255,255,255,0.65))] p-4 dark:bg-[linear-gradient(180deg,rgba(48,48,48,0.9),rgba(38,38,38,0.65))]">
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={activeChartData} margin={{ top: 10, right: 12, left: -16, bottom: 0 }}>
                         <defs>
@@ -664,7 +664,7 @@ export default function Dashboard() {
                   </CardContent>
                 </Card>
 
-                <Card className="rounded-[32px] border-transparent bg-[linear-gradient(135deg,#fbfbfa,#f3f0e9)] shadow-[0_20px_50px_-30px_rgba(15,23,42,0.45)]">
+                <Card className="rounded-[32px] border-transparent bg-[linear-gradient(135deg,#fbfbfa,#f3f0e9)] shadow-[0_20px_50px_-30px_rgba(15,23,42,0.45)] dark:bg-[linear-gradient(135deg,#2a2a2a,#1e1e1e)]">
                   <CardHeader className="pb-3">
                     <div className="flex items-center justify-between gap-3">
                       <div>
