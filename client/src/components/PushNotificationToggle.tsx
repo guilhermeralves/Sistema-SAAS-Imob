@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Bell, BellOff, BellRing, Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { trpc } from "@/lib/trpc";
 import {
@@ -11,7 +12,17 @@ import {
   unsubscribeFromPush,
 } from "@/lib/push";
 
-export default function PushNotificationToggle() {
+type Variant = "menu" | "button";
+
+type PushNotificationToggleProps = {
+  /** "menu" (padrão) renderiza como DropdownMenuItem — só use dentro de
+   *  um <DropdownMenu>. "button" renderiza como Button avulso. */
+  variant?: Variant;
+};
+
+export default function PushNotificationToggle({
+  variant = "menu",
+}: PushNotificationToggleProps) {
   const supported = isPushSupported();
   const { data: config } = trpc.notifications.config.useQuery(undefined, {
     enabled: supported,
@@ -29,8 +40,6 @@ export default function PushNotificationToggle() {
     getExistingSubscription()
       .then(sub => {
         setSubscribed(Boolean(sub));
-        // Reenvia a inscrição existente ao servidor (idempotente). Cobre o caso
-        // de o navegador ter a inscrição mas o servidor tê-la perdido.
         if (sub?.endpoint && sub.keys?.p256dh && sub.keys?.auth) {
           subscribeMutation.mutate({
             endpoint: sub.endpoint,
@@ -49,8 +58,7 @@ export default function PushNotificationToggle() {
 
   const permissionDenied = getNotificationPermission() === "denied";
 
-  const handleEnable = async (event: Event) => {
-    event.preventDefault();
+  const handleEnable = async () => {
     if (busy) return;
     setBusy(true);
     try {
@@ -73,8 +81,7 @@ export default function PushNotificationToggle() {
     }
   };
 
-  const handleDisable = async (event: Event) => {
-    event.preventDefault();
+  const handleDisable = async () => {
     if (busy) return;
     setBusy(true);
     try {
@@ -91,8 +98,7 @@ export default function PushNotificationToggle() {
     }
   };
 
-  const handleTest = async (event: Event) => {
-    event.preventDefault();
+  const handleTest = async () => {
     try {
       const result = await sendTestMutation.mutateAsync();
       if (result.sent > 0) {
@@ -107,17 +113,86 @@ export default function PushNotificationToggle() {
     }
   };
 
-  const handleBlockedInfo = (event: Event) => {
-    event.preventDefault();
+  const handleBlockedInfo = () => {
     toast.info(
       "As notificações estão bloqueadas. Abra as configurações do site no navegador (ou Ajustes → Notificações → AFG no iPhone) e mude para Permitir.",
       { duration: 8000 }
     );
   };
 
+  // ── Variante BUTTON (uso standalone, fora de DropdownMenu) ─────────
+  if (variant === "button") {
+    if (permissionDenied && !subscribed) {
+      return (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleBlockedInfo}
+          className="gap-2"
+        >
+          <BellOff className="h-4 w-4" />
+          Notificações bloqueadas — toque para ajuda
+        </Button>
+      );
+    }
+    if (subscribed) {
+      return (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleDisable}
+            disabled={busy}
+            className="gap-2"
+          >
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <BellRing className="h-4 w-4 text-emerald-600" />
+            )}
+            Notificações ativas
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={handleTest}
+            className="gap-2"
+          >
+            <Send className="h-4 w-4" />
+            Testar
+          </Button>
+        </div>
+      );
+    }
+    return (
+      <Button
+        type="button"
+        onClick={handleEnable}
+        disabled={busy}
+        className="gap-2"
+      >
+        {busy ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Bell className="h-4 w-4" />
+        )}
+        Ativar notificações
+      </Button>
+    );
+  }
+
+  // ── Variante MENU (padrão — dentro de DropdownMenu) ────────────────
+  const preventDefault = (fn: () => void) => (event: Event) => {
+    event.preventDefault();
+    void fn();
+  };
+
   if (permissionDenied && !subscribed) {
     return (
-      <DropdownMenuItem onSelect={handleBlockedInfo} className="cursor-pointer gap-2">
+      <DropdownMenuItem
+        onSelect={preventDefault(handleBlockedInfo)}
+        className="cursor-pointer gap-2"
+      >
         <BellOff className="h-4 w-4" />
         Notificações bloqueadas — toque para ajuda
       </DropdownMenuItem>
@@ -128,7 +203,10 @@ export default function PushNotificationToggle() {
     <>
       {subscribed ? (
         <>
-          <DropdownMenuItem onSelect={handleDisable} className="cursor-pointer gap-2">
+          <DropdownMenuItem
+            onSelect={preventDefault(handleDisable)}
+            className="cursor-pointer gap-2"
+          >
             {busy ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
@@ -136,13 +214,19 @@ export default function PushNotificationToggle() {
             )}
             Notificações ativas
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={handleTest} className="cursor-pointer gap-2">
+          <DropdownMenuItem
+            onSelect={preventDefault(handleTest)}
+            className="cursor-pointer gap-2"
+          >
             <Send className="h-4 w-4" />
             Enviar notificação de teste
           </DropdownMenuItem>
         </>
       ) : (
-        <DropdownMenuItem onSelect={handleEnable} className="cursor-pointer gap-2">
+        <DropdownMenuItem
+          onSelect={preventDefault(handleEnable)}
+          className="cursor-pointer gap-2"
+        >
           {busy ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (

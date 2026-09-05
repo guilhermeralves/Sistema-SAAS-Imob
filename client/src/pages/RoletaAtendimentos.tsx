@@ -73,7 +73,7 @@ function PushHint() {
           </p>
         </div>
         <div className="shrink-0">
-          <PushNotificationToggle />
+          <PushNotificationToggle variant="button" />
         </div>
       </CardContent>
     </Card>
