@@ -261,6 +261,31 @@
     background-color: rgba(58, 58, 58, 0.9) !important;
   }
 
+  /* Fundos "-100" das cores accent (usados em chips / ícones) — no
+     modo escuro viram uma tint escura da mesma família para manter
+     leitura sem gritar. Os "-700"/"-500" (cores fortes) ficam intactos.
+     rgba escolhidos aproximam o slate/emerald/amber-950 com 40-50% de
+     opacidade, dando um tom rico mas discreto. */
+  .dark .bg-slate-100 {
+    background-color: rgba(51, 65, 85, 0.35) !important; /* slate-800/35 */
+  }
+  .dark .bg-emerald-100 {
+    background-color: rgba(6, 78, 59, 0.4) !important; /* emerald-900/40 */
+  }
+  .dark .bg-emerald-50,
+  .dark .bg-emerald-50\/60 {
+    background-color: rgba(6, 78, 59, 0.25) !important;
+  }
+  .dark .bg-amber-100 {
+    background-color: rgba(120, 53, 15, 0.4) !important; /* amber-900/40 */
+  }
+  .dark .bg-rose-100 {
+    background-color: rgba(136, 19, 55, 0.4) !important; /* rose-900/40 */
+  }
+  .dark .bg-sky-100 {
+    background-color: rgba(12, 74, 110, 0.4) !important; /* sky-900/40 */
+  }
+
   /* bg-white/5, /10, /15, /20 (transparências muito baixas) ficam intactos
      — são overlays intencionais dentro de cards coloridos. */
 
