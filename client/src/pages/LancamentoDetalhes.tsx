@@ -257,9 +257,9 @@ export default function LancamentoDetalhes() {
     }
   };
 
-  const handleFilesPick = async (fileList: FileList | null) => {
+  const handleFilesPick = async (fileList: File[] | null) => {
     if (!fileList || fileList.length === 0) return;
-    for (const file of Array.from(fileList)) {
+    for (const file of fileList) {
       try {
         const dataUrl = await fileToDataUrl(file);
         await uploadFile.mutateAsync({
@@ -498,9 +498,12 @@ export default function LancamentoDetalhes() {
                   accept="image/*"
                   className="hidden"
                   onChange={e => {
+                    // Copia o File para variável local ANTES de resetar
+                    // e.target.value (evita perder a referência).
                     const f = e.target.files?.[0] ?? null;
+                    const captured = f;
                     e.target.value = "";
-                    void handlePhotoPick(f);
+                    void handlePhotoPick(captured);
                   }}
                 />
                 <Button
@@ -800,9 +803,13 @@ export default function LancamentoDetalhes() {
                     accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,text/csv"
                     className="hidden"
                     onChange={e => {
-                      const list = e.target.files;
+                      // Copia p/ array ANTES de resetar input.value —
+                      // caso contrário .files vira FileList vazia.
+                      const files = e.target.files
+                        ? Array.from(e.target.files)
+                        : [];
                       e.target.value = "";
-                      void handleFilesPick(list);
+                      void handleFilesPick(files);
                     }}
                   />
                   <Button
