@@ -512,6 +512,12 @@ const propertyLaunchMutationSchema = z.object({
   cep: z.string().trim().max(10).nullable().optional(),
   fotos: z.string().trim().nullable().optional(),
   numeroTorres: z.number().int().min(0).max(50).nullable().optional(),
+  identificadoresTorres: z.string().max(2000).nullable().optional(),
+  numeroPavimentos: z.number().int().min(0).max(200).nullable().optional(),
+  unidadesPorPavimento: z.number().int().min(0).max(100).nullable().optional(),
+  totalUnidades: z.number().int().min(0).max(10000).nullable().optional(),
+  temElevadores: z.number().int().min(0).max(1).nullable().optional(),
+  elevadoresPorTorre: z.number().int().min(0).max(20).nullable().optional(),
   areasComuns: z.string().max(4000).nullable().optional(),
   destaque: z.number().int().min(0).max(1).optional(),
 });

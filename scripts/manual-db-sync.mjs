@@ -526,6 +526,19 @@ const patches = [
     ],
   },
   {
+    id: "2026-08-30_launch_infos_gerais",
+    description:
+      "Adiciona identificadoresTorres, numeroPavimentos, unidadesPorPavimento, totalUnidades, temElevadores, elevadoresPorTorre em propertyLaunches",
+    statements: [
+      `ALTER TABLE "propertyLaunches" ADD COLUMN IF NOT EXISTS "identificadoresTorres" text;`,
+      `ALTER TABLE "propertyLaunches" ADD COLUMN IF NOT EXISTS "numeroPavimentos" integer;`,
+      `ALTER TABLE "propertyLaunches" ADD COLUMN IF NOT EXISTS "unidadesPorPavimento" integer;`,
+      `ALTER TABLE "propertyLaunches" ADD COLUMN IF NOT EXISTS "totalUnidades" integer;`,
+      `ALTER TABLE "propertyLaunches" ADD COLUMN IF NOT EXISTS "temElevadores" integer;`,
+      `ALTER TABLE "propertyLaunches" ADD COLUMN IF NOT EXISTS "elevadoresPorTorre" integer;`,
+    ],
+  },
+  {
     id: "2026-08-30_launch_extras_and_files",
     description:
       "Adiciona numeroTorres/areasComuns em propertyLaunches e cria tabela launchFiles",

@@ -141,6 +141,14 @@ export default function LancamentoDetalhes() {
   const [editMode, setEditMode] = useState(false);
   const [nome, setNome] = useState("");
   const [numeroTorres, setNumeroTorres] = useState<string>("");
+  const [identificadoresTorres, setIdentificadoresTorres] = useState<string[]>(
+    []
+  );
+  const [numeroPavimentos, setNumeroPavimentos] = useState<string>("");
+  const [unidadesPorPavimento, setUnidadesPorPavimento] = useState<string>("");
+  const [totalUnidades, setTotalUnidades] = useState<string>("");
+  const [temElevadores, setTemElevadores] = useState<boolean>(false);
+  const [elevadoresPorTorre, setElevadoresPorTorre] = useState<string>("");
   const [addr, setAddr] = useState<AddressValue>({});
   const [areasComuns, setAreasComuns] = useState<string[]>([]);
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -151,6 +159,22 @@ export default function LancamentoDetalhes() {
     setNome(data.nome ?? "");
     setNumeroTorres(
       data.numeroTorres != null ? String(data.numeroTorres) : ""
+    );
+    setIdentificadoresTorres(parseAreas(data.identificadoresTorres));
+    setNumeroPavimentos(
+      data.numeroPavimentos != null ? String(data.numeroPavimentos) : ""
+    );
+    setUnidadesPorPavimento(
+      data.unidadesPorPavimento != null
+        ? String(data.unidadesPorPavimento)
+        : ""
+    );
+    setTotalUnidades(
+      data.totalUnidades != null ? String(data.totalUnidades) : ""
+    );
+    setTemElevadores(data.temElevadores === 1);
+    setElevadoresPorTorre(
+      data.elevadoresPorTorre != null ? String(data.elevadoresPorTorre) : ""
     );
     setAddr({
       cep: data.cep,
@@ -268,6 +292,13 @@ export default function LancamentoDetalhes() {
       toast.error("Preencha endereço, cidade e UF.");
       return;
     }
+    const parseIntOrNull = (v: string) => {
+      const t = v.trim();
+      if (t === "") return null;
+      const n = parseInt(t, 10);
+      return Number.isFinite(n) ? n : null;
+    };
+
     update.mutate({
       id,
       nome: nome.trim(),
@@ -277,11 +308,36 @@ export default function LancamentoDetalhes() {
       bairro: addr.bairro ?? null,
       cidade: addr.cidade,
       estado: (addr.estado ?? "").toUpperCase(),
-      numeroTorres:
-        numeroTorres.trim() === "" ? null : parseInt(numeroTorres, 10),
+      numeroTorres: parseIntOrNull(numeroTorres),
+      identificadoresTorres: identificadoresTorres.length
+        ? JSON.stringify(identificadoresTorres)
+        : null,
+      numeroPavimentos: parseIntOrNull(numeroPavimentos),
+      unidadesPorPavimento: parseIntOrNull(unidadesPorPavimento),
+      totalUnidades: parseIntOrNull(totalUnidades),
+      temElevadores: temElevadores ? 1 : 0,
+      elevadoresPorTorre: temElevadores
+        ? parseIntOrNull(elevadoresPorTorre)
+        : null,
       areasComuns: areasComuns.length ? JSON.stringify(areasComuns) : null,
     });
   };
+
+  // Sincroniza a quantidade de identificadores com numeroTorres.
+  useEffect(() => {
+    if (!editMode) return;
+    const n = parseInt(numeroTorres || "0", 10);
+    if (!Number.isFinite(n) || n < 0) return;
+    setIdentificadoresTorres(current => {
+      if (current.length === n) return current;
+      const next = [...current];
+      while (next.length < n) {
+        next.push(`Bloco ${next.length + 1}`);
+      }
+      next.length = n;
+      return next;
+    });
+  }, [numeroTorres, editMode]);
 
   const savedAreas = useMemo(
     () => parseAreas(data?.areasComuns),
@@ -333,10 +389,18 @@ export default function LancamentoDetalhes() {
               <Building2 className="h-5 w-5 text-emerald-700" />
               <h1 className="truncate text-2xl font-bold">{data.nome}</h1>
             </div>
-            <p className="flex items-start gap-1.5 text-sm text-muted-foreground">
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                formatFullAddress(data)
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Abrir no Google Maps / Waze"
+              className="flex items-start gap-1.5 text-sm text-muted-foreground underline-offset-4 hover:text-emerald-700 hover:underline"
+            >
               <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0" />
               <span className="line-clamp-2">{formatFullAddress(data)}</span>
-            </p>
+            </a>
             {data.construtora ? (
               <p className="text-xs uppercase tracking-wider text-muted-foreground">
                 {data.construtora}
@@ -470,31 +534,36 @@ export default function LancamentoDetalhes() {
           </div>
         </div>
 
-        {/* ── INFORMAÇÕES DO EMPREENDIMENTO ── */}
+        {/* ── INFORMAÇÕES GERAIS ── */}
         <Card>
           <CardHeader>
-            <CardTitle>Informações do empreendimento</CardTitle>
+            <CardTitle>Informações Gerais</CardTitle>
             <CardDescription>
-              Dados cadastrais e características. Use o botão "Editar" no topo
-              para alterar.
+              Características construtivas do empreendimento. Use o botão
+              "Editar" no topo para alterar.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Nome / Torres */}
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div className="md:col-span-2">
-                <Label>Nome do lançamento</Label>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+              <div>
+                <Label>Total de unidades</Label>
                 {editMode ? (
                   <Input
-                    value={nome}
-                    onChange={e => setNome(e.target.value)}
+                    type="number"
+                    min={0}
+                    max={10000}
+                    value={totalUnidades}
+                    onChange={e => setTotalUnidades(e.target.value)}
+                    placeholder="ex: 120"
                   />
                 ) : (
-                  <p className="text-sm">{data.nome}</p>
+                  <p className="text-sm">
+                    {data.totalUnidades != null ? data.totalUnidades : "—"}
+                  </p>
                 )}
               </div>
               <div>
-                <Label>Número de torres</Label>
+                <Label>Número de blocos</Label>
                 {editMode ? (
                   <Input
                     type="number"
@@ -510,19 +579,158 @@ export default function LancamentoDetalhes() {
                   </p>
                 )}
               </div>
+              <div>
+                <Label>Pavimentos</Label>
+                {editMode ? (
+                  <Input
+                    type="number"
+                    min={0}
+                    max={200}
+                    value={numeroPavimentos}
+                    onChange={e => setNumeroPavimentos(e.target.value)}
+                    placeholder="ex: 20"
+                  />
+                ) : (
+                  <p className="text-sm">
+                    {data.numeroPavimentos != null
+                      ? data.numeroPavimentos
+                      : "—"}
+                  </p>
+                )}
+              </div>
+              <div>
+                <Label>Unidades por pavimento</Label>
+                {editMode ? (
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={unidadesPorPavimento}
+                    onChange={e => setUnidadesPorPavimento(e.target.value)}
+                    placeholder="ex: 4"
+                  />
+                ) : (
+                  <p className="text-sm">
+                    {data.unidadesPorPavimento != null
+                      ? data.unidadesPorPavimento
+                      : "—"}
+                  </p>
+                )}
+              </div>
             </div>
 
-            {/* Endereço */}
-            <div>
-              <p className="mb-2 text-sm font-medium">Endereço</p>
-              {editMode ? (
-                <AddressFields value={addr} onChange={setAddr} required />
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  {formatFullAddress(data)}
+            {/* Identificadores de cada bloco */}
+            {editMode ? (
+              identificadoresTorres.length > 0 ? (
+                <div>
+                  <Label>Identificadores dos blocos</Label>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Um nome por bloco (ex: "Torre A", "Bloco 1", "Ipê"). A
+                    quantidade acompanha o campo "Número de blocos" acima.
+                  </p>
+                  <div className="mt-2 grid grid-cols-2 gap-2 md:grid-cols-4">
+                    {identificadoresTorres.map((label, idx) => (
+                      <Input
+                        key={idx}
+                        value={label}
+                        onChange={e =>
+                          setIdentificadoresTorres(current => {
+                            const next = [...current];
+                            next[idx] = e.target.value;
+                            return next;
+                          })
+                        }
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : null
+            ) : parseAreas(data.identificadoresTorres).length > 0 ? (
+              <div>
+                <p className="mb-2 text-sm font-medium">
+                  Identificadores dos blocos
                 </p>
-              )}
+                <div className="flex flex-wrap gap-2">
+                  {parseAreas(data.identificadoresTorres).map((label, idx) => (
+                    <span
+                      key={idx}
+                      className="rounded-full bg-muted px-3 py-1 text-xs font-medium"
+                    >
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {/* Elevadores */}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <Label>Possui elevadores?</Label>
+                {editMode ? (
+                  <div className="mt-2 flex items-center gap-2">
+                    <Checkbox
+                      checked={temElevadores}
+                      onCheckedChange={v => setTemElevadores(v === true)}
+                      id="tem-elevadores"
+                    />
+                    <label
+                      htmlFor="tem-elevadores"
+                      className="cursor-pointer text-sm"
+                    >
+                      Sim, possui elevadores
+                    </label>
+                  </div>
+                ) : (
+                  <p className="text-sm">
+                    {data.temElevadores === 1
+                      ? "Sim"
+                      : data.temElevadores === 0
+                        ? "Não"
+                        : "—"}
+                  </p>
+                )}
+              </div>
+              {(editMode ? temElevadores : data.temElevadores === 1) ? (
+                <div>
+                  <Label>Elevadores por torre</Label>
+                  {editMode ? (
+                    <Input
+                      type="number"
+                      min={0}
+                      max={20}
+                      value={elevadoresPorTorre}
+                      onChange={e => setElevadoresPorTorre(e.target.value)}
+                      placeholder="ex: 2"
+                    />
+                  ) : (
+                    <p className="text-sm">
+                      {data.elevadoresPorTorre != null
+                        ? data.elevadoresPorTorre
+                        : "—"}
+                    </p>
+                  )}
+                </div>
+              ) : null}
             </div>
+
+            {/* Nome e Endereço no modo edição (não aparecem em leitura,
+                já que estão no hero) */}
+            {editMode ? (
+              <div className="space-y-4 border-t pt-4">
+                <div>
+                  <Label>Nome do lançamento</Label>
+                  <Input
+                    value={nome}
+                    onChange={e => setNome(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <p className="mb-2 text-sm font-medium">Endereço</p>
+                  <AddressFields value={addr} onChange={setAddr} required />
+                </div>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 

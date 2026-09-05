@@ -335,6 +335,15 @@ export const propertyLaunches = pgTable("propertyLaunches", {
   cep: varchar("cep", { length: 10 }),
   fotos: text("fotos"),
   numeroTorres: integer("numeroTorres"),
+  /** JSON array de strings com os identificadores dos blocos/torres
+   * (ex: ["Torre A", "Torre B"] ou ["Bloco 1", "Bloco 2"]). */
+  identificadoresTorres: text("identificadoresTorres"),
+  numeroPavimentos: integer("numeroPavimentos"),
+  unidadesPorPavimento: integer("unidadesPorPavimento"),
+  totalUnidades: integer("totalUnidades"),
+  /** 1 = sim, 0 = não, null = não informado */
+  temElevadores: integer("temElevadores"),
+  elevadoresPorTorre: integer("elevadoresPorTorre"),
   // JSON array de strings com as áreas comuns marcadas (piscina,
   // academia, etc.). Guardar como text simplifica queries/serialization.
   areasComuns: text("areasComuns"),
