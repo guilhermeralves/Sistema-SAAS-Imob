@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import {
   Dialog,
@@ -77,7 +78,9 @@ function formatDelivery(value?: Date | string | null) {
 
 function parsePhoto(value?: string | null) {
   if (!value) return "/placeholder-property.jpg";
-
+  // Novo formato: URL simples (ex: /api/media/launches/abc.webp)
+  if (value.startsWith("/") || value.startsWith("http")) return value;
+  // Formato legado: JSON array de URLs
   try {
     const parsed = JSON.parse(value);
     if (Array.isArray(parsed) && typeof parsed[0] === "string") {
@@ -86,8 +89,11 @@ function parsePhoto(value?: string | null) {
   } catch {
     return "/placeholder-property.jpg";
   }
-
   return "/placeholder-property.jpg";
+}
+
+function isPublicLaunchImage(src: string) {
+  return src.startsWith("/api/media/launches/");
 }
 
 function createEmptyLaunchForm() {
@@ -846,18 +852,29 @@ export default function Lancamentos() {
             </div>
           ) : lancamentosFiltrados.length > 0 ? (
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {lancamentosFiltrados.map(lancamento => (
+              {lancamentosFiltrados.map(lancamento => {
+                const photoSrc = parsePhoto(lancamento.fotos);
+                return (
+                <Link key={lancamento.id} href={`/lancamentos/${lancamento.id}`}>
+                <a className="block h-full">
                 <Card
-                  key={lancamento.id}
                   className="h-full overflow-hidden rounded-[28px] border-white/70 bg-white/90 shadow-[0_24px_70px_-38px_rgba(15,23,42,0.42)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_30px_90px_-42px_rgba(15,23,42,0.52)]"
                 >
                   <div className="relative h-56 overflow-hidden bg-slate-100">
-                    <ProtectedPropertyImage
-                      src={parsePhoto(lancamento.fotos)}
-                      variant="thumb"
-                      alt={lancamento.nome}
-                      className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
-                    />
+                    {isPublicLaunchImage(photoSrc) ? (
+                      <img
+                        src={photoSrc}
+                        alt={lancamento.nome}
+                        className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+                      />
+                    ) : (
+                      <ProtectedPropertyImage
+                        src={photoSrc}
+                        variant="thumb"
+                        alt={lancamento.nome}
+                        className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
+                      />
+                    )}
                     <div className="absolute right-4 top-4 rounded-full border border-white/20 bg-slate-950/80 px-3 py-1 text-sm font-semibold capitalize text-white backdrop-blur">
                       {lancamento.status.replace(/_/g, " ")}
                     </div>
@@ -922,7 +939,10 @@ export default function Lancamentos() {
                     ) : null}
                   </CardContent>
                 </Card>
-              ))}
+                </a>
+                </Link>
+                );
+              })}
             </div>
           ) : (
             <Card className="rounded-[32px] border-white/70 bg-white/90 p-12 text-center shadow-[0_24px_70px_-38px_rgba(15,23,42,0.45)]">

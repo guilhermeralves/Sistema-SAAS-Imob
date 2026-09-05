@@ -2923,6 +2923,69 @@ export const appRouter = router({
       const { getActivePropertyLaunches } = await import("./db");
       return await getActivePropertyLaunches();
     }),
+    getById: publicProcedure
+      .input(idSchema)
+      .query(async ({ input }) => {
+        const { getPropertyLaunchById } = await import("./db");
+        return await getPropertyLaunchById(input.id);
+      }),
+    update: staffProcedure
+      .input(
+        propertyLaunchMutationSchema.partial().extend({
+          id: z.number().int().positive(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { updatePropertyLaunch } = await import("./db");
+        const { id, entregaPrevista, ...rest } = input;
+        const data: Record<string, unknown> = { ...rest };
+        if (entregaPrevista !== undefined) {
+          data.entregaPrevista = entregaPrevista
+            ? new Date(`${entregaPrevista}T00:00:00`)
+            : null;
+        }
+        return await updatePropertyLaunch(id, data);
+      }),
+    uploadPhoto: staffProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          dataUrl: z.string().min(1),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const { updatePropertyLaunch, getPropertyLaunchById } = await import(
+          "./db"
+        );
+        const { optimizeAndStoreLaunchImage, removeLaunchImageByUrl } =
+          await import("./_core/launch-images");
+        const stored = await optimizeAndStoreLaunchImage({
+          dataUrl: input.dataUrl,
+        });
+        // Se já tinha foto, apaga a antiga (fotos guarda apenas a URL
+        // da foto principal como string; futuras versões podem migrar
+        // para JSON com várias).
+        const current = await getPropertyLaunchById(input.id);
+        if (current?.fotos) {
+          await removeLaunchImageByUrl(current.fotos).catch(() => null);
+        }
+        return await updatePropertyLaunch(input.id, { fotos: stored.url });
+      }),
+    removePhoto: staffProcedure
+      .input(idSchema)
+      .mutation(async ({ input }) => {
+        const { getPropertyLaunchById, updatePropertyLaunch } = await import(
+          "./db"
+        );
+        const { removeLaunchImageByUrl } = await import(
+          "./_core/launch-images"
+        );
+        const current = await getPropertyLaunchById(input.id);
+        if (current?.fotos) {
+          await removeLaunchImageByUrl(current.fotos).catch(() => null);
+        }
+        return await updatePropertyLaunch(input.id, { fotos: null });
+      }),
     create: staffProcedure
       .input(propertyLaunchMutationSchema)
       .mutation(async ({ ctx, input }) => {

@@ -14,6 +14,7 @@ import Register from "./pages/Register";
 import Home from "./pages/Home";
 import Imoveis from "./pages/Imoveis";
 import Lancamentos from "./pages/Lancamentos";
+import LancamentoDetalhes from "./pages/LancamentoDetalhes";
 import ImovelNovoPreview from "./pages/ImovelNovoPreview";
 import Servicos from "./pages/Servicos";
 import Contato from "./pages/Contato";
@@ -86,6 +87,9 @@ function Router() {
       <Route path={"/imoveis"} component={Imoveis} />
       <Route path={"/lancamentos"}>
         <ProtectedRoute component={Lancamentos} roles={["corretor", "administrativo"]} />
+      </Route>
+      <Route path={"/lancamentos/:id"}>
+        <ProtectedRoute component={LancamentoDetalhes} roles={["corretor", "administrativo"]} />
       </Route>
       <Route path={"/imoveis/novo/preview"}>
         <ProtectedRoute component={ImovelNovoPreview} roles={["corretor", "administrativo"]} />

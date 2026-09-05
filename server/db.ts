@@ -942,6 +942,31 @@ export async function createPropertyLaunch(data: InsertPropertyLaunch) {
   return created;
 }
 
+export async function getPropertyLaunchById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db
+    .select()
+    .from(propertyLaunches)
+    .where(eq(propertyLaunches.id, id))
+    .limit(1);
+  return row;
+}
+
+export async function updatePropertyLaunch(
+  id: number,
+  data: Partial<InsertPropertyLaunch>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [updated] = await db
+    .update(propertyLaunches)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(propertyLaunches.id, id))
+    .returning();
+  return updated;
+}
+
 export async function createProperty(
   data: InsertProperty,
   relations?: { ownerIds?: number[] }

@@ -15,6 +15,10 @@ import {
   PROPERTY_IMAGE_REQUEST_HEADER,
   type PropertyImageVariant,
 } from "./property-images";
+import {
+  ensureLaunchUploadDir,
+  getLaunchImageAbsolutePath,
+} from "./launch-images";
 import { startLeadSlaScheduler } from "./leadSla";
 import { startLicenseHeartbeat } from "./licenseHeartbeat";
 import { serveStatic, setupVite } from "./vite";
@@ -41,6 +45,7 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   await ensureBootstrapAdmin();
   await ensurePropertyUploadDir();
+  await ensureLaunchUploadDir();
   startLeadSlaScheduler();
   startLicenseHeartbeat();
 
@@ -104,6 +109,27 @@ async function startServer() {
 
   app.get("/api/media/properties/:fileName", async (req, res) => {
     await sendPropertyImage(req, res, "large", String(req.params.fileName || "").trim());
+  });
+
+  // Fotos de lançamentos são PÚBLICAS (não exigem header/auth)
+  app.get("/api/media/launches/:fileName", async (req, res) => {
+    const fileName = String(req.params.fileName || "").trim();
+    const abs = getLaunchImageAbsolutePath(fileName);
+    if (!abs) {
+      res.status(404).end();
+      return;
+    }
+    try {
+      await fs.access(abs);
+    } catch {
+      res.status(404).end();
+      return;
+    }
+    res.setHeader("Content-Type", "image/webp");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.sendFile(abs, error => {
+      if (error && !res.headersSent) res.status(404).end();
+    });
   });
 
   // OAuth callback under /api/oauth/callback
