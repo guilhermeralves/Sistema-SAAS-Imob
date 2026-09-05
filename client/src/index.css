@@ -209,7 +209,19 @@
     height: 0;
   }
 
-  .dark [class*="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,0.88),rgba(244,240,232,0.82)_45%,rgba(248,248,246,1)_100%)]"] {
+  /* Fundo padrão de várias páginas (Admin, Dashboard, CRM etc.). No
+     código-fonte é um radial-gradient esverdeado/creme; aqui trocamos
+     por cinzas neutros no modo claro e por cinzas escuros no dark. */
+  [class*="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,"] {
+    background: radial-gradient(
+      circle at top left,
+      rgba(232, 232, 232, 0.88),
+      rgba(240, 240, 240, 0.82) 45%,
+      rgba(246, 246, 246, 1) 100%
+    ) !important;
+  }
+
+  .dark [class*="bg-[radial-gradient(circle_at_top_left,rgba(223,232,226,"] {
     background: radial-gradient(
       circle at top left,
       rgba(48, 48, 48, 0.94),
