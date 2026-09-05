@@ -8,6 +8,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import AddressFields from "@/components/AddressFields";
 import Layout from "@/components/Layout";
 import MoneyInput from "@/components/MoneyInput";
 import ProtectedPropertyImage from "@/components/ProtectedPropertyImage";
@@ -553,93 +554,29 @@ export default function Lancamentos() {
                             Localização
                           </h3>
                         </div>
-                        <div className="grid gap-4 lg:grid-cols-6">
-                          <div className="space-y-1.5 lg:col-span-4">
-                            <Label htmlFor="launch-endereco">Endereço *</Label>
-                            <Input
-                              id="launch-endereco"
-                              value={newLaunchData.endereco}
-                              onChange={event =>
-                                setNewLaunchData({
-                                  ...newLaunchData,
-                                  endereco: event.target.value,
-                                })
-                              }
-                              className="rounded-2xl"
-                            />
-                          </div>
-                          <div className="space-y-1.5 lg:col-span-1">
-                            <Label htmlFor="launch-numero">Número</Label>
-                            <Input
-                              id="launch-numero"
-                              value={newLaunchData.numero}
-                              onChange={event =>
-                                setNewLaunchData({
-                                  ...newLaunchData,
-                                  numero: event.target.value,
-                                })
-                              }
-                              className="rounded-2xl"
-                            />
-                          </div>
-                          <div className="space-y-1.5 lg:col-span-1">
-                            <Label htmlFor="launch-cep">CEP</Label>
-                            <Input
-                              id="launch-cep"
-                              value={newLaunchData.cep}
-                              onChange={event =>
-                                setNewLaunchData({
-                                  ...newLaunchData,
-                                  cep: event.target.value,
-                                })
-                              }
-                              className="rounded-2xl"
-                            />
-                          </div>
-                          <div className="space-y-1.5 lg:col-span-2">
-                            <Label htmlFor="launch-bairro">Bairro</Label>
-                            <Input
-                              id="launch-bairro"
-                              value={newLaunchData.bairro}
-                              onChange={event =>
-                                setNewLaunchData({
-                                  ...newLaunchData,
-                                  bairro: event.target.value,
-                                })
-                              }
-                              className="rounded-2xl"
-                            />
-                          </div>
-                          <div className="space-y-1.5 lg:col-span-3">
-                            <Label htmlFor="launch-cidade">Cidade *</Label>
-                            <Input
-                              id="launch-cidade"
-                              value={newLaunchData.cidade}
-                              onChange={event =>
-                                setNewLaunchData({
-                                  ...newLaunchData,
-                                  cidade: event.target.value,
-                                })
-                              }
-                              className="rounded-2xl"
-                            />
-                          </div>
-                          <div className="space-y-1.5 lg:col-span-1">
-                            <Label htmlFor="launch-estado">Estado *</Label>
-                            <Input
-                              id="launch-estado"
-                              value={newLaunchData.estado}
-                              maxLength={2}
-                              onChange={event =>
-                                setNewLaunchData({
-                                  ...newLaunchData,
-                                  estado: event.target.value.toUpperCase(),
-                                })
-                              }
-                              className="rounded-2xl"
-                            />
-                          </div>
-                        </div>
+                        <AddressFields
+                          required
+                          value={{
+                            cep: newLaunchData.cep,
+                            endereco: newLaunchData.endereco,
+                            numero: newLaunchData.numero,
+                            bairro: newLaunchData.bairro,
+                            cidade: newLaunchData.cidade,
+                            estado: newLaunchData.estado,
+                          }}
+                          onChange={next =>
+                            setNewLaunchData(current => ({
+                              ...current,
+                              cep: next.cep ?? "",
+                              endereco: next.endereco ?? "",
+                              numero: next.numero ?? "",
+                              bairro: next.bairro ?? "",
+                              cidade: next.cidade ?? "",
+                              estado: next.estado ?? "",
+                            }))
+                          }
+                          hide={["complemento"]}
+                        />
                       </div>
 
                       <Button
