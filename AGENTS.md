@@ -2,6 +2,71 @@
 
 Este arquivo orienta agentes de IA, como Codex, Cursor, Claude Code ou ChatGPT, a trabalhar neste projeto com mais consistência, menor risco de quebrar funcionalidades existentes e melhor entendimento da arquitetura.
 
+## 0. Identidade visual (LEIA ANTES DE CRIAR QUALQUER TELA)
+
+O sistema tem uma identidade visual **cinza-neutro com acento verde emerald** — nada de azul, roxo ou slate tintado. Qualquer tela nova DEVE seguir estas regras. Elas evitam o retrabalho de "arrumar cor depois".
+
+**Paleta:**
+- Fundo do site: `bg-background` (cinza neutro claro no light, cinza escuro neutro no dark).
+- Cards: `bg-card` + `border-border` (nunca `bg-white`, `bg-white/90`, `bg-slate-50` etc.).
+- Texto: `text-foreground` para corpo, `text-muted-foreground` para secundário.
+- Botão primário: `<Button>` padrão do shadcn — já resolve pra emerald via `--primary`.
+- Acento/destaque: `bg-emerald-700` / `text-emerald-700` (ou `-600` / `-800`).
+- **Nunca use** `bg-primary` esperando azul, `text-blue-*`, `text-sky-*`, `bg-blue-*`, `bg-sky-*` sem motivo explícito. O primário é emerald.
+- **Nunca use** `text-slate-950`, `text-slate-900` etc. em vez de `text-foreground`. Slate tem tinta azul; foreground é neutro.
+
+**Fundos hardcoded proibidos:**
+- `bg-white`, `bg-white/70`, `bg-white/80`, `bg-white/90` → use `bg-card` ou `bg-background`.
+- `bg-slate-50`, `bg-slate-100` → use `bg-muted` ou `bg-accent`.
+- `bg-[#111827]`, `bg-[#0f172a]`, `bg-slate-900`, `bg-slate-950` (tons slate escuros) — nem no dark.
+- Gradientes com `rgba(15,23,42,...)` (slate-900), `rgba(30,41,59,...)` (slate-800), `rgba(223,232,226,...)` (verde-creme) — use tons neutros.
+- Sombras com `rgba(15,23,42,X)` — trocar por `rgba(0,0,0,X)` para tint neutra.
+
+**Bordas:**
+- `border-border` (padrão) — respeita a paleta.
+- Nunca `border-white/*` ou `border-slate-*` diretamente em telas novas.
+
+**Layout padrão de uma tela nova:**
+
+```tsx
+import Layout from "@/components/Layout";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+
+export default function MinhaPagina() {
+  return (
+    <Layout>
+      <div className="mx-auto max-w-5xl space-y-4 p-4 md:p-6">
+        <div>
+          <h1 className="text-2xl font-bold">Título</h1>
+          <p className="text-sm text-muted-foreground">Descrição breve</p>
+        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Seção</CardTitle>
+            <CardDescription>Contexto da seção</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Sem bg-white, sem shadow hardcoded, sem rounded-[28px] */}
+          </CardContent>
+        </Card>
+      </div>
+    </Layout>
+  );
+}
+```
+
+**Endereço em qualquer formulário:**
+Todos os cadastros que pedem endereço DEVEM usar `<AddressFields>` — ele já faz o autocomplete via CEP e mantém os campos padronizados:
+
+```tsx
+import AddressFields, { type AddressValue } from "@/components/AddressFields";
+const [addr, setAddr] = useState<AddressValue>({});
+<AddressFields value={addr} onChange={setAddr} required />
+```
+
+**Regra de ouro:** se você se pegar copiando classes de páginas antigas (Admin.tsx, Dashboard.tsx, AdminUsers.tsx etc.), pare — elas têm hardcodes legados. Use apenas tokens semânticos (`bg-card`, `text-foreground`, `border-border`, `text-muted-foreground`) e o `<Button>` padrão do shadcn.
+
 ## 1. Visão geral do projeto
 
 O projeto `AFG_SITE` é uma plataforma imobiliária construída com:
