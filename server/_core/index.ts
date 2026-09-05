@@ -57,9 +57,9 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
   // Configure body parser with larger size limit for file uploads.
-  // 100 MB comporta PDF de até ~70 MB (base64 = ~1.33x do tamanho).
-  app.use(express.json({ limit: "100mb" }));
-  app.use(express.urlencoded({ limit: "100mb", extended: true }));
+  // 150 MB comporta arquivo de até 80 MB (base64 = ~1.33x + folga).
+  app.use(express.json({ limit: "150mb" }));
+  app.use(express.urlencoded({ limit: "150mb", extended: true }));
 
   const sendPropertyImage = async (
     req: express.Request,

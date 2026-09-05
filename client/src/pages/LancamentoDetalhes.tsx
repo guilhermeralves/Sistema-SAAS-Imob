@@ -257,13 +257,13 @@ export default function LancamentoDetalhes() {
     }
   };
 
-  const MAX_FILE_BYTES = 50 * 1024 * 1024;
+  const MAX_FILE_BYTES = 80 * 1024 * 1024;
   const handleFilesPick = async (fileList: File[] | null) => {
     if (!fileList || fileList.length === 0) return;
     for (const file of fileList) {
       if (file.size > MAX_FILE_BYTES) {
         toast.error(
-          `${file.name}: arquivo excede 50 MB (envie até 50 MB por arquivo).`
+          `${file.name}: arquivo excede 80 MB (envie até 80 MB por arquivo).`
         );
         continue;
       }
@@ -798,7 +798,7 @@ export default function LancamentoDetalhes() {
                 <CardTitle>Arquivos do empreendimento</CardTitle>
                 <CardDescription>
                   PDFs, plantas, book, imagens e outros documentos. Aceita
-                  PDF/Word/Excel/PowerPoint/imagens até 50 MB cada.
+                  PDF/Word/Excel/PowerPoint/imagens até 80 MB cada.
                 </CardDescription>
               </div>
               {canEdit ? (

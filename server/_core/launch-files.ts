@@ -11,7 +11,7 @@ import { nanoid } from "nanoid";
  * São servidos como públicos via rota /api/media/launch-files/:fileName.
  */
 
-const MAX_INPUT_BYTES = 50 * 1024 * 1024; // 50 MB
+const MAX_INPUT_BYTES = 80 * 1024 * 1024; // 80 MB
 
 // Tipos aceitos: PDF, imagens comuns, documentos Office e planilhas.
 const ALLOWED_MIME_PREFIXES = ["image/", "application/pdf"];
@@ -71,7 +71,7 @@ function parseDataUrl(dataUrl: string) {
   const buffer = Buffer.from(match[2], "base64");
   if (!buffer.length) throw new Error("Arquivo vazio.");
   if (buffer.length > MAX_INPUT_BYTES) {
-    throw new Error("Arquivo excede o limite de 50 MB.");
+    throw new Error("Arquivo excede o limite de 80 MB.");
   }
   return { mime, buffer };
 }
