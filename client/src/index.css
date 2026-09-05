@@ -290,24 +290,24 @@
      — são overlays intencionais dentro de cards coloridos. */
 
   /* Bordas de cards no modo escuro — mantidas discretas pra separar
-     apenas sutilmente o card do fundo. Cinza neutro (não slate) com
-     opacidade baixa. */
-  .dark .border-white\/80,
-  .dark .border-white\/70 {
+     apenas sutilmente o card do fundo. Uso attribute-selector pra
+     pegar também variantes responsivas (md:border-white/80 etc.). */
+  .dark [class*="border-white/80"],
+  .dark [class*="border-white/70"] {
     border-color: rgba(255, 255, 255, 0.08) !important;
   }
 
-  .dark .border-white\/30,
-  .dark .border-white\/25,
-  .dark .border-white\/20,
-  .dark .border-white\/15,
-  .dark .border-white\/10 {
+  .dark [class*="border-white/30"],
+  .dark [class*="border-white/25"],
+  .dark [class*="border-white/20"],
+  .dark [class*="border-white/15"],
+  .dark [class*="border-white/10"] {
     border-color: rgba(255, 255, 255, 0.06) !important;
   }
 
-  .dark .border-slate-200,
-  .dark .border-slate-100,
-  .dark .border-slate-300 {
+  .dark [class*="border-slate-200"],
+  .dark [class*="border-slate-100"],
+  .dark [class*="border-slate-300"] {
     border-color: rgba(255, 255, 255, 0.06) !important;
   }
 
