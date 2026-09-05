@@ -2986,6 +2986,15 @@ export const appRouter = router({
         }
         return await updatePropertyLaunch(input.id, { fotos: null });
       }),
+    /**
+     * Soft-delete: marca lançamento como inativo. Ele deixa de aparecer
+     * na listagem (getActivePropertyLaunches filtra por isAtivo=1) mas
+     * o registro segue no banco para auditoria/histórico.
+     */
+    remove: staffProcedure.input(idSchema).mutation(async ({ input }) => {
+      const { updatePropertyLaunch } = await import("./db");
+      return await updatePropertyLaunch(input.id, { isAtivo: 0 });
+    }),
     create: staffProcedure
       .input(propertyLaunchMutationSchema)
       .mutation(async ({ ctx, input }) => {

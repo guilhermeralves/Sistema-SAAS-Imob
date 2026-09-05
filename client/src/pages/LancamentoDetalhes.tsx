@@ -16,6 +16,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { isStaffRole } from "@shared/auth";
 import { trpc } from "@/lib/trpc";
 import {
+  AlertTriangle,
   ArrowLeft,
   ImageIcon,
   Loader2,
@@ -24,6 +25,17 @@ import {
   Upload,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 async function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -88,6 +100,15 @@ export default function LancamentoDetalhes() {
       toast.success("Foto removida.");
       utils.launches.getById.invalidate({ id });
       utils.launches.list.invalidate();
+    },
+    onError: e => toast.error(e.message),
+  });
+
+  const removeLaunch = trpc.launches.remove.useMutation({
+    onSuccess: () => {
+      toast.success("Lançamento removido.");
+      utils.launches.list.invalidate();
+      setLocation("/lancamentos");
     },
     onError: e => toast.error(e.message),
   });
@@ -159,18 +180,58 @@ export default function LancamentoDetalhes() {
   return (
     <Layout>
       <div className="mx-auto max-w-4xl space-y-4 p-4 md:p-6">
-        <div>
-          <Link href="/lancamentos">
-            <a className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-              <ArrowLeft className="h-4 w-4" /> Voltar aos lançamentos
-            </a>
-          </Link>
-          <h1 className="mt-1 text-2xl font-bold">{data.nome}</h1>
-          <p className="text-sm text-muted-foreground">
-            {[data.endereco, data.cidade, data.estado]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <Link href="/lancamentos">
+              <a className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+                <ArrowLeft className="h-4 w-4" /> Voltar aos lançamentos
+              </a>
+            </Link>
+            <h1 className="mt-1 text-2xl font-bold">{data.nome}</h1>
+            <p className="text-sm text-muted-foreground">
+              {[data.endereco, data.cidade, data.estado]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          </div>
+          {canEdit ? (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950"
+                  title="Remover lançamento"
+                  aria-label="Remover lançamento"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5 text-red-600" />
+                    Remover "{data.nome}"?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    O lançamento sai da listagem imediatamente. O registro
+                    fica preservado no banco para auditoria (soft-delete),
+                    mas não é possível reativar pela interface — precisa
+                    ser feito manualmente.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => removeLaunch.mutate({ id })}
+                    className="bg-red-600 text-white hover:bg-red-700"
+                  >
+                    Remover
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          ) : null}
         </div>
 
         {/* Foto do empreendimento */}
