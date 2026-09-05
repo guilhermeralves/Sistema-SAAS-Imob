@@ -19,6 +19,10 @@ import {
   ensureLaunchUploadDir,
   getLaunchImageAbsolutePath,
 } from "./launch-images";
+import {
+  ensureLaunchFilesUploadDir,
+  getLaunchFileAbsolutePath,
+} from "./launch-files";
 import { startLeadSlaScheduler } from "./leadSla";
 import { startLicenseHeartbeat } from "./licenseHeartbeat";
 import { serveStatic, setupVite } from "./vite";
@@ -46,6 +50,7 @@ async function startServer() {
   await ensureBootstrapAdmin();
   await ensurePropertyUploadDir();
   await ensureLaunchUploadDir();
+  await ensureLaunchFilesUploadDir();
   startLeadSlaScheduler();
   startLicenseHeartbeat();
 
@@ -126,6 +131,27 @@ async function startServer() {
       return;
     }
     res.setHeader("Content-Type", "image/webp");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    res.sendFile(abs, error => {
+      if (error && !res.headersSent) res.status(404).end();
+    });
+  });
+
+  // Arquivos anexados a lançamentos (PDF/imagem/etc.) — públicos
+  app.get("/api/media/launch-files/:fileName", async (req, res) => {
+    const fileName = String(req.params.fileName || "").trim();
+    const abs = getLaunchFileAbsolutePath(fileName);
+    if (!abs) {
+      res.status(404).end();
+      return;
+    }
+    try {
+      await fs.access(abs);
+    } catch {
+      res.status(404).end();
+      return;
+    }
+    // Deixa o browser inferir o tipo pelo Content-Type do arquivo
     res.setHeader("Cache-Control", "public, max-age=86400");
     res.sendFile(abs, error => {
       if (error && !res.headersSent) res.status(404).end();

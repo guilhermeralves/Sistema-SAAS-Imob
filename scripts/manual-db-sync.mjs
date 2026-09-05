@@ -526,6 +526,27 @@ const patches = [
     ],
   },
   {
+    id: "2026-08-30_launch_extras_and_files",
+    description:
+      "Adiciona numeroTorres/areasComuns em propertyLaunches e cria tabela launchFiles",
+    statements: [
+      `ALTER TABLE "propertyLaunches" ADD COLUMN IF NOT EXISTS "numeroTorres" integer;`,
+      `ALTER TABLE "propertyLaunches" ADD COLUMN IF NOT EXISTS "areasComuns" text;`,
+      `CREATE TABLE IF NOT EXISTS "launchFiles" (
+        "id" serial PRIMARY KEY NOT NULL,
+        "launchId" integer NOT NULL,
+        "fileName" varchar(128) NOT NULL,
+        "originalName" varchar(255) NOT NULL,
+        "url" varchar(500) NOT NULL,
+        "mimeType" varchar(120) NOT NULL,
+        "sizeBytes" integer NOT NULL,
+        "uploadedByUserId" integer,
+        "createdAt" timestamp DEFAULT now() NOT NULL
+      );`,
+      `CREATE INDEX IF NOT EXISTS "launchFiles_launchId_idx" ON "launchFiles" ("launchId");`,
+    ],
+  },
+  {
     id: "2026-08-30_license_activation_table",
     description:
       "Cria licenseActivation (linha única guardando token JWT do NOXILON Central)",

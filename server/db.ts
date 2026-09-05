@@ -1,6 +1,8 @@
 import { and, asc, desc, eq, inArray, isNull, lt, ne, notInArray, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import {
+  launchFiles,
+  type InsertLaunchFile,
   adminUserViews,
   attendanceQueues,
   attendanceQueueMembers,
@@ -965,6 +967,36 @@ export async function updatePropertyLaunch(
     .where(eq(propertyLaunches.id, id))
     .returning();
   return updated;
+}
+
+export async function listLaunchFiles(launchId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
+    .select()
+    .from(launchFiles)
+    .where(eq(launchFiles.launchId, launchId))
+    .orderBy(desc(launchFiles.createdAt));
+}
+
+export async function createLaunchFile(data: InsertLaunchFile) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [created] = await db.insert(launchFiles).values(data).returning();
+  return created;
+}
+
+export async function deleteLaunchFileById(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [row] = await db
+    .select()
+    .from(launchFiles)
+    .where(eq(launchFiles.id, id))
+    .limit(1);
+  if (!row) return null;
+  await db.delete(launchFiles).where(eq(launchFiles.id, id));
+  return row;
 }
 
 export async function createProperty(

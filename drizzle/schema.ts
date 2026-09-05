@@ -334,6 +334,10 @@ export const propertyLaunches = pgTable("propertyLaunches", {
   estado: varchar("estado", { length: 2 }).notNull(),
   cep: varchar("cep", { length: 10 }),
   fotos: text("fotos"),
+  numeroTorres: integer("numeroTorres"),
+  // JSON array de strings com as áreas comuns marcadas (piscina,
+  // academia, etc.). Guardar como text simplifica queries/serialization.
+  areasComuns: text("areasComuns"),
   destaque: integer("destaque").default(0).notNull(),
   isAtivo: integer("isAtivo").default(1).notNull(),
   createdByUserId: integer("createdByUserId"),
@@ -343,6 +347,26 @@ export const propertyLaunches = pgTable("propertyLaunches", {
 
 export type PropertyLaunch = typeof propertyLaunches.$inferSelect;
 export type InsertPropertyLaunch = typeof propertyLaunches.$inferInsert;
+
+/**
+ * Arquivos anexados a um lançamento (PDFs, plantas, book, imagens
+ * adicionais além da foto de capa). Armazenados em uploads/launch-files/
+ * e servidos via rota pública /api/media/launch-files/:fileName.
+ */
+export const launchFiles = pgTable("launchFiles", {
+  id: serial("id").primaryKey(),
+  launchId: integer("launchId").notNull(),
+  fileName: varchar("fileName", { length: 128 }).notNull(),
+  originalName: varchar("originalName", { length: 255 }).notNull(),
+  url: varchar("url", { length: 500 }).notNull(),
+  mimeType: varchar("mimeType", { length: 120 }).notNull(),
+  sizeBytes: integer("sizeBytes").notNull(),
+  uploadedByUserId: integer("uploadedByUserId"),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export type LaunchFile = typeof launchFiles.$inferSelect;
+export type InsertLaunchFile = typeof launchFiles.$inferInsert;
 
 export const propertyOwnerLinks = pgTable(
   "propertyOwnerLinks",

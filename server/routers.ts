@@ -511,6 +511,8 @@ const propertyLaunchMutationSchema = z.object({
   estado: z.string().trim().min(2).max(2),
   cep: z.string().trim().max(10).nullable().optional(),
   fotos: z.string().trim().nullable().optional(),
+  numeroTorres: z.number().int().min(0).max(50).nullable().optional(),
+  areasComuns: z.string().max(4000).nullable().optional(),
   destaque: z.number().int().min(0).max(1).optional(),
 });
 
@@ -2995,6 +2997,52 @@ export const appRouter = router({
       const { updatePropertyLaunch } = await import("./db");
       return await updatePropertyLaunch(input.id, { isAtivo: 0 });
     }),
+
+    // ── Arquivos anexados a lançamentos ────────────────────────────
+    listFiles: publicProcedure
+      .input(z.object({ launchId: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const { listLaunchFiles } = await import("./db");
+        return await listLaunchFiles(input.launchId);
+      }),
+
+    uploadFile: staffProcedure
+      .input(
+        z.object({
+          launchId: z.number().int().positive(),
+          dataUrl: z.string().min(1),
+          originalName: z.string().min(1).max(255),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { createLaunchFile } = await import("./db");
+        const { storeLaunchFile } = await import("./_core/launch-files");
+        const stored = await storeLaunchFile({
+          dataUrl: input.dataUrl,
+          originalName: input.originalName,
+        });
+        return await createLaunchFile({
+          launchId: input.launchId,
+          fileName: stored.fileName,
+          originalName: stored.originalName,
+          url: stored.url,
+          mimeType: stored.mime,
+          sizeBytes: stored.sizeBytes,
+          uploadedByUserId: ctx.user.id,
+        });
+      }),
+
+    deleteFile: staffProcedure
+      .input(idSchema)
+      .mutation(async ({ input }) => {
+        const { deleteLaunchFileById } = await import("./db");
+        const { removeLaunchFile } = await import("./_core/launch-files");
+        const row = await deleteLaunchFileById(input.id);
+        if (row?.fileName) {
+          await removeLaunchFile(row.fileName).catch(() => null);
+        }
+        return { ok: true };
+      }),
     create: staffProcedure
       .input(propertyLaunchMutationSchema)
       .mutation(async ({ ctx, input }) => {
