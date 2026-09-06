@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "wouter";
 import Layout from "@/components/Layout";
 import AddressFields, { type AddressValue } from "@/components/AddressFields";
+import ComercialCard, {
+  type ComercialCounts,
+} from "@/pages/lancamento/ComercialCard";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -151,6 +154,15 @@ export default function LancamentoDetalhes() {
   const [elevadoresPorTorre, setElevadoresPorTorre] = useState<string>("");
   const [addr, setAddr] = useState<AddressValue>({});
   const [areasComuns, setAreasComuns] = useState<string[]>([]);
+
+  // Contadores comerciais (usados também no card Comercial)
+  const [comercial, setComercial] = useState<ComercialCounts>({
+    total: 0,
+    disponiveis: 0,
+    reservadas: 0,
+    emNegociacao: 0,
+    vendidas: 0,
+  });
   const photoInputRef = useRef<HTMLInputElement>(null);
   const filesInputRef = useRef<HTMLInputElement>(null);
 
@@ -172,6 +184,13 @@ export default function LancamentoDetalhes() {
     setTotalUnidades(
       data.totalUnidades != null ? String(data.totalUnidades) : ""
     );
+    setComercial({
+      total: data.totalUnidades ?? 0,
+      disponiveis: data.unidadesDisponiveis ?? 0,
+      reservadas: data.unidadesReservadas ?? 0,
+      emNegociacao: data.unidadesEmNegociacao ?? 0,
+      vendidas: data.unidadesVendidas ?? 0,
+    });
     setTemElevadores(data.temElevadores === 1);
     setElevadoresPorTorre(
       data.elevadoresPorTorre != null ? String(data.elevadoresPorTorre) : ""
@@ -321,7 +340,11 @@ export default function LancamentoDetalhes() {
         : null,
       numeroPavimentos: parseIntOrNull(numeroPavimentos),
       unidadesPorPavimento: parseIntOrNull(unidadesPorPavimento),
-      totalUnidades: parseIntOrNull(totalUnidades),
+      totalUnidades: comercial.total > 0 ? comercial.total : null,
+      unidadesDisponiveis: comercial.disponiveis,
+      unidadesReservadas: comercial.reservadas,
+      unidadesEmNegociacao: comercial.emNegociacao,
+      unidadesVendidas: comercial.vendidas,
       temElevadores: temElevadores ? 1 : 0,
       elevadoresPorTorre: temElevadores
         ? parseIntOrNull(elevadoresPorTorre)
@@ -544,7 +567,9 @@ export default function LancamentoDetalhes() {
           </div>
         </div>
 
-        {/* ── INFORMAÇÕES GERAIS ── */}
+        {/* ── INFORMAÇÕES GERAIS + COMERCIAL (lado a lado no desktop) ── */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2">
         <Card>
           <CardHeader>
             <CardTitle>Informações Gerais</CardTitle>
@@ -554,24 +579,7 @@ export default function LancamentoDetalhes() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-              <div>
-                <Label>Total de unidades</Label>
-                {editMode ? (
-                  <Input
-                    type="number"
-                    min={0}
-                    max={10000}
-                    value={totalUnidades}
-                    onChange={e => setTotalUnidades(e.target.value)}
-                    placeholder="ex: 120"
-                  />
-                ) : (
-                  <p className="text-sm">
-                    {data.totalUnidades != null ? data.totalUnidades : "—"}
-                  </p>
-                )}
-              </div>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div>
                 <Label>Número de blocos</Label>
                 {editMode ? (
@@ -743,6 +751,17 @@ export default function LancamentoDetalhes() {
             ) : null}
           </CardContent>
         </Card>
+          </div>
+
+          {/* Card Comercial ao lado direito (empilha no mobile) */}
+          <div className="lg:col-span-1">
+            <ComercialCard
+              counts={comercial}
+              editMode={editMode}
+              onChange={patch => setComercial(current => ({ ...current, ...patch }))}
+            />
+          </div>
+        </div>
 
         {/* ── ÁREAS COMUNS ── */}
         <Card>

@@ -341,6 +341,12 @@ export const propertyLaunches = pgTable("propertyLaunches", {
   numeroPavimentos: integer("numeroPavimentos"),
   unidadesPorPavimento: integer("unidadesPorPavimento"),
   totalUnidades: integer("totalUnidades"),
+  // Contadores comerciais. Somados devem bater com totalUnidades.
+  // Poderão migrar para SUM() de uma tabela launchUnits quando o
+  // controle passar a ser por unidade individual.
+  unidadesReservadas: integer("unidadesReservadas").default(0).notNull(),
+  unidadesEmNegociacao: integer("unidadesEmNegociacao").default(0).notNull(),
+  unidadesVendidas: integer("unidadesVendidas").default(0).notNull(),
   /** 1 = sim, 0 = não, null = não informado */
   temElevadores: integer("temElevadores"),
   elevadoresPorTorre: integer("elevadoresPorTorre"),

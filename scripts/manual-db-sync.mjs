@@ -526,6 +526,16 @@ const patches = [
     ],
   },
   {
+    id: "2026-09-05_launch_comercial_counters",
+    description:
+      "Adiciona unidadesReservadas, unidadesEmNegociacao, unidadesVendidas em propertyLaunches",
+    statements: [
+      `ALTER TABLE "propertyLaunches" ADD COLUMN IF NOT EXISTS "unidadesReservadas" integer DEFAULT 0 NOT NULL;`,
+      `ALTER TABLE "propertyLaunches" ADD COLUMN IF NOT EXISTS "unidadesEmNegociacao" integer DEFAULT 0 NOT NULL;`,
+      `ALTER TABLE "propertyLaunches" ADD COLUMN IF NOT EXISTS "unidadesVendidas" integer DEFAULT 0 NOT NULL;`,
+    ],
+  },
+  {
     id: "2026-08-30_launch_infos_gerais",
     description:
       "Adiciona identificadoresTorres, numeroPavimentos, unidadesPorPavimento, totalUnidades, temElevadores, elevadoresPorTorre em propertyLaunches",
