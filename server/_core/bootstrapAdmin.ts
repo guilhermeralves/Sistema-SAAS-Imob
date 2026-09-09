@@ -1,5 +1,11 @@
 import { nanoid } from "nanoid";
-import { createUser, getDb, getUserByEmail, updateUser } from "../db";
+import {
+  createUser,
+  getDb,
+  getUserByEmail,
+  getUserByOpenId,
+  updateUser,
+} from "../db";
 import { ENV } from "./env";
 import { hashPassword } from "./passwords";
 
@@ -21,13 +27,22 @@ export async function ensureBootstrapAdmin() {
   }
 
   const email = ENV.ownerEmail.trim().toLowerCase();
-  const existingUser = await getUserByEmail(email);
+  const bootstrapOpenId =
+    ENV.ownerOpenId || `local:bootstrap-admin:${nanoid(8)}`;
+
+  // 1) Tenta encontrar pelo email (caso o email do .env já esteja no banco).
+  // 2) Se não achar por email mas o openId do bootstrap existir, usa esse
+  //    registro (isso cobre o caso do OWNER_EMAIL ter sido alterado no .env
+  //    depois do primeiro boot — a linha antiga é atualizada em vez de criar
+  //    outra e violar UNIQUE(openId)).
+  let existingUser =
+    (await getUserByEmail(email)) ?? (await getUserByOpenId(bootstrapOpenId));
 
   if (!existingUser) {
     const passwordHash = await hashPassword(ENV.ownerPassword);
 
     await createUser({
-      openId: ENV.ownerOpenId || `local:bootstrap-admin:${nanoid(8)}`,
+      openId: bootstrapOpenId,
       name: ROOT_ADMIN_NAME,
       email,
       loginMethod: "password",
@@ -41,6 +56,19 @@ export async function ensureBootstrapAdmin() {
     console.log(`[Auth] Bootstrap admin created for ${email}`);
     return;
   }
+
+  // Se o usuário atual tem email diferente do .env, sincroniza.
+  if (existingUser.email !== email) {
+    await updateUser(existingUser.id, { email });
+    existingUser = { ...existingUser, email };
+  }
+
+  // Sempre re-sincroniza a senha do .env (senha é fonte de verdade lá).
+  const passwordHash = await hashPassword(ENV.ownerPassword);
+  await updateUser(existingUser.id, {
+    passwordHash,
+    loginMethod: "password",
+  });
 
   const updatePayload: Record<string, unknown> = {};
 
