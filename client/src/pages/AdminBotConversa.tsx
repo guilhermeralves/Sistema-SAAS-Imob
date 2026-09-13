@@ -16,13 +16,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
-import { AlertCircle, Loader2, MessageSquare, RefreshCw } from "lucide-react";
+import {
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  MessageSquare,
+  RefreshCw,
+} from "lucide-react";
+import { useState } from "react";
 
-/**
- * Página de teste da integração BotConversa. Ao clicar em "Sincronizar",
- * chama o endpoint tRPC integracoes.botconversa.listarContatos e
- * mostra numa tabela.
- */
+const CHUNK_SIZE = 500;
 
 function formatDate(v?: string | null) {
   if (!v) return "—";
@@ -36,10 +40,12 @@ function formatDate(v?: string | null) {
 function formatTags(v: unknown) {
   if (!v) return "—";
   if (Array.isArray(v))
-    return v
-      .map(t => (typeof t === "string" ? t : (t as { name?: string })?.name))
-      .filter(Boolean)
-      .join(", ") || "—";
+    return (
+      v
+        .map(t => (typeof t === "string" ? t : (t as { name?: string })?.name))
+        .filter(Boolean)
+        .join(", ") || "—"
+    );
   return String(v);
 }
 
@@ -50,20 +56,53 @@ function displayName(row: {
 }) {
   const first = row.full_name ?? "";
   if (first) return first;
-  return [row.first_name ?? "", row.last_name ?? ""].filter(Boolean).join(" ")
-    || "—";
+  return (
+    [row.first_name ?? "", row.last_name ?? ""].filter(Boolean).join(" ") || "—"
+  );
 }
 
 export default function AdminBotConversa() {
-  const { data, isLoading, isFetching, error, refetch } =
-    trpc.integracoesExternas.botconversa.listarContatos.useQuery(undefined, {
-      enabled: false, // só busca quando clicar em Sincronizar
+  // Histórico de startPages visitados (para permitir Anterior sem
+  // recalcular). Cada entrada é o `startPage` que foi passado ao
+  // servidor para produzir aquele lote.
+  const [history, setHistory] = useState<number[]>([1]);
+  const [index, setIndex] = useState(0);
+  const currentStartPage = history[index];
+
+  const query = trpc.integracoesExternas.botconversa.listarContatos.useQuery(
+    { startPage: currentStartPage, chunkSize: CHUNK_SIZE },
+    {
       retry: false,
-    });
+      staleTime: 5 * 60_000,
+    }
+  );
+
+  const goNext = () => {
+    if (!query.data?.nextStartPage) return;
+    const next = query.data.nextStartPage;
+    // Se já visitamos, só avança o índice (react-query serve do cache)
+    if (history[index + 1] === next) {
+      setIndex(index + 1);
+      return;
+    }
+    // Descarta futuro (caso tenha voltado e mudou algo) e adiciona novo
+    setHistory(h => [...h.slice(0, index + 1), next]);
+    setIndex(index + 1);
+  };
+
+  const goPrev = () => {
+    if (index === 0) return;
+    setIndex(index - 1);
+  };
+
+  const total = query.data?.total ?? null;
+  const chunkNumber = index + 1;
+  const chunkStart = index * CHUNK_SIZE + 1;
+  const chunkEnd = chunkStart + (query.data?.contatos.length ?? 0) - 1;
 
   return (
     <Layout>
-      <div className="mx-auto max-w-5xl space-y-4 p-4 md:p-6">
+      <div className="mx-auto max-w-6xl space-y-4 p-4 md:p-6">
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-bold">
@@ -71,20 +110,26 @@ export default function AdminBotConversa() {
               BotConversa
             </h1>
             <p className="text-sm text-muted-foreground">
-              Teste de integração — lista de contatos do BotConversa via API.
+              Contatos sincronizados da API BotConversa em lotes de{" "}
+              {CHUNK_SIZE}. Novos lotes só são buscados quando você navega
+              (o servidor consulta a API sob demanda).
             </p>
           </div>
-          <Button onClick={() => refetch()} disabled={isFetching}>
-            {isFetching ? (
+          <Button
+            variant="outline"
+            onClick={() => query.refetch()}
+            disabled={query.isFetching}
+          >
+            {query.isFetching ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             ) : (
               <RefreshCw className="mr-2 h-4 w-4" />
             )}
-            Sincronizar
+            Recarregar lote atual
           </Button>
         </div>
 
-        {error ? (
+        {query.error ? (
           <Card>
             <CardContent className="flex items-start gap-3 py-4 text-sm">
               <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600" />
@@ -92,7 +137,9 @@ export default function AdminBotConversa() {
                 <p className="font-medium text-red-700">
                   Falha ao consultar o BotConversa
                 </p>
-                <p className="mt-1 text-muted-foreground">{error.message}</p>
+                <p className="mt-1 text-muted-foreground">
+                  {query.error.message}
+                </p>
                 <p className="mt-2 text-xs text-muted-foreground">
                   Verifique se <code>BOTCONVERSA_API_KEY</code> está preenchida
                   no <code>.env</code> do servidor e reinicie o dev.
@@ -104,23 +151,51 @@ export default function AdminBotConversa() {
 
         <Card>
           <CardHeader>
-            <CardTitle>
-              Contatos {data ? `(${data.total})` : ""}
-            </CardTitle>
-            <CardDescription>
-              {isLoading || isFetching
-                ? "Buscando…"
-                : data
-                  ? "Lista atual retornada pela API."
-                  : "Clique em Sincronizar para carregar."}
-            </CardDescription>
+            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+              <div>
+                <CardTitle>
+                  Contatos {total != null ? `· ${total} no total` : ""}
+                </CardTitle>
+                <CardDescription>
+                  {query.isFetching
+                    ? "Buscando…"
+                    : query.data
+                      ? `Exibindo ${chunkStart}–${chunkEnd} · Lote ${chunkNumber}`
+                      : "Aguardando…"}
+                </CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={goPrev}
+                  disabled={index === 0 || query.isFetching}
+                >
+                  <ChevronLeft className="mr-1 h-4 w-4" /> Anterior
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={goNext}
+                  disabled={
+                    !query.data?.nextStartPage || query.isFetching
+                  }
+                >
+                  Próxima <ChevronRight className="ml-1 h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            {data && data.total === 0 ? (
+            {query.isLoading ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
-                Nenhum contato retornado.
+                Carregando primeiro lote…
               </p>
-            ) : data ? (
+            ) : query.data && query.data.contatos.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Nenhum contato neste lote.
+              </p>
+            ) : query.data ? (
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -129,12 +204,12 @@ export default function AdminBotConversa() {
                       <TableHead>Nome</TableHead>
                       <TableHead>Telefone</TableHead>
                       <TableHead>Tags</TableHead>
-                      <TableHead>Última interação</TableHead>
+                      <TableHead>Criado em</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {data.contatos.map((c, idx) => (
-                      <TableRow key={String(c.id ?? idx)}>
+                    {query.data.contatos.map((c, idx) => (
+                      <TableRow key={String(c.id ?? `${index}-${idx}`)}>
                         <TableCell className="font-mono text-xs">
                           {String(c.id ?? "—")}
                         </TableCell>
@@ -144,7 +219,7 @@ export default function AdminBotConversa() {
                         </TableCell>
                         <TableCell>{formatTags(c.tags)}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">
-                          {formatDate(c.last_interaction ?? c.created_at)}
+                          {formatDate(c.created_at)}
                         </TableCell>
                       </TableRow>
                     ))}

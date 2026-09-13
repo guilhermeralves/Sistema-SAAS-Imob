@@ -64,35 +64,66 @@ type PaginatedResponse = {
   results?: BotConversaSubscriber[];
 };
 
-/**
- * Retorna TODOS os subscribers seguindo a paginação até o fim.
- * A API devolve `next` como URL absoluta — extraímos o `page=N` dela
- * e chamamos `/subscribers/?page=N` até `next` virar null.
- *
- * Limite de segurança: para em 500 páginas (caso de loop ou volume
- * muito acima do esperado). Ajuste MAX_PAGES se necessário.
- */
-export async function listSubscribers(): Promise<BotConversaSubscriber[]> {
-  const MAX_PAGES = 500;
-  const all: BotConversaSubscriber[] = [];
-  let page = 1;
+export type SubscriberChunk = {
+  /** Contatos deste lote (até `chunkSize`). */
+  contatos: BotConversaSubscriber[];
+  /** Total de contatos existentes na conta BotConversa (do `count`). */
+  count: number | null;
+  /**
+   * Número da primeira página BotConversa que AINDA não foi lida.
+   * `null` quando não há mais nada — o cliente usa isso para saber se
+   * mostra ou não o botão "Próxima".
+   */
+  nextStartPage: number | null;
+};
 
-  while (page <= MAX_PAGES) {
-    const url = page === 1 ? "/subscribers/" : `/subscribers/?page=${page}`;
+/**
+ * Busca um LOTE de subscribers a partir da página BotConversa
+ * `startPage`, acumulando páginas internas até chegar em `chunkSize`
+ * (padrão 500) ou até a API ficar sem `next`.
+ *
+ * Uso típico do cliente: primeira chamada `startPage=1`; próxima
+ * `startPage=result.nextStartPage`; anterior → guardar histórico
+ * dos `startPage`s visitados no cliente e voltar um.
+ */
+export async function listSubscribersChunk(input?: {
+  startPage?: number;
+  chunkSize?: number;
+}): Promise<SubscriberChunk> {
+  const chunkSize = Math.max(1, input?.chunkSize ?? 500);
+  const initialPage = Math.max(1, input?.startPage ?? 1);
+  const MAX_PAGES_PER_CHUNK = 500;
+
+  const contatos: BotConversaSubscriber[] = [];
+  let page = initialPage;
+  let count: number | null = null;
+  let hasMore = true;
+
+  for (let i = 0; i < MAX_PAGES_PER_CHUNK; i++) {
+    const url = `/subscribers/?page=${page}`;
     const data = await botconversaGet<
       BotConversaSubscriber[] | PaginatedResponse
     >(url);
 
-    // Resposta não-paginada (fallback improvável)
     if (Array.isArray(data)) {
-      all.push(...data);
+      contatos.push(...data);
+      hasMore = false;
       break;
     }
 
-    if (Array.isArray(data.results)) all.push(...data.results);
-    if (!data.next) break;
+    if (typeof data.count === "number") count = data.count;
+    if (Array.isArray(data.results)) contatos.push(...data.results);
     page += 1;
+    if (!data.next) {
+      hasMore = false;
+      break;
+    }
+    if (contatos.length >= chunkSize) break;
   }
 
-  return all;
+  return {
+    contatos: contatos.slice(0, chunkSize),
+    count,
+    nextStartPage: hasMore ? page : null,
+  };
 }

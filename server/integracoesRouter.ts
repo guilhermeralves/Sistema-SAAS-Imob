@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { adminProcedure, router } from "./_core/trpc";
 
 /**
@@ -8,16 +9,33 @@ import { adminProcedure, router } from "./_core/trpc";
 export const integracoesRouter = router({
   botconversa: router({
     /**
-     * Lista contatos (subscribers) da conta BotConversa. Retorna também
-     * a contagem para facilitar debug na UI.
+     * Lista contatos em lotes de 500 (default). Cliente passa
+     * `startPage` (número da página BotConversa por onde começar). No
+     * retorno vem `nextStartPage` — usar isso no próximo clique de
+     * "Próxima". Se for null, chegou ao fim.
      */
-    listarContatos: adminProcedure.query(async () => {
-      const { listSubscribers } = await import("./_core/botconversa");
-      const contatos = await listSubscribers();
-      return {
-        total: contatos.length,
-        contatos,
-      };
-    }),
+    listarContatos: adminProcedure
+      .input(
+        z
+          .object({
+            startPage: z.number().int().min(1).default(1),
+            chunkSize: z.number().int().min(1).max(2000).default(500),
+          })
+          .default({ startPage: 1, chunkSize: 500 })
+      )
+      .query(async ({ input }) => {
+        const { listSubscribersChunk } = await import("./_core/botconversa");
+        const chunk = await listSubscribersChunk({
+          startPage: input.startPage,
+          chunkSize: input.chunkSize,
+        });
+        return {
+          startPage: input.startPage,
+          chunkSize: input.chunkSize,
+          total: chunk.count,
+          contatos: chunk.contatos,
+          nextStartPage: chunk.nextStartPage,
+        };
+      }),
   }),
 });
