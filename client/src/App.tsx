@@ -41,6 +41,7 @@ import RoletaAtendimentos from "./pages/RoletaAtendimentos";
 import Ativar from "./pages/Ativar";
 import ParametrosDoSistema from "./pages/ParametrosDoSistema";
 import AdminBotConversa from "./pages/AdminBotConversa";
+import AdminIntegracoes from "./pages/AdminIntegracoes";
 
 function RootEntryRoute() {
   const { user, loading, isAuthenticated } = useAuth();
@@ -142,6 +143,9 @@ function Router() {
       </Route>
       <Route path={"/admin/parametros"}>
         <ProtectedRoute component={ParametrosDoSistema} roles={["administrativo"]} />
+      </Route>
+      <Route path={"/admin/integracoes"}>
+        <ProtectedRoute component={AdminIntegracoes} roles={["administrativo"]} />
       </Route>
       <Route path={"/admin/integracoes/botconversa"}>
         <ProtectedRoute component={AdminBotConversa} roles={["administrativo"]} />

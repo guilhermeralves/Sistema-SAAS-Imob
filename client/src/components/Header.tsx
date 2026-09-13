@@ -387,8 +387,8 @@ export default function Header() {
                       <DropdownMenuItem asChild>
                         <Link href="/integracoes">
                           <a className="flex items-center gap-2">
-                            <PlugZap className="h-4 w-4" />
-                            Integrações
+                            <Building2 className="h-4 w-4" />
+                            Portais de Divulgação
                           </a>
                         </Link>
                       </DropdownMenuItem>
@@ -413,10 +413,10 @@ export default function Header() {
                   ) : null}
                   {user.role === "administrativo" ? (
                     <DropdownMenuItem asChild>
-                      <Link href="/admin/integracoes/botconversa">
+                      <Link href="/admin/integracoes">
                         <a className="flex items-center gap-2">
-                          <MessageSquare className="h-4 w-4" />
-                          BotConversa
+                          <PlugZap className="h-4 w-4" />
+                          Integrações
                         </a>
                       </Link>
                     </DropdownMenuItem>

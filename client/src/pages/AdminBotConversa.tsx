@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -18,13 +19,16 @@ import {
 import { trpc } from "@/lib/trpc";
 import {
   AlertCircle,
+  ArrowLeft,
   ChevronLeft,
   ChevronRight,
   Loader2,
   MessageSquare,
   RefreshCw,
+  Search,
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { Link } from "wouter";
 
 const CHUNK_SIZE = 500;
 
@@ -67,6 +71,7 @@ export default function AdminBotConversa() {
   // servidor para produzir aquele lote.
   const [history, setHistory] = useState<number[]>([1]);
   const [index, setIndex] = useState(0);
+  const [search, setSearch] = useState("");
   const currentStartPage = history[index];
 
   const query = trpc.integracoesExternas.botconversa.listarContatos.useQuery(
@@ -100,9 +105,32 @@ export default function AdminBotConversa() {
   const chunkStart = index * CHUNK_SIZE + 1;
   const chunkEnd = chunkStart + (query.data?.contatos.length ?? 0) - 1;
 
+  /**
+   * Filtro client-side: procura o termo em qualquer campo textual do
+   * subscriber (nome/telefone/tags/id/etc). Só busca dentro do lote
+   * atual — para pesquisar em tudo é preciso paginar até achar.
+   */
+  const filteredContatos = useMemo(() => {
+    const raw = query.data?.contatos ?? [];
+    const term = search.trim().toLowerCase();
+    if (!term) return raw;
+    return raw.filter(c => {
+      const haystack = Object.values(c)
+        .map(v => (v == null ? "" : String(v)))
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(term);
+    });
+  }, [query.data?.contatos, search]);
+
   return (
     <Layout>
       <div className="mx-auto max-w-6xl space-y-4 p-4 md:p-6">
+        <Link href="/admin/integracoes">
+          <a className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+            <ArrowLeft className="h-4 w-4" /> Voltar para Integrações
+          </a>
+        </Link>
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-bold">
@@ -186,7 +214,27 @@ export default function AdminBotConversa() {
               </div>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
+            {query.data ? (
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Pesquisar por nome, telefone, tag, ID…"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="pl-9"
+                />
+                {search ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {filteredContatos.length} de{" "}
+                    {query.data.contatos.length} resultados neste lote (busca
+                    só nos contatos já carregados — mude de lote para
+                    procurar em outros).
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
             {query.isLoading ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
                 Carregando primeiro lote…
@@ -208,21 +256,32 @@ export default function AdminBotConversa() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {query.data.contatos.map((c, idx) => (
-                      <TableRow key={String(c.id ?? `${index}-${idx}`)}>
-                        <TableCell className="font-mono text-xs">
-                          {String(c.id ?? "—")}
-                        </TableCell>
-                        <TableCell>{displayName(c)}</TableCell>
-                        <TableCell className="font-mono text-xs">
-                          {c.phone ?? "—"}
-                        </TableCell>
-                        <TableCell>{formatTags(c.tags)}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {formatDate(c.created_at)}
+                    {filteredContatos.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={5}
+                          className="py-6 text-center text-sm text-muted-foreground"
+                        >
+                          Nenhum contato encontrado para "{search}" neste lote.
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ) : (
+                      filteredContatos.map((c, idx) => (
+                        <TableRow key={String(c.id ?? `${index}-${idx}`)}>
+                          <TableCell className="font-mono text-xs">
+                            {String(c.id ?? "—")}
+                          </TableCell>
+                          <TableCell>{displayName(c)}</TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {c.phone ?? "—"}
+                          </TableCell>
+                          <TableCell>{formatTags(c.tags)}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {formatDate(c.created_at)}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </div>
