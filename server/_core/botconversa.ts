@@ -57,11 +57,42 @@ export type BotConversaSubscriber = {
   [key: string]: unknown;
 };
 
+type PaginatedResponse = {
+  count?: number;
+  next?: string | null;
+  previous?: string | null;
+  results?: BotConversaSubscriber[];
+};
+
+/**
+ * Retorna TODOS os subscribers seguindo a paginação até o fim.
+ * A API devolve `next` como URL absoluta — extraímos o `page=N` dela
+ * e chamamos `/subscribers/?page=N` até `next` virar null.
+ *
+ * Limite de segurança: para em 500 páginas (caso de loop ou volume
+ * muito acima do esperado). Ajuste MAX_PAGES se necessário.
+ */
 export async function listSubscribers(): Promise<BotConversaSubscriber[]> {
-  const data = await botconversaGet<
-    BotConversaSubscriber[] | { results?: BotConversaSubscriber[] }
-  >("/subscribers/");
-  if (Array.isArray(data)) return data;
-  if (data && Array.isArray(data.results)) return data.results;
-  return [];
+  const MAX_PAGES = 500;
+  const all: BotConversaSubscriber[] = [];
+  let page = 1;
+
+  while (page <= MAX_PAGES) {
+    const url = page === 1 ? "/subscribers/" : `/subscribers/?page=${page}`;
+    const data = await botconversaGet<
+      BotConversaSubscriber[] | PaginatedResponse
+    >(url);
+
+    // Resposta não-paginada (fallback improvável)
+    if (Array.isArray(data)) {
+      all.push(...data);
+      break;
+    }
+
+    if (Array.isArray(data.results)) all.push(...data.results);
+    if (!data.next) break;
+    page += 1;
+  }
+
+  return all;
 }
