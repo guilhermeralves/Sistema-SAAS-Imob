@@ -19,7 +19,6 @@ import {
 import { trpc } from "@/lib/trpc";
 import {
   AlertCircle,
-  ArrowLeft,
   ChevronLeft,
   ChevronRight,
   Loader2,
@@ -28,7 +27,6 @@ import {
   Search,
 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Link } from "wouter";
 
 const CHUNK_SIZE = 500;
 
@@ -126,11 +124,6 @@ export default function AdminBotConversa() {
   return (
     <Layout>
       <div className="mx-auto max-w-6xl space-y-4 p-4 md:p-6">
-        <Link href="/admin/integracoes">
-          <a className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="h-4 w-4" /> Voltar para Integrações
-          </a>
-        </Link>
         <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-bold">
