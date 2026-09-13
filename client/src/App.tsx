@@ -40,6 +40,7 @@ import Condominios from "./pages/Condominios";
 import RoletaAtendimentos from "./pages/RoletaAtendimentos";
 import Ativar from "./pages/Ativar";
 import ParametrosDoSistema from "./pages/ParametrosDoSistema";
+import AdminBotConversa from "./pages/AdminBotConversa";
 
 function RootEntryRoute() {
   const { user, loading, isAuthenticated } = useAuth();
@@ -141,6 +142,9 @@ function Router() {
       </Route>
       <Route path={"/admin/parametros"}>
         <ProtectedRoute component={ParametrosDoSistema} roles={["administrativo"]} />
+      </Route>
+      <Route path={"/admin/integracoes/botconversa"}>
+        <ProtectedRoute component={AdminBotConversa} roles={["administrativo"]} />
       </Route>
       <Route path={"/financeiro"}>
         <ProtectedRoute component={Financeiro} roles={["administrativo"]} />

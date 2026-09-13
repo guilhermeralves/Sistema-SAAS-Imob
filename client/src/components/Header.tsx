@@ -28,6 +28,7 @@ import {
   Briefcase,
   Building2,
   Gift,
+  MessageSquare,
   Target,
   Hammer,
   Home,
@@ -406,6 +407,16 @@ export default function Header() {
                               title="Existem novos cadastros"
                             />
                           ) : null}
+                        </a>
+                      </Link>
+                    </DropdownMenuItem>
+                  ) : null}
+                  {user.role === "administrativo" ? (
+                    <DropdownMenuItem asChild>
+                      <Link href="/admin/integracoes/botconversa">
+                        <a className="flex items-center gap-2">
+                          <MessageSquare className="h-4 w-4" />
+                          BotConversa
                         </a>
                       </Link>
                     </DropdownMenuItem>

@@ -39,6 +39,7 @@ import {
 } from "./_core/roleta";
 import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
+import { integracoesRouter } from "./integracoesRouter";
 import { licenseActivationRouter } from "./licenseActivationRouter";
 import { systemParametersRouter } from "./systemParametersRouter";
 import {
@@ -7330,6 +7331,7 @@ export const appRouter = router({
   roleta: roletaRouter,
   license: licenseActivationRouter,
   systemParameters: systemParametersRouter,
+  integracoesExternas: integracoesRouter,
 });
 
 export type AppRouter = typeof appRouter;
