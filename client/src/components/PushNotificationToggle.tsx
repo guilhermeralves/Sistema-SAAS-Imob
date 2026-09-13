@@ -52,8 +52,32 @@ export default function PushNotificationToggle({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supported]);
 
-  if (!supported || !config?.enabled || !config.publicKey) {
+  // Explica o motivo em vez de sumir do menu — ajuda quem tá tentando
+  // ativar sem saber por que não aparece.
+  const unavailableReason = (() => {
+    if (!supported) return "Este navegador não suporta notificações push.";
+    if (!config?.enabled) return "Push desativado no servidor (VAPID).";
+    if (!config?.publicKey) return "Chave pública VAPID ausente.";
     return null;
+  })();
+
+  if (unavailableReason) {
+    if (variant === "button") {
+      return (
+        <p className="text-xs text-muted-foreground">
+          <BellOff className="mr-1 inline h-3 w-3" /> {unavailableReason}
+        </p>
+      );
+    }
+    return (
+      <DropdownMenuItem
+        disabled
+        className="cursor-not-allowed gap-2 text-muted-foreground"
+      >
+        <BellOff className="h-4 w-4" />
+        {unavailableReason}
+      </DropdownMenuItem>
+    );
   }
 
   const permissionDenied = getNotificationPermission() === "denied";
