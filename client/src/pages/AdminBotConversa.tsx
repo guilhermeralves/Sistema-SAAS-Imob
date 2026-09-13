@@ -209,14 +209,18 @@ export default function AdminBotConversa() {
           </CardHeader>
           <CardContent className="space-y-3">
             {query.data ? (
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Pesquisar por nome, telefone, tag, ID…"
-                  value={search}
-                  onChange={e => setSearch(e.target.value)}
-                  className="pl-9"
-                />
+              <div>
+                <div className="relative">
+                  <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                    <Search className="h-4 w-4 text-muted-foreground" />
+                  </span>
+                  <Input
+                    placeholder="Pesquisar por nome, telefone, tag, ID…"
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
                 {search ? (
                   <p className="mt-1 text-xs text-muted-foreground">
                     {filteredContatos.length} de{" "}

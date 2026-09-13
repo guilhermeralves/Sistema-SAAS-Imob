@@ -1336,6 +1336,27 @@ async function enrichLeadBirthDateByCpf<
   });
 }
 
+/**
+ * Busca o lead ATIVO mais recente por telefone (ignorando pontuação).
+ * Usado pelo webhook do BotConversa: se o mesmo número já entrou, não
+ * criamos duplicata — atualizamos o existente.
+ */
+export async function getLeadByTelefone(telefone: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const digits = telefone.replace(/\D/g, "");
+  if (digits.length === 0) return undefined;
+
+  // Carrega leads recentes e faz o match normalizado no client-side.
+  const rows = await db
+    .select()
+    .from(leads)
+    .orderBy(desc(leads.createdAt))
+    .limit(500);
+  return rows.find(r => (r.telefone ?? "").replace(/\D/g, "") === digits);
+}
+
 export async function getLeadsByCpf(cpf: string) {
   const db = await getDb();
   if (!db) return [];

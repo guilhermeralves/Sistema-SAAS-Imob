@@ -6,6 +6,7 @@ import os from 'os';
 import fs from "fs/promises";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
+import { registerBotConversaWebhook } from "../whatsappWebhook";
 import { appRouter } from "../routers";
 import { ensureBootstrapAdmin } from "./bootstrapAdmin";
 import { createContext } from "./context";
@@ -161,6 +162,9 @@ async function startServer() {
 
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+
+  // Webhook público que recebe eventos do BotConversa
+  registerBotConversaWebhook(app);
 
   // Webhook da D4Sign (assinaturas de locacao). A D4Sign envia o uuid do
   // documento quando o status muda; sincronizamos a assinatura correspondente.
