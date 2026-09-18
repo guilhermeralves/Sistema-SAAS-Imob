@@ -49,6 +49,9 @@ step "2/6 — pnpm install"
 corepack pnpm install --frozen-lockfile
 
 step "3/6 — migrações do banco"
+# 1º: schema base via Drizzle (idempotente — só aplica o que faltou)
+corepack pnpm run db:push
+# 2º: patches incrementais em cima
 corepack pnpm run db:manual:sync
 
 step "4/6 — build (frontend + backend)"
