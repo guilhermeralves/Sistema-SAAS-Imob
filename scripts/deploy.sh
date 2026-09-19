@@ -14,6 +14,11 @@
 
 set -euo pipefail
 
+# Faz o script funcionar de qualquer diretório: cd para a raiz do projeto
+# (um nível acima de onde este arquivo está).
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/.."
+
 # Configurável via env: BRANCH=main ./scripts/deploy.sh
 BRANCH="${BRANCH:-feat/licencas-tenants}"
 APP_NAME="${APP_NAME:-newimob}"
