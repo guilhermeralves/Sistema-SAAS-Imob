@@ -1,7 +1,7 @@
 {
-  "name": "AFG Imobiliária",
-  "short_name": "AFG",
-  "description": "Sistema de gestão da AFG Imobiliária",
+  "name": "New Imob",
+  "short_name": "New Imob",
+  "description": "Sistema de gestão da New Imob",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
