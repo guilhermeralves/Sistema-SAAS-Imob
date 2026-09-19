@@ -2,8 +2,10 @@
 #
 # scripts/deploy.sh — pipeline de deploy no servidor de produção.
 #
-# Uso (dentro do diretório da app, ex: /var/www/Sistema-SAAS-Imob):
-#   ./scripts/deploy.sh
+# Uso (de qualquer pasta, se houver symlink em /usr/local/bin/):
+#   deploy-newimob
+# Ou direto:
+#   /var/www/Sistema-SAAS-Imob/scripts/deploy.sh
 #
 # Requer:
 #   - git, corepack (Node 22+), pnpm, pm2 no PATH
@@ -14,13 +16,15 @@
 
 set -euo pipefail
 
-# Faz o script funcionar de qualquer diretório: cd para a raiz do projeto
-# (um nível acima de onde este arquivo está).
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve o caminho real do script mesmo quando chamado via symlink
+# (ex: /usr/local/bin/deploy-newimob -> /var/www/.../scripts/deploy.sh).
+# Sem readlink -f, BASH_SOURCE aponta pro symlink e o cd .. dá em lugar errado.
+REAL_SCRIPT="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "$REAL_SCRIPT")" && pwd)"
 cd "$SCRIPT_DIR/.."
 
 # Configurável via env: BRANCH=main ./scripts/deploy.sh
-BRANCH="${BRANCH:-feat/licencas-tenants}"
+BRANCH="${BRANCH:-NewImob_VictorCabral}"
 APP_NAME="${APP_NAME:-newimob}"
 
 step() {
