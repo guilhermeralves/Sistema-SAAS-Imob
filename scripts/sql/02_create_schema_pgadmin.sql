@@ -1,5 +1,5 @@
 ﻿-- Execute este arquivo no pgAdmin ja conectado ao banco "afg_imobiliaria".
--- Este script cria a estrutura atual esperada pelo projeto AFG_SITE em PostgreSQL.
+-- Este script cria a estrutura atual esperada pelo projeto Sistema-SAAS-Imob em PostgreSQL.
 
 CREATE TABLE "contracts" (
     "id" serial PRIMARY KEY NOT NULL,

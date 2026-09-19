@@ -3,7 +3,7 @@ description: Retoma uma funcionalidade já iniciada, identificando onde parou
 argument-hint: [nome do módulo/feature, ex.: locacoes]
 ---
 
-Você vai **retomar** uma funcionalidade já em andamento no AFG_SITE.
+Você vai **retomar** uma funcionalidade já em andamento no Sistema-SAAS-Imob.
 Alvo (se informado): **$ARGUMENTS** — se vazio, descubra o item em andamento mais relevante.
 
 ## Fase 1 — Descobrir onde parou
