@@ -1,7 +1,7 @@
 {
-  "name": "New Imob",
+  "name": "New Imobiliária",
   "short_name": "New Imob",
-  "description": "Sistema de gestão da New Imob",
+  "description": "Sistema de gestão da New Imobiliária",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

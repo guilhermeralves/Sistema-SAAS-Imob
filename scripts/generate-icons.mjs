@@ -6,7 +6,9 @@ import sharp from "sharp";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
-const SOURCE = "client/public/LOGO-NEW.png";
+// LOGO-NEW-black.png = versão preta pura, contraste bom em fundo claro E
+// escuro. Não use LOGO-NEW.png se a arte for branca — some no navegador.
+const SOURCE = "client/public/LOGO-NEW-black.png";
 const OUT_ROOT = "client/public";
 const OUT_ICONS = join(OUT_ROOT, "icons");
 
