@@ -38,6 +38,14 @@ async function runOnce() {
 }
 
 export function startLicenseHeartbeat() {
+  // Kill switch: em instalações sem NOXILON Central ainda, evita chamadas
+  // periódicas que só logam erro. Defina LICENSE_HEARTBEAT_ENABLED=0 no .env.
+  const enabled = (process.env.LICENSE_HEARTBEAT_ENABLED ?? "1").trim() !== "0";
+  if (!enabled) {
+    console.info("[license-heartbeat] desabilitado via LICENSE_HEARTBEAT_ENABLED=0");
+    return;
+  }
+
   // Roda uma vez logo após o boot (dá 5s para o servidor central estar de pé)
   setTimeout(() => {
     void runOnce();
