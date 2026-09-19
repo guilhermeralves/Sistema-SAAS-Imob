@@ -23,6 +23,7 @@ self.addEventListener("push", event => {
   }
 
   const title = data.title || "AFG Imobiliária";
+  const silent = Boolean(data.silent);
   const options = {
     body: data.body || "",
     icon: "/icons/icon-192.png",
@@ -32,7 +33,11 @@ self.addEventListener("push", event => {
     // explícitos para atualizar a posição sem incomodar a cada mudança.
     renotify:
       typeof data.renotify === "boolean" ? data.renotify : Boolean(data.tag),
-    silent: Boolean(data.silent),
+    silent,
+    // Padrão de vibração. No Android o Chrome usa este campo como sinal de
+    // importância — sem vibrate, a notificação chega sem som mesmo com
+    // silent=false. Respeitamos silent=true (roleta) omitindo a vibração.
+    vibrate: silent ? undefined : [200, 100, 200],
     // Mantém a notificação fixa na bandeja (ex.: posição na roleta) até o
     // usuário interagir. Suporte varia por plataforma (melhor no Android).
     requireInteraction: Boolean(data.requireInteraction),
