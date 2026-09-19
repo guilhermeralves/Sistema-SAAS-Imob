@@ -1,4 +1,4 @@
-# Documentação do Projeto AFG_SITE
+# Documentação do Projeto Sistema-SAAS-Imob
 
 Esta pasta organiza o contexto do projeto para humanos e agentes de IA.
 

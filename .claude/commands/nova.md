@@ -1,9 +1,9 @@
 ---
-description: Inicia uma nova funcionalidade do zero seguindo a arquitetura do AFG_SITE
+description: Inicia uma nova funcionalidade do zero seguindo a arquitetura do Sistema-SAAS-Imob
 argument-hint: <descrição da funcionalidade>
 ---
 
-Você vai iniciar uma nova funcionalidade no AFG_SITE: **$ARGUMENTS**
+Você vai iniciar uma nova funcionalidade no Sistema-SAAS-Imob: **$ARGUMENTS**
 
 Siga este processo (baseado em `AGENTS.md`). NÃO comece a editar código antes de entender o contexto.
 
@@ -38,4 +38,4 @@ Faça alterações pequenas, coesas e localizadas. Não use `any` sem justificat
 3. Atualize a doc do módulo em `docs/` se a arquitetura mudou.
 4. Resuma o que foi alterado, onde e por quê.
 
-Lembre: o AFG_SITE vai virar SaaS multi-imobiliária no futuro — ao desenhar dados, considere isolamento por tenant quando fizer sentido.
+Lembre: o Sistema-SAAS-Imob vai virar SaaS multi-imobiliária no futuro — ao desenhar dados, considere isolamento por tenant quando fizer sentido.

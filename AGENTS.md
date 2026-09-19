@@ -69,7 +69,7 @@ const [addr, setAddr] = useState<AddressValue>({});
 
 ## 1. Visão geral do projeto
 
-O projeto `AFG_SITE` é uma plataforma imobiliária construída com:
+O projeto `Sistema-SAAS-Imob` é uma plataforma imobiliária construída com:
 
 - Frontend em React, TypeScript, Vite e Tailwind CSS 4.
 - Backend em Node.js, Express e tRPC.
