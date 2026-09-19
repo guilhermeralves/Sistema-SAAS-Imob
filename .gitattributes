@@ -1,0 +1,4 @@
+# Shell scripts têm que rodar no Linux (VPS) — força LF sempre.
+# Sem isso, editar/checkout no Windows converte pra CRLF e quebra a
+# execução no server, ou aparece como "modified" no git status do VPS.
+*.sh text eol=lf
