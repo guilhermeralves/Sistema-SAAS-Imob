@@ -11,6 +11,10 @@ async function runOnce() {
   const gate = await loadGateState();
   if (!gate.activated) return;
 
+  if (gate.activation.centralUrl === "dev-bypass") {
+    return;
+  }
+
   const result = await callHeartbeat({
     tenantId: gate.activation.tenantId,
     activationCodeId: gate.activation.activationCodeId,
