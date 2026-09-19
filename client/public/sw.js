@@ -9,6 +9,11 @@ self.addEventListener("activate", event => {
   event.waitUntil(self.clients.claim());
 });
 
+/* Fetch handler mínimo (sem cache): o Chrome exige um listener de fetch
+   registrado para considerar o site instalável como PWA no Android. Não
+   interceptamos as respostas — deixamos o navegador seguir o fluxo padrão. */
+self.addEventListener("fetch", () => {});
+
 self.addEventListener("push", event => {
   let data = {};
   try {
