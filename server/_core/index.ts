@@ -56,6 +56,11 @@ async function startServer() {
   startLicenseHeartbeat();
 
   const app = express();
+  // Rodamos atrás do Nginx em produção. Sem isso o Express ignora
+  // X-Forwarded-Proto e req.protocol vira sempre "http", quebrando
+  // res.cookie({ secure: true }) — o cookie de sessão nunca chega
+  // ao navegador em HTTPS.
+  app.set("trust proxy", 1);
   const server = createServer(app);
   // Configure body parser with larger size limit for file uploads.
   // 150 MB comporta arquivo de até 80 MB (base64 = ~1.33x + folga).
