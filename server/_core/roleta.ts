@@ -69,8 +69,11 @@ export async function notifyQueuePositions(queueId: number) {
             : `Você está participando da Roleta • Sua posição na fila: ${position}`,
           url: "/roleta-atendimentos",
           tag,
-          silent: true,
-          renotify: false,
+          // Silencioso para posições intermediárias (evita apitar toda vez que a
+          // fila muda). Toca som quando o corretor vira o próximo — momento
+          // importante que ele precisa ouvir.
+          silent: !isNext,
+          renotify: isNext,
           requireInteraction: true,
         });
       })
