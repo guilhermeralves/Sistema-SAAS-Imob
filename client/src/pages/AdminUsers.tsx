@@ -403,140 +403,147 @@ export default function AdminUsers() {
             }}
           >
             <DialogTrigger asChild>
-              <Button className="gap-2 rounded-full bg-slate-950 text-white hover:bg-slate-800">
+              <Button className="gap-2">
                 <Plus className="h-4 w-4" />
-                Novo Usuario
+                Novo Usuário
               </Button>
             </DialogTrigger>
             <DialogContent
-              className="max-h-[90vh] w-full max-w-xl overflow-y-auto scrollbar-hidden rounded-[32px] border-white/80 bg-[#f7f6f2] p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)] sm:p-6"
+              className="max-h-[90vh] w-full max-w-2xl overflow-y-auto scrollbar-hidden"
               onOpenAutoFocus={event => event.preventDefault()}
             >
-              <DialogHeader className="space-y-3 pb-2">
-                <DialogTitle className="text-2xl font-semibold tracking-tight text-slate-950">Criar Usuario</DialogTitle>
-                <DialogDescription className="text-slate-600">
+              <DialogHeader>
+                <DialogTitle>Criar Usuário</DialogTitle>
+                <DialogDescription>
                   Crie contas de cliente, corretor ou admin.
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="space-y-5">
-                <div className="space-y-2">
-                  <Label htmlFor="create-name">Nome</Label>
-                  <Input
-                    id="create-name"
-                    className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
-                    value={createForm.name}
-                    onChange={event =>
-                      setCreateForm(current => ({ ...current, name: event.target.value }))
-                    }
-                  />
+              <div className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="create-name">Nome</Label>
+                    <Input
+                      id="create-name"
+                      value={createForm.name}
+                      onChange={event =>
+                        setCreateForm(current => ({ ...current, name: event.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="create-cpf">CPF</Label>
+                    <Input
+                      id="create-cpf"
+                      value={createForm.cpf}
+                      inputMode="numeric"
+                      maxLength={14}
+                      onChange={event =>
+                        setCreateForm(current => ({ ...current, cpf: formatCpf(event.target.value) }))
+                      }
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="create-cpf">CPF</Label>
-                  <Input
-                    id="create-cpf"
-                    className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
-                    value={createForm.cpf}
-                    inputMode="numeric"
-                    maxLength={14}
-                    onChange={event =>
-                      setCreateForm(current => ({ ...current, cpf: formatCpf(event.target.value) }))
-                    }
-                  />
-                </div>
+
                 {leadLinkPreview ? (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                  <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
                     <div className="flex items-start gap-2">
                       <AlertTriangle className="mt-0.5 h-4 w-4" />
                       <div className="space-y-1">
                         <p className="font-medium">
-                          Esse usuario ja e um lead e sera vinculado automaticamente.
+                          Esse usuário já é um lead e será vinculado automaticamente.
                         </p>
                         <p>
                           Interesse anterior: {formatLeadInterest(leadLinkPreview.latestInterest)}
                         </p>
                         <p>
-                          Origem: {leadLinkPreview.latestOrigin || "Nao informada"} â€¢{" "}
+                          Origem: {leadLinkPreview.latestOrigin || "Não informada"} •{" "}
                           {leadLinkPreview.leadCount} lead(s)
                         </p>
                       </div>
                     </div>
                   </div>
                 ) : null}
-                <div className="space-y-2">
-                  <Label htmlFor="create-email">E-mail</Label>
-                  <Input
-                    id="create-email"
-                    type="email"
-                    className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
-                    value={createForm.email}
-                    onChange={event =>
-                      setCreateForm(current => ({ ...current, email: event.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="create-password">Senha</Label>
-                  <Input
-                    id="create-password"
-                    type="password"
-                    minLength={8}
-                    className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
-                    value={createForm.password}
-                    onChange={event =>
-                      setCreateForm(current => ({ ...current, password: event.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Papel</Label>
-                  <Select
-                    value={createForm.role}
-                    onValueChange={value =>
-                      setCreateForm(current => ({
-                        ...current,
-                        role: value as AppRole,
-                      }))
-                    }
-                  >
-                    <SelectTrigger className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="cliente">Cliente</SelectItem>
-                      <SelectItem value="corretor">Corretor</SelectItem>
-                      <SelectItem value="administrativo">Admin</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                {createForm.role === "corretor" ? (
+
+                <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="create-creci">CRECI</Label>
+                    <Label htmlFor="create-email">E-mail</Label>
                     <Input
-                      id="create-creci"
-                      className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
-                      value={createForm.creci}
-                      inputMode="text"
-                      maxLength={10}
-                      placeholder="123456/SP"
+                      id="create-email"
+                      type="email"
+                      value={createForm.email}
                       onChange={event =>
-                        setCreateForm(current => ({
-                          ...current,
-                          creci: formatCreci(event.target.value),
-                        }))
+                        setCreateForm(current => ({ ...current, email: event.target.value }))
                       }
                     />
-                    <p className="text-xs text-muted-foreground">
-                      Cadastro feito por admin entra como validado automaticamente.
-                    </p>
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="create-password">Senha</Label>
+                    <Input
+                      id="create-password"
+                      type="password"
+                      minLength={8}
+                      value={createForm.password}
+                      onChange={event =>
+                        setCreateForm(current => ({ ...current, password: event.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Papel</Label>
+                    <Select
+                      value={createForm.role}
+                      onValueChange={value =>
+                        setCreateForm(current => ({
+                          ...current,
+                          role: value as AppRole,
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="cliente">Cliente</SelectItem>
+                        <SelectItem value="corretor">Corretor</SelectItem>
+                        <SelectItem value="administrativo">Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {createForm.role === "corretor" ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="create-creci">CRECI</Label>
+                      <Input
+                        id="create-creci"
+                        value={createForm.creci}
+                        inputMode="text"
+                        maxLength={10}
+                        placeholder="123456/SP"
+                        onChange={event =>
+                          setCreateForm(current => ({
+                            ...current,
+                            creci: formatCreci(event.target.value),
+                          }))
+                        }
+                      />
+                    </div>
+                  ) : null}
+                </div>
+                {createForm.role === "corretor" ? (
+                  <p className="text-xs text-muted-foreground">
+                    Cadastro feito por admin entra como validado automaticamente.
+                  </p>
                 ) : null}
+
                 <Button
-                  className="w-full rounded-full bg-emerald-700 text-white shadow-[0_18px_40px_-28px_rgba(4,120,87,0.75)] hover:bg-emerald-800"
+                  className="w-full"
                   disabled={createUser.isPending}
                   onClick={() => submitCreateUser(false)}
                 >
-                  {createUser.isPending ? "Criando..." : "Criar usuario"}
+                  {createUser.isPending ? "Criando..." : "Criar usuário"}
                 </Button>
               </div>
             </DialogContent>
@@ -808,29 +815,28 @@ export default function AdminUsers() {
 
         <Dialog open={Boolean(editState)} onOpenChange={open => !open && setEditState(null)}>
             <DialogContent
-              className="max-h-[90vh] w-full max-w-xl overflow-y-auto scrollbar-hidden rounded-[32px] border-white/80 bg-[#f7f6f2] p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)] sm:p-6"
+              className="max-h-[90vh] w-full max-w-2xl overflow-y-auto scrollbar-hidden"
               onOpenAutoFocus={event => event.preventDefault()}
             >
-              <DialogHeader className="space-y-3 pb-2">
-                <DialogTitle className="text-2xl font-semibold tracking-tight text-slate-950">
-                  {editState?.passwordOnly ? "Trocar senha do Administrador" : "Editar Usuario"}
+              <DialogHeader>
+                <DialogTitle>
+                  {editState?.passwordOnly ? "Trocar senha do Administrador" : "Editar Usuário"}
                 </DialogTitle>
-                <DialogDescription className="text-slate-600">
+                <DialogDescription>
                   {editState?.passwordOnly
                     ? "Para o admin principal, somente a senha pode ser alterada."
-                    : "Atualize papel, status e senha quando necessario."}
+                    : "Atualize papel, status e senha quando necessário."}
                 </DialogDescription>
               </DialogHeader>
 
               {editState && (
-              <div className="space-y-5">
+              <div className="space-y-4">
                 {editState.passwordOnly ? null : (
                   <>
                     <div className="space-y-2">
                       <Label htmlFor="edit-name">Nome</Label>
                       <Input
                         id="edit-name"
-                        className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                         value={editState.name}
                         onChange={event =>
                           setEditState(current =>
@@ -841,48 +847,50 @@ export default function AdminUsers() {
                         }
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label>Papel</Label>
-                      <Select
-                        value={editState.role}
-                        onValueChange={value =>
-                          setEditState(current =>
-                            current
-                              ? { ...current, role: value as EditableRole }
-                              : current
-                          )
-                        }
-                      >
-                        <SelectTrigger className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="cliente">Cliente</SelectItem>
-                          <SelectItem value="corretor">Corretor</SelectItem>
-                          <SelectItem value="administrativo">Admin</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Status</Label>
-                      <Select
-                        value={editState.isActive}
-                        onValueChange={value =>
-                          setEditState(current =>
-                            current
-                              ? { ...current, isActive: value as "0" | "1" }
-                              : current
-                          )
-                        }
-                      >
-                        <SelectTrigger className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="1">Ativo</SelectItem>
-                          <SelectItem value="0">Inativo</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Papel</Label>
+                        <Select
+                          value={editState.role}
+                          onValueChange={value =>
+                            setEditState(current =>
+                              current
+                                ? { ...current, role: value as EditableRole }
+                                : current
+                            )
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="cliente">Cliente</SelectItem>
+                            <SelectItem value="corretor">Corretor</SelectItem>
+                            <SelectItem value="administrativo">Admin</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Status</Label>
+                        <Select
+                          value={editState.isActive}
+                          onValueChange={value =>
+                            setEditState(current =>
+                              current
+                                ? { ...current, isActive: value as "0" | "1" }
+                                : current
+                            )
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="1">Ativo</SelectItem>
+                            <SelectItem value="0">Inativo</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
                   </>
                 )}
@@ -893,7 +901,6 @@ export default function AdminUsers() {
                     type="password"
                     minLength={8}
                     placeholder="Deixe em branco para manter"
-                    className="rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base"
                     value={editState.password}
                     onChange={event =>
                       setEditState(current =>
@@ -905,7 +912,7 @@ export default function AdminUsers() {
                   />
                 </div>
                 <Button
-                  className="w-full rounded-full bg-emerald-700 text-white shadow-[0_18px_40px_-28px_rgba(4,120,87,0.75)] hover:bg-emerald-800"
+                  className="w-full"
                   disabled={updateUser.isPending}
                   onClick={() => {
                     if (editState.passwordOnly && !editState.password) {
@@ -914,7 +921,7 @@ export default function AdminUsers() {
                     }
 
                     if (editState.password && editState.password.trim().length < 8) {
-                      toast.error("A senha deve ter no minimo 8 caracteres.");
+                      toast.error("A senha deve ter no mínimo 8 caracteres.");
                       return;
                     }
 
@@ -934,7 +941,7 @@ export default function AdminUsers() {
                     );
                   }}
                 >
-                  {updateUser.isPending ? "Salvando..." : "Salvar alteracoes"}
+                  {updateUser.isPending ? "Salvando..." : "Salvar alterações"}
                 </Button>
               </div>
             )}
@@ -942,19 +949,19 @@ export default function AdminUsers() {
         </Dialog>
 
         <AlertDialog open={createConfirmOpen} onOpenChange={setCreateConfirmOpen}>
-          <AlertDialogContent className="rounded-[32px] border-white/80 bg-[#f7f6f2] shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)]">
+          <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle className="text-2xl font-semibold tracking-tight text-slate-950">Confirmar vinculacao com lead existente?</AlertDialogTitle>
-              <AlertDialogDescription className="text-slate-600">
+              <AlertDialogTitle>Confirmar vinculação com lead existente?</AlertDialogTitle>
+              <AlertDialogDescription>
                 {leadLinkPreview
-                  ? `Esse usuario ja e um lead e tem interesse em: ${formatLeadInterest(leadLinkPreview.latestInterest)}. O sistema vinculara o acesso de usuario ao lead.`
-                  : "Nao ha lead para vincular."}
+                  ? `Esse usuário já é um lead e tem interesse em: ${formatLeadInterest(leadLinkPreview.latestInterest)}. O sistema vinculará o acesso de usuário ao lead.`
+                  : "Não há lead para vincular."}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel className="rounded-full">Voltar</AlertDialogCancel>
-              <AlertDialogAction className="rounded-full bg-slate-950 text-white hover:bg-slate-800" onClick={() => submitCreateUser(true)}>
-                Confirmar e criar usuario
+              <AlertDialogCancel>Voltar</AlertDialogCancel>
+              <AlertDialogAction onClick={() => submitCreateUser(true)}>
+                Confirmar e criar usuário
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -962,21 +969,21 @@ export default function AdminUsers() {
 
         <Dialog open={deleteState !== null} onOpenChange={open => !open && setDeleteState(null)}>
           <DialogContent
-            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto scrollbar-hidden rounded-[32px] border-white/80 bg-[#f7f6f2] p-4 shadow-[0_30px_80px_-40px_rgba(15,23,42,0.6)] sm:p-6"
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto scrollbar-hidden"
             onOpenAutoFocus={event => event.preventDefault()}
           >
-            <DialogHeader className="space-y-3 pb-2">
-              <DialogTitle className="text-2xl font-semibold tracking-tight text-slate-950">
+            <DialogHeader>
+              <DialogTitle>
                 {deletePreview?.mode === "revoke_access"
                   ? deletePreview.isSelf
-                    ? "Voce ira excluir o proprio acesso de usuario?"
+                    ? "Você irá excluir o próprio acesso de usuário?"
                     : "Revogar acesso deste administrador?"
-                  : "Excluir usuario?"}
+                  : "Excluir usuário?"}
               </DialogTitle>
-              <DialogDescription className="text-slate-600">
+              <DialogDescription>
                 {deletePreview?.mode === "revoke_access"
-                  ? "Os dados do perfil permanecerao no sistema. Apenas o acesso sera removido."
-                  : "A exclusao remove o cadastro de acesso do sistema. Se houver lead vinculado, voce pode manter ou apagar esse historico comercial."}
+                  ? "Os dados do perfil permanecerão no sistema. Apenas o acesso será removido."
+                  : "A exclusão remove o cadastro de acesso do sistema. Se houver lead vinculado, você pode manter ou apagar esse histórico comercial."}
               </DialogDescription>
             </DialogHeader>
 
@@ -992,16 +999,16 @@ export default function AdminUsers() {
               </div>
             ) : deletePreview ? (
               <div className="space-y-4">
-                <div className="rounded-2xl border border-white/80 bg-white/90 p-4 text-sm shadow-sm">
-                  <p><strong>Usuario:</strong> {deletePreview.user.name || "Sem nome"}</p>
-                  <p><strong>E-mail:</strong> {deletePreview.user.email || "Nao informado"}</p>
+                <div className="rounded-md border border-border bg-muted/50 p-4 text-sm">
+                  <p><strong>Usuário:</strong> {deletePreview.user.name || "Sem nome"}</p>
+                  <p><strong>E-mail:</strong> {deletePreview.user.email || "Não informado"}</p>
                   <p><strong>Papel:</strong> {ROLE_LABELS[deletePreview.user.role]}</p>
                   <p><strong>Status:</strong> {deletePreview.user.isActive === 1 ? "Ativo" : "Inativo"}</p>
                 </div>
 
                 {isProtectedRootAdmin ? (
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                    O admin principal do sistema e protegido e nao pode ser excluido.
+                  <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                    O admin principal do sistema é protegido e não pode ser excluído.
                   </div>
                 ) : null}
 
@@ -1010,21 +1017,21 @@ export default function AdminUsers() {
                     <div>
                       <p className="text-sm font-medium">Lead(s) vinculado(s)</p>
                       <p className="text-sm text-muted-foreground">
-                        Encontramos {deletePreview.linkedLeads.length} lead(s) ligado(s) a este usuario.
+                        Encontramos {deletePreview.linkedLeads.length} lead(s) ligado(s) a este usuário.
                       </p>
                     </div>
-                    <div className="space-y-2 rounded-2xl border border-white/80 bg-white/90 p-3 shadow-sm">
+                    <div className="space-y-2 rounded-md border border-border bg-muted/50 p-3">
                       {deletePreview.linkedLeads.map(lead => (
-                        <div key={lead.id} className="rounded-xl border border-slate-200 bg-white p-3 text-sm">
+                        <div key={lead.id} className="rounded-md border border-border bg-card p-3 text-sm">
                           <p><strong>Lead #{lead.id}:</strong> {lead.nome}</p>
                           <p><strong>Interesse:</strong> {formatLeadInterest(lead.interesse)}</p>
-                          <p><strong>Origem:</strong> {lead.origem || "Nao informada"}</p>
+                          <p><strong>Origem:</strong> {lead.origem || "Não informada"}</p>
                           <p><strong>Status:</strong> {lead.status}</p>
                         </div>
                       ))}
                     </div>
                     {deletePreview.mode === "delete_user" ? (
-                      <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                      <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-3">
                         <Checkbox
                           id="delete-linked-leads"
                           checked={deleteState?.deleteLinkedLeads === true}
@@ -1038,10 +1045,10 @@ export default function AdminUsers() {
                         />
                         <div className="space-y-1">
                           <Label htmlFor="delete-linked-leads" className="cursor-pointer font-medium">
-                            Apagar o lead junto com o usuario
+                            Apagar o lead junto com o usuário
                           </Label>
                           <p className="text-sm text-muted-foreground">
-                            Se esta opcao ficar desmarcada, o lead sera mantido no CRM e apenas perdera o vinculo com o usuario.
+                            Se esta opção ficar desmarcada, o lead será mantido no CRM e apenas perderá o vínculo com o usuário.
                           </p>
                         </div>
                       </div>
@@ -1066,8 +1073,8 @@ export default function AdminUsers() {
                     {deleteUser.isPending
                       ? "Processando..."
                       : deletePreview.mode === "revoke_access"
-                        ? "Confirmar revogacao"
-                        : "Confirmar exclusao"}
+                        ? "Confirmar revogação"
+                        : "Confirmar exclusão"}
                   </Button>
                 </div>
               </div>
