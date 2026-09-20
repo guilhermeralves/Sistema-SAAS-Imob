@@ -1420,6 +1420,19 @@ export async function createLead(data: InsertLead) {
     .returning();
 }
 
+export async function getLeadByBotconversaSubscriberId(subscriberId: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+
+  const rows = await db
+    .select()
+    .from(leads)
+    .where(eq(leads.botconversaSubscriberId, subscriberId))
+    .limit(1);
+
+  return rows[0];
+}
+
 export async function updateLead(id: number, data: Partial<InsertLead>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

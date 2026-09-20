@@ -445,6 +445,9 @@ export const leads = pgTable("leads", {
   userId: integer("userId"), // conta vinculada por CPF quando existir
   idResponsavel: integer("idResponsavel"), // ID do corretor/admin responsavel
   idImovel: integer("idImovel"), // ID do imovel de interesse (opcional)
+  // ID do contato (subscriber) no BotConversa. Guardado para chamar a API
+  // do BotConversa (transferir conversa, marcar como atendido, etc).
+  botconversaSubscriberId: varchar("botconversaSubscriberId", { length: 64 }),
   assignmentCycleStartedAt: timestamp("assignmentCycleStartedAt", {
     mode: "date",
   })

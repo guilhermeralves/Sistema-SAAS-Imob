@@ -1,21 +1,33 @@
 import type { Express, Request, Response } from "express";
 
 /**
- * Webhook público que recebe eventos do BotConversa. Configuração no
- * BotConversa: crie um fluxo que dispara "ao receber mensagem" e
- * adicione um nó "Webhook" chamando:
+ * Webhooks públicos que recebem eventos do BotConversa.
  *
- *   POST https://SEU_DOMINIO/api/webhooks/botconversa
- *   Header:  X-Webhook-Secret: <valor do BOTCONVERSA_WEBHOOK_SECRET no .env>
- *   Body:    JSON com pelo menos { phone, full_name?, message? }
- *
- * O handler:
- *   1. Valida o secret (rejeita 401 se não bater);
- *   2. Extrai telefone/nome/mensagem (aceita várias chaves comuns);
- *   3. Reusa lead existente por telefone ou cria um novo;
- *   4. Chama distributeLeadToRoleta — assumido corretor, notifica push,
- *      registra interação. Se não há fila padrão configurada, o lead
- *      fica sem responsável e o SLA existente cuida como fallback.
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ 1) POST /api/webhooks/botconversa — LEAD NOVO                            │
+ * │                                                                          │
+ * │  Configuração no BotConversa: crie um fluxo que dispara "ao receber       │
+ * │  mensagem" e adicione um nó "Webhook" chamando:                          │
+ * │                                                                          │
+ * │    POST https://SEU_DOMINIO/api/webhooks/botconversa                     │
+ * │    Header:  X-Webhook-Secret: <valor do BOTCONVERSA_WEBHOOK_SECRET>      │
+ * │    Body:    JSON com pelo menos { phone, full_name?, message?,          │
+ * │             subscriber_id? }                                             │
+ * │                                                                          │
+ * │  Cria/atualiza o lead, guarda o subscriber_id e aciona a roleta.         │
+ * ├──────────────────────────────────────────────────────────────────────────┤
+ * │ 2) POST /api/webhooks/botconversa/attended — CORRETOR ATENDEU            │
+ * │                                                                          │
+ * │  Configuração no BotConversa: crie um fluxo que dispara "quando gerente  │
+ * │  envia mensagem" e adicione um nó "Webhook" chamando:                    │
+ * │                                                                          │
+ * │    POST https://SEU_DOMINIO/api/webhooks/botconversa/attended            │
+ * │    Header:  X-Webhook-Secret: <valor do BOTCONVERSA_WEBHOOK_SECRET>      │
+ * │    Body:    JSON com pelo menos { subscriber_id }                        │
+ * │                                                                          │
+ * │  Marca o lead como atendido (attendedAt = agora, status = atendimento),  │
+ * │  parando a fiscalização do SLA.                                          │
+ * └──────────────────────────────────────────────────────────────────────────┘
  */
 
 function pickString(source: Record<string, unknown>, keys: string[]): string | null {
@@ -32,20 +44,24 @@ function normalizeTelefone(raw: string) {
   return digits.length > 0 ? digits : null;
 }
 
-async function handle(req: Request, res: Response) {
+function validateSecret(req: Request, res: Response): boolean {
   const expected = (process.env.BOTCONVERSA_WEBHOOK_SECRET ?? "").trim();
-  if (expected) {
-    const provided = String(
-      req.headers["x-webhook-secret"] ??
-        req.headers["X-Webhook-Secret"] ??
-        req.query.secret ??
-        ""
-    ).trim();
-    if (provided !== expected) {
-      res.status(401).json({ ok: false, message: "invalid secret" });
-      return;
-    }
+  if (!expected) return true;
+  const provided = String(
+    req.headers["x-webhook-secret"] ??
+      req.headers["X-Webhook-Secret"] ??
+      req.query.secret ??
+      ""
+  ).trim();
+  if (provided !== expected) {
+    res.status(401).json({ ok: false, message: "invalid secret" });
+    return false;
   }
+  return true;
+}
+
+async function handleNewLead(req: Request, res: Response) {
+  if (!validateSecret(req, res)) return;
 
   const body = (req.body ?? {}) as Record<string, unknown>;
 
@@ -85,7 +101,6 @@ async function handle(req: Request, res: Response) {
 
     if (existing) {
       leadId = existing.id;
-      // Só atualiza observação/nome se veio algo novo.
       const nextObs = mensagem
         ? [existing.observacao ?? "", `[BotConversa] ${mensagem}`]
             .filter(Boolean)
@@ -97,6 +112,8 @@ async function handle(req: Request, res: Response) {
           : nome,
         origem: existing.origem ?? "whatsapp",
         observacao: nextObs,
+        // Só grava/atualiza se o valor veio no payload.
+        ...(subscriberId ? { botconversaSubscriberId: subscriberId } : {}),
       });
       await createLeadInteraction({
         idLead: existing.id,
@@ -112,11 +129,10 @@ async function handle(req: Request, res: Response) {
         telefone,
         origem: "whatsapp",
         status: "novo",
+        botconversaSubscriberId: subscriberId ?? null,
         observacao: mensagem
-          ? `[BotConversa] ${mensagem}${subscriberId ? `\n(subscriber_id: ${subscriberId})` : ""}`
-          : subscriberId
-            ? `subscriber_id BotConversa: ${subscriberId}`
-            : null,
+          ? `[BotConversa] ${mensagem}`
+          : null,
       });
       leadId = created.id;
       await createLeadInteraction({
@@ -127,7 +143,6 @@ async function handle(req: Request, res: Response) {
       });
     }
 
-    // Aciona a roleta — assigna ao próximo, notifica push, atualiza fila.
     const assignedTo = await distributeLeadToRoleta({
       id: leadId,
       nome,
@@ -147,8 +162,77 @@ async function handle(req: Request, res: Response) {
   }
 }
 
+async function handleAttended(req: Request, res: Response) {
+  if (!validateSecret(req, res)) return;
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+
+  const subscriberId = pickString(body, [
+    "subscriber_id",
+    "id",
+    "contact_id",
+  ]);
+  if (!subscriberId) {
+    res
+      .status(400)
+      .json({ ok: false, message: "campo subscriber_id ausente" });
+    return;
+  }
+
+  // Opcional: identidade de quem atendeu, apenas para o histórico.
+  const managerName = pickString(body, ["manager_name", "agent_name"]);
+  const managerId = pickString(body, ["manager_id", "agent_id"]);
+
+  try {
+    const {
+      getLeadByBotconversaSubscriberId,
+      updateLead,
+      createLeadInteraction,
+    } = await import("./db");
+
+    const lead = await getLeadByBotconversaSubscriberId(subscriberId);
+    if (!lead) {
+      res
+        .status(404)
+        .json({ ok: false, message: "lead com esse subscriber_id não encontrado" });
+      return;
+    }
+
+    if (lead.attendedAt) {
+      // Idempotência: se já foi atendido antes, só confirma. Evita
+      // resetar o histórico se o BotConversa reenviar o evento.
+      res.status(200).json({ ok: true, leadId: lead.id, alreadyAttended: true });
+      return;
+    }
+
+    const now = new Date();
+    await updateLead(lead.id, {
+      attendedAt: now,
+      status: "atendimento",
+    });
+
+    const who = managerName || managerId || "corretor";
+    await createLeadInteraction({
+      idLead: lead.id,
+      idUsuario: null,
+      eventType: "botconversa_attended",
+      message: `Lead atendido no BotConversa por ${who}. Fiscalização do SLA encerrada.`,
+    });
+
+    res.status(200).json({ ok: true, leadId: lead.id, attendedAt: now.toISOString() });
+  } catch (err) {
+    console.error("[botconversa-webhook-attended] erro:", err);
+    res
+      .status(500)
+      .json({ ok: false, message: err instanceof Error ? err.message : "erro" });
+  }
+}
+
 export function registerBotConversaWebhook(app: Express) {
   app.post("/api/webhooks/botconversa", (req, res) => {
-    void handle(req, res);
+    void handleNewLead(req, res);
+  });
+  app.post("/api/webhooks/botconversa/attended", (req, res) => {
+    void handleAttended(req, res);
   });
 }

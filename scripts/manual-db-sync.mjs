@@ -591,6 +591,15 @@ const patches = [
       );`,
     ],
   },
+  {
+    id: "2026-09-20_leads_botconversa_subscriber_id",
+    description:
+      "Adiciona botconversaSubscriberId em leads para vincular lead ao contato do BotConversa e permitir marcá-lo como atendido via webhook",
+    statements: [
+      `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "botconversaSubscriberId" varchar(64);`,
+      `CREATE INDEX IF NOT EXISTS "leads_botconversaSubscriberId_idx" ON "leads" ("botconversaSubscriberId");`,
+    ],
+  },
 ];
 
 async function ensureManualMigrationsTable(client) {
