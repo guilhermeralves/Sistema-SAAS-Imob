@@ -7,7 +7,7 @@ function ensureConfigured(): boolean {
   if (configured) return true;
   if (!ENV.vapidPublicKey || !ENV.vapidPrivateKey) return false;
   webpush.setVapidDetails(
-    ENV.vapidSubject || "mailto:contato@afg.com",
+    ENV.vapidSubject || "mailto:contato@new.com",
     ENV.vapidPublicKey,
     ENV.vapidPrivateKey
   );

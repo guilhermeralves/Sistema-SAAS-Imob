@@ -1,4 +1,4 @@
-# AFG IMOBILIÁRIA - TODO
+# NEW IMOBILIÁRIA - TODO
 
 > Fonte da verdade do progresso. Atualize ao concluir/iniciar funcionalidades —
 > agentes de IA leem este arquivo para saber o que fazer.

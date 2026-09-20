@@ -66,7 +66,7 @@ import {
 import { toast } from "sonner";
 
 const WHATSAPP_NUMBER = "5511999999999";
-const CONTACT_INTEREST_PROPERTY_STORAGE_KEY = "afg:contact-interest-property";
+const CONTACT_INTEREST_PROPERTY_STORAGE_KEY = "new:contact-interest-property";
 const LEGAL_FIELD_CLASS = "rounded-2xl border-slate-200 bg-white/90 text-sm shadow-sm sm:text-base";
 
 function formatCurrency(value: number) {

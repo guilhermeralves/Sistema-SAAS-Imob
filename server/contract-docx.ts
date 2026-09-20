@@ -17,7 +17,7 @@ export class ContractDocxFillError extends Error {
   }
 }
 
-const FOOTER_PART_NAME = "word/footer_afg.xml";
+const FOOTER_PART_NAME = "word/footer_new.xml";
 const FOOTER_RELATIONSHIP_TYPE =
   "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer";
 const FOOTER_CONTENT_TYPE =
@@ -264,8 +264,8 @@ function createSharedFooter(
     `${footerParagraph}</w:ftr>`;
   zip.file(FOOTER_PART_NAME, footerXml);
 
-  // Relationship document.xml -> footer_afg.xml
-  const relationship = `<Relationship Id="${relId}" Type="${FOOTER_RELATIONSHIP_TYPE}" Target="footer_afg.xml"/>`;
+  // Relationship document.xml -> footer_new.xml
+  const relationship = `<Relationship Id="${relId}" Type="${FOOTER_RELATIONSHIP_TYPE}" Target="footer_new.xml"/>`;
   const updatedRels = relsXml.replace(
     /<\/Relationships>\s*$/,
     `${relationship}</Relationships>`

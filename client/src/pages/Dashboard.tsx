@@ -324,7 +324,7 @@ export default function Dashboard() {
       recentClients: [...newClients].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 4).map(item => ({
         id: `client-${item.id}`,
         title: item.name || item.email || `Cliente #${item.id}`,
-        subtitle: "Conta criada no portal da AFG",
+        subtitle: "Conta criada no portal da New",
         date: item.createdAt,
         tone: "emerald" as const,
       })),
@@ -491,7 +491,7 @@ export default function Dashboard() {
                   <div className="max-w-2xl space-y-2">
                     <p className="text-base text-slate-700 md:text-lg">
                       {isAdmin
-                        ? "Acompanhe a evolução comercial e operacional da AFG em um painel mais executivo."
+                        ? "Acompanhe a evolução comercial e operacional da New em um painel mais executivo."
                         : "Acompanhe seus leads, a carteira de imóveis e uma prévia do desempenho do período."}
                     </p>
                     <p className="text-sm text-slate-600">Os dados consideram sempre o período selecionado.</p>

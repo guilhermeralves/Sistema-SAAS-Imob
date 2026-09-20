@@ -88,7 +88,7 @@ No iPhone, o push **só funciona com o site instalado na tela inicial** e em
 2. Faça login no sistema com seu usuário de corretor/admin.
 3. Toque no botão **Compartilhar** (quadrado com seta para cima).
 4. Toque em **"Adicionar à Tela de Início"** → **Adicionar**.
-5. Feche o Safari e **abra o app pela tela inicial** (o ícone da AFG).
+5. Feche o Safari e **abra o app pela tela inicial** (o ícone da New).
 
 > No **Android** é mais simples: pode usar direto no Chrome. Se quiser, use o menu
 > do Chrome → "Instalar app" / "Adicionar à tela inicial".
@@ -121,7 +121,7 @@ No iPhone, o push **só funciona com o site instalado na tela inicial** e em
 - **iPhone não mostra "Ativar notificações"**: confirme iOS ≥ 16.4 e que abriu
   pelo **ícone instalado** (não pela aba do Safari).
 - **"Notificações bloqueadas no navegador"**: você negou a permissão antes. No
-  iPhone: Ajustes → Notificações → AFG. No Android/Chrome: cadeado da página →
+  iPhone: Ajustes → Notificações → New. No Android/Chrome: cadeado da página →
   Permissões → Notificações.
 - **Túnel mudou de URL**: a cada `cloudflared`/`ngrok` reiniciado a URL muda.
   Reinstale o PWA com a nova URL (a inscrição antiga deixa de valer).
@@ -132,7 +132,7 @@ No iPhone, o push **só funciona com o site instalado na tela inicial** e em
 
 ## Quando for para a nuvem
 
-Em produção, com um domínio fixo e HTTPS (ex.: `https://app.afgimobiliaria.com.br`),
+Em produção, com um domínio fixo e HTTPS (ex.: `https://app.newimobiliaria.com.br`),
 nada disso de túnel é necessário — o push funciona direto. Basta:
 
 - Definir `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` e `VAPID_SUBJECT` no ambiente

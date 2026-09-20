@@ -106,7 +106,7 @@ export default function Register() {
                         Crie sua conta
                       </h1>
                       <p className="mt-1.5 text-sm leading-6 text-slate-600 sm:text-[15px]">
-                        Cadastre-se para acompanhar os Imóveis, contratos e toda a experiência AFG.
+                        Cadastre-se para acompanhar os Imóveis, contratos e toda a experiência New.
                       </p>
                     </div>
 
@@ -243,7 +243,7 @@ export default function Register() {
                   <div className="relative flex h-full min-h-full overflow-hidden rounded-[32px] bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] xl:rounded-[40px]">
                     <img
                       src="/banner_login_register/desktop.webp"
-                      alt="AFG Imobiliária"
+                      alt="New Imobiliária"
                       className="h-full w-full object-cover"
                     />
                   </div>

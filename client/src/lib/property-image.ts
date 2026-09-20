@@ -2,7 +2,7 @@ const PROPERTY_IMAGE_STORAGE_PREFIX = "/uploads/properties/";
 const PROPERTY_IMAGE_MEDIA_PREFIX = "/api/media/properties/";
 const PROPERTY_IMAGE_VARIANTS = ["large", "thumb"] as const;
 
-export const PROPERTY_IMAGE_REQUEST_HEADER = "x-afg-media-request";
+export const PROPERTY_IMAGE_REQUEST_HEADER = "x-new-media-request";
 export type PropertyImageVariant = (typeof PROPERTY_IMAGE_VARIANTS)[number];
 
 function isSafePropertyImageFileName(value: string) {

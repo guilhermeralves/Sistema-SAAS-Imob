@@ -408,7 +408,7 @@ const patches = [
   {
     id: "2026-08-29_tenants_and_licenses",
     description:
-      "Cria tenants, licenses e licensePayments; seed do tenant AFG e licença ativa",
+      "Cria tenants, licenses e licensePayments; seed do tenant inicial e licença ativa",
     statements: [
       `CREATE TABLE IF NOT EXISTS "tenants" (
         "id" serial PRIMARY KEY NOT NULL,
@@ -454,7 +454,7 @@ const patches = [
       `CREATE INDEX IF NOT EXISTS "licensePayments_tenantId_idx" ON "licensePayments" ("tenantId");`,
 
       `INSERT INTO "tenants" ("slug", "nome", "cidade", "estado")
-       SELECT 'afg', 'AFG Imóveis', 'Interior SP', 'SP'
+       SELECT 'afg', 'New Imobiliária', 'Interior SP', 'SP'
        WHERE NOT EXISTS (SELECT 1 FROM "tenants" WHERE "slug" = 'afg');`,
 
       `INSERT INTO "licenses" ("tenantId", "status", "valorCentavos", "dueDate", "gracePeriodDays")

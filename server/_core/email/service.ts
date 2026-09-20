@@ -58,7 +58,7 @@ export async function sendWelcomeEmail(input: WelcomeEmailInput) {
             ...renderWelcomeBrokerTemplate({ name, appUrl }),
           }
         : {
-            subject: "Bem-vindo(a) a AFG Imobiliaria",
+            subject: "Bem-vindo(a) a New Imobiliária",
             ...renderWelcomeClientTemplate({ name, appUrl }),
           };
 

@@ -8,9 +8,9 @@ type WelcomeBrokerTemplateInput = {
 export function renderWelcomeBrokerTemplate(input: WelcomeBrokerTemplateInput) {
   return renderEmailLayout({
     title: "Seu acesso de corretor foi criado",
-    preheader: "A conta de corretor da AFG esta pronta para uso.",
+    preheader: "A conta de corretor da New esta pronta para uso.",
     greeting: `Ola, ${input.name}!`,
-    intro: "Seu acesso como corretor foi liberado na plataforma da AFG Imobiliaria. Antes de operar, revise seus dados e confirme se o cadastro do CRECI esta correto no seu perfil.",
+    intro: "Seu acesso como corretor foi liberado na plataforma da New Imobiliária. Antes de operar, revise seus dados e confirme se o cadastro do CRECI esta correto no seu perfil.",
     highlights: [
       "Revise seus dados cadastrais no primeiro acesso.",
       "Se o CRECI foi cadastrado pelo admin, ele ja pode aparecer como validado.",
@@ -18,6 +18,6 @@ export function renderWelcomeBrokerTemplate(input: WelcomeBrokerTemplateInput) {
     ],
     ctaLabel: "Entrar na plataforma",
     ctaUrl: input.appUrl,
-    footerText: "Em caso de duvida sobre credenciais, permissao de acesso ou validacao do CRECI, responda este e-mail e fale com a administracao da AFG.",
+    footerText: "Em caso de duvida sobre credenciais, permissao de acesso ou validacao do CRECI, responda este e-mail e fale com a administração da New.",
   });
 }

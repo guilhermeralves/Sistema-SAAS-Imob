@@ -17,7 +17,7 @@ import { useLocation } from "wouter";
 
 const CONTACT_INFO = {
   phone: "(12) 99677-3547",
-  email: "contato@afg.com",
+  email: "contato@new.com",
   address: "Rua Exemplo, 123 - Centro - São Paulo/SP - CEP 01000-000",
   horario: "Segunda a Sexta: 9h às 18h | Sábado: 9h às 13h",
 };
@@ -28,7 +28,7 @@ const WHATSAPP_CONFIG = {
 };
 
 const CAREERS_CONFIG = {
-  email: "contato@afg.com",
+  email: "contato@new.com",
   subject: "Trabalhe Conosco - Apresentação Profissional",
 };
 const CONTACT_INTEREST_OPTIONS = [
@@ -37,7 +37,7 @@ const CONTACT_INTEREST_OPTIONS = [
   { value: "Aquisição Imóvel na Planta", label: "Aquisição Imóvel na Planta" },
   { value: "Avaliação de Imóvel", label: "Avaliação de Imóvel" },
 ];
-const CONTACT_INTEREST_PROPERTY_STORAGE_KEY = "afg:contact-interest-property";
+const CONTACT_INTEREST_PROPERTY_STORAGE_KEY = "new:contact-interest-property";
 const CONTACT_INTEREST_PROPERTY_TTL_MS = 30 * 60 * 1000;
 
 function formatPhoneNumber(value: string) {
@@ -323,7 +323,7 @@ export default function Contato() {
                       <CheckCircle2 className="mx-auto mb-4 h-16 w-16 text-emerald-600" />
                       <h3 className="text-xl font-semibold text-slate-950">Mensagem enviada!</h3>
                       <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-slate-600">
-                        Obrigado pelo contato. A equipe AFG vai analisar sua mensagem e responder em breve.
+                        Obrigado pelo contato. A equipe New vai analisar sua mensagem e responder em breve.
                       </p>
                       <Button
                         onClick={() => setSubmitted(false)}
@@ -503,7 +503,7 @@ export default function Contato() {
                       <div>
                         <p className="font-semibold text-slate-950">Como se apresentar</p>
                         <p className="mt-1 text-sm leading-6 text-slate-600">
-                          Envie seu currículo ou uma breve apresentação profissional com seu interesse de atuação na AFG.
+                          Envie seu currículo ou uma breve apresentação profissional com seu interesse de atuação na New.
                         </p>
                       </div>
                     </div>

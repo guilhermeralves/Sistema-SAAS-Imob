@@ -81,7 +81,7 @@ export default function EvolucaoProfissional() {
               Evolução Profissional
             </h1>
             <p className="max-w-3xl text-slate-600">
-              Estruture caminhos de aprendizado, prática e evolução profissional para parceiros e colaboradores da AFG.
+              Estruture caminhos de aprendizado, prática e evolução profissional para parceiros e colaboradores da New.
             </p>
           </div>
 
@@ -175,7 +175,7 @@ export default function EvolucaoProfissional() {
             <TabsContent value="planejamento">
               <Card className={SURFACE_CARD_CLASS}>
                 <CardHeader>
-                  <CardTitle className="text-slate-950">Planejamento AFG</CardTitle>
+                  <CardTitle className="text-slate-950">Planejamento New</CardTitle>
                   <CardDescription className="text-slate-600">
                     Área reservada para inserir o planejamento oficial das trilhas de desenvolvimento.
                   </CardDescription>

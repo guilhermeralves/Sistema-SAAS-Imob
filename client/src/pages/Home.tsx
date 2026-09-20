@@ -84,7 +84,7 @@ const SERVICES = [
 const CAPTACAO_CONFIG = {
   title: "Quer vender ou alugar seu imóvel?",
   description:
-    "Anuncie com a AFG e coloque seu imóvel dentro da operação que une gestão, segurança e acompanhamento comercial.",
+    "Anuncie com a New e coloque seu imóvel dentro da operação que une gestão, segurança e acompanhamento comercial.",
   ctaText: "Anunciar meu imóvel",
   whatsapp: "5511999999999",
 };
@@ -134,7 +134,7 @@ export default function Home() {
 
   const announceHref = isAuthenticated
     ? `https://wa.me/${CAPTACAO_CONFIG.whatsapp}?text=${encodeURIComponent(
-        "Olá, tudo bem? Gostaria de anunciar meu imóvel na AFG."
+        "Olá, tudo bem? Gostaria de anunciar meu imóvel na New."
       )}`
     : getLoginUrl();
   const announceTarget = isAuthenticated ? "_blank" : undefined;
@@ -184,7 +184,7 @@ export default function Home() {
           <div className="container">
             <div className="mb-8 max-w-2xl">
               <p className="mb-3 inline-flex rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-800">
-                Operação AFG
+                Operação New
               </p>
               <h2 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">
                 Vantagens dos serviços prestados pela nossa equipe.

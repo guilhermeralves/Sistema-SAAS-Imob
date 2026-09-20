@@ -12,7 +12,7 @@ const THUMB_WEBP_QUALITY = 82;
 const PROPERTY_UPLOAD_DIR = path.resolve(import.meta.dirname, "../..", "uploads", "properties");
 const PROPERTY_UPLOAD_STORAGE_PREFIX = "/uploads/properties/";
 export const PROPERTY_IMAGE_MEDIA_PREFIX = "/api/media/properties/";
-export const PROPERTY_IMAGE_REQUEST_HEADER = "x-afg-media-request";
+export const PROPERTY_IMAGE_REQUEST_HEADER = "x-new-media-request";
 export const PROPERTY_IMAGE_VARIANTS = ["large", "thumb"] as const;
 
 export type PropertyImageVariant = (typeof PROPERTY_IMAGE_VARIANTS)[number];

@@ -1,4 +1,4 @@
-/* Service Worker da AFG Imobiliária — responsável por receber e exibir
+/* Service Worker da New Imobiliária — responsável por receber e exibir
    notificações Web Push e abrir a tela certa ao clicar. */
 
 self.addEventListener("install", () => {
@@ -19,10 +19,10 @@ self.addEventListener("push", event => {
   try {
     data = event.data ? event.data.json() : {};
   } catch (error) {
-    data = { title: "AFG Imobiliária", body: event.data ? event.data.text() : "" };
+    data = { title: "New Imobiliária", body: event.data ? event.data.text() : "" };
   }
 
-  const title = data.title || "AFG Imobiliária";
+  const title = data.title || "New Imobiliária";
   const silent = Boolean(data.silent);
   const options = {
     body: data.body || "",

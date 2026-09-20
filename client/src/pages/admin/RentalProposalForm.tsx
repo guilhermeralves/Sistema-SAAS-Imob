@@ -1990,7 +1990,7 @@ function RentalInspectionPanel({
             {link && waLink ? (
               <a
                 href={waLink}
-                target="afgWhatsApp"
+                target="newWhatsApp"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
               >
@@ -2064,7 +2064,7 @@ function RentalInspectionPanel({
           {requested && waLink ? (
             <a
               href={waLink}
-              target="afgWhatsApp"
+              target="newWhatsApp"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
             >

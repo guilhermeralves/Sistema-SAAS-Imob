@@ -20,13 +20,13 @@ import {
 import { Eye, EyeOff, LockKeyhole, Mail } from "lucide-react";
 import { toast } from "sonner";
 
-const REMEMBER_EMAIL_KEY = "afg_login_remember_email";
-const SUPPORT_EMAIL = "contato@afg.com";
+const REMEMBER_EMAIL_KEY = "new_login_remember_email";
+const SUPPORT_EMAIL = "contato@new.com";
 
 function buildForgotPasswordMailto(email: string) {
-  const subject = "Recuperação de acesso - AFG Imobiliária";
+  const subject = "Recuperação de acesso - New Imobiliária";
   const body = [
-    "Olá, equipe AFG.",
+    "Olá, equipe New.",
     "",
     "Preciso de apoio para recuperar meu acesso ao sistema.",
     email ? `E-mail da conta: ${email}` : "E-mail da conta:",
@@ -271,7 +271,7 @@ export default function Login() {
                               </div>
 
                               <div className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-3 text-sm leading-6 text-slate-600">
-                                O botão abaixo abre seu e-mail padrão para falar com a equipe AFG.
+                                O botão abaixo abre seu e-mail padrão para falar com a equipe New.
                               </div>
 
                               <Button
@@ -310,7 +310,7 @@ export default function Login() {
                   <div className="relative flex h-full min-h-full overflow-hidden rounded-[32px] bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] xl:rounded-[40px]">
                     <img
                       src="/banner_login_register/desktop.webp"
-                      alt="AFG Imobiliária"
+                      alt="New Imobiliária"
                       className="h-full w-full object-cover"
                     />
                   </div>

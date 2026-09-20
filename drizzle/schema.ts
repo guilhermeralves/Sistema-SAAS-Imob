@@ -1093,7 +1093,7 @@ export type InsertDocument = typeof documents.$inferInsert;
  * participante (attendanceQueueParticipants) e recebe leads em rodízio.
  *
  * `tenantId` fica reservado (nullable) para o futuro multi-imobiliária: hoje o
- * piloto AFG opera como tenant único, então permanece nulo.
+ * piloto inicial opera como tenant único, então permanece nulo.
  */
 export const attendanceQueues = pgTable("attendanceQueues", {
   id: serial("id").primaryKey(),
@@ -1188,7 +1188,7 @@ export type InsertAttendanceQueueParticipant =
 
 /**
  * Imobiliária cliente da plataforma (tenant). Fase 1 opera com 1 tenant
- * (AFG); fase 2 (multi-tenant) reutiliza esta tabela como raiz de escopo.
+ * ; fase 2 (multi-tenant) reutiliza esta tabela como raiz de escopo.
  */
 export const tenants = pgTable("tenants", {
   id: serial("id").primaryKey(),

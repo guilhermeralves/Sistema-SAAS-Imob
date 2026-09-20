@@ -36,7 +36,7 @@ export function renderEmailLayout(input: EmailLayoutInput) {
       <tr>
         <td style="padding: 0;">
           <div style="background: linear-gradient(135deg, #0f4c81 0%, #1d8ab5 100%); color: #ffffff; border-radius: 20px 20px 0 0; padding: 28px 32px;">
-            <p style="margin: 0 0 10px; font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.78;">AFG Imobiliaria</p>
+            <p style="margin: 0 0 10px; font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.78;">New Imobiliária</p>
             <h1 style="margin: 0; font-size: 30px; line-height: 1.15;">${escapeHtml(input.title)}</h1>
           </div>
           <div style="background: #ffffff; border: 1px solid #dbe4f0; border-top: 0; border-radius: 0 0 20px 20px; padding: 32px;">

@@ -139,7 +139,7 @@ export default function PushNotificationToggle({
 
   const handleBlockedInfo = () => {
     toast.info(
-      "As notificações estão bloqueadas. Abra as configurações do site no navegador (ou Ajustes → Notificações → AFG no iPhone) e mude para Permitir.",
+      "As notificações estão bloqueadas. Abra as configurações do site no navegador (ou Ajustes → Notificações → New no iPhone) e mude para Permitir.",
       { duration: 8000 }
     );
   };

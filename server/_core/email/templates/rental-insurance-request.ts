@@ -23,9 +23,9 @@ export function renderRentalInsuranceRequestTemplate(
     highlights: [
       "Seguro fianca: comprovante da primeira parcela paga.",
       "Seguro incendio: comprovante da primeira parcela paga.",
-      "Voce pode responder a este e-mail anexando os comprovantes ou envia-los pelo WhatsApp da AFG.",
+      "Voce pode responder a este e-mail anexando os comprovantes ou envia-los pelo WhatsApp da New.",
     ],
-    ctaLabel: "Falar com a AFG",
+    ctaLabel: "Falar com a New",
     ctaUrl: input.appUrl,
     footerText:
       "Assim que recebermos e validarmos os comprovantes, avancamos para as proximas etapas da locacao.",

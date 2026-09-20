@@ -61,7 +61,7 @@ export function useAuth(options?: UseAuthOptions) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    localStorage.setItem("afg-runtime-user-info", JSON.stringify(meQuery.data ?? null));
+    localStorage.setItem("new-runtime-user-info", JSON.stringify(meQuery.data ?? null));
   }, [meQuery.data]);
 
   useEffect(() => {

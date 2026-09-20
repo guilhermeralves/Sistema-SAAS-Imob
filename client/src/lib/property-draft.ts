@@ -34,9 +34,9 @@ export type NewPropertyDraftData = {
   }>;
 };
 
-const NEW_PROPERTY_DRAFT_STORAGE_KEY = "afg_new_property_draft_v1";
+const NEW_PROPERTY_DRAFT_STORAGE_KEY = "new_property_draft_v1";
 const NEW_PROPERTY_DRAFT_PHOTOS_STORAGE_KEY =
-  "afg_new_property_draft_photos_v1";
+  "new_property_draft_photos_v1";
 
 function isPropertyDraft(value: unknown): value is NewPropertyDraftData {
   if (!value || typeof value !== "object") return false;

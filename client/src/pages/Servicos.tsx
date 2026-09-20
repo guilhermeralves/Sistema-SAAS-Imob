@@ -180,7 +180,7 @@ export default function Servicos() {
           <div className="container">
             <div className="mb-8 max-w-2xl">
               <p className="mb-3 inline-flex rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-emerald-800">
-                Atuação AFG
+                Atuação New
               </p>
               <h2 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">
                 Áreas em que atuamos dentro da operação imobiliária.
