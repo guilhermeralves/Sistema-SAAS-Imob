@@ -409,7 +409,7 @@ export default function AdminUsers() {
               </Button>
             </DialogTrigger>
             <DialogContent
-              className="max-h-[90vh] w-full max-w-2xl overflow-y-auto scrollbar-hidden"
+              className="max-h-[90vh] w-full max-w-xl overflow-y-auto scrollbar-hidden"
               onOpenAutoFocus={event => event.preventDefault()}
             >
               <DialogHeader>
@@ -815,7 +815,7 @@ export default function AdminUsers() {
 
         <Dialog open={Boolean(editState)} onOpenChange={open => !open && setEditState(null)}>
             <DialogContent
-              className="max-h-[90vh] w-full max-w-2xl overflow-y-auto scrollbar-hidden"
+              className="max-h-[90vh] w-full max-w-lg overflow-y-auto scrollbar-hidden"
               onOpenAutoFocus={event => event.preventDefault()}
             >
               <DialogHeader>
@@ -969,7 +969,7 @@ export default function AdminUsers() {
 
         <Dialog open={deleteState !== null} onOpenChange={open => !open && setDeleteState(null)}>
           <DialogContent
-            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto scrollbar-hidden"
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto scrollbar-hidden"
             onOpenAutoFocus={event => event.preventDefault()}
           >
             <DialogHeader>
