@@ -90,11 +90,19 @@ async function handleNewLead(req: Request, res: Response) {
   try {
     const {
       getLeadByTelefone,
+      getDefaultAttendanceQueue,
       createLead,
       updateLead,
       createLeadInteraction,
     } = await import("./db");
-    const { distributeLeadToRoleta } = await import("./_core/roleta");
+
+    // Lê o delay configurado na fila padrão. Sem fila, distribui na hora.
+    const queue = await getDefaultAttendanceQueue();
+    const delayMinutes = queue?.botconversaDelayMinutes ?? 0;
+    const distributeAfter =
+      delayMinutes > 0
+        ? new Date(Date.now() + delayMinutes * 60_000)
+        : new Date();
 
     let leadId: number;
     const existing = await getLeadByTelefone(telefone);
@@ -112,8 +120,9 @@ async function handleNewLead(req: Request, res: Response) {
           : nome,
         origem: existing.origem ?? "whatsapp",
         observacao: nextObs,
-        // Só grava/atualiza se o valor veio no payload.
         ...(subscriberId ? { botconversaSubscriberId: subscriberId } : {}),
+        // Só reprograma distribuição se ainda não tem responsável.
+        ...(existing.idResponsavel ? {} : { distributeAfter }),
       });
       await createLeadInteraction({
         idLead: existing.id,
@@ -130,6 +139,7 @@ async function handleNewLead(req: Request, res: Response) {
         origem: "whatsapp",
         status: "novo",
         botconversaSubscriberId: subscriberId ?? null,
+        distributeAfter,
         observacao: mensagem
           ? `[BotConversa] ${mensagem}`
           : null,
@@ -139,20 +149,18 @@ async function handleNewLead(req: Request, res: Response) {
         idLead: leadId,
         idUsuario: null,
         eventType: "lead_created_botconversa",
-        message: `Lead criado a partir de mensagem no BotConversa.`,
+        message: delayMinutes > 0
+          ? `Lead criado a partir de mensagem no BotConversa. Distribuição agendada para daqui a ${delayMinutes} min.`
+          : `Lead criado a partir de mensagem no BotConversa.`,
       });
     }
-
-    const assignedTo = await distributeLeadToRoleta({
-      id: leadId,
-      nome,
-    });
 
     res.status(200).json({
       ok: true,
       leadId,
-      assignedTo,
       created: !existing,
+      distributeAfter: distributeAfter.toISOString(),
+      delayMinutes,
     });
   } catch (err) {
     console.error("[botconversa-webhook] erro:", err);

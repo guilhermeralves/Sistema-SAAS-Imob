@@ -1261,6 +1261,8 @@ export async function getLeadById(id: number) {
       assignedAt: leads.assignedAt,
       attendedAt: leads.attendedAt,
       assignmentSlaNotifiedAt: leads.assignmentSlaNotifiedAt,
+      botconversaSubscriberId: leads.botconversaSubscriberId,
+      distributeAfter: leads.distributeAfter,
       createdAt: leads.createdAt,
       updatedAt: leads.updatedAt,
     })
@@ -1510,6 +1512,7 @@ export async function getLeadsForSlaProcessing() {
       assignedAt: leads.assignedAt,
       attendedAt: leads.attendedAt,
       assignmentSlaNotifiedAt: leads.assignmentSlaNotifiedAt,
+      distributeAfter: leads.distributeAfter,
       createdAt: leads.createdAt,
     })
     .from(leads)

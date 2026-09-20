@@ -600,6 +600,17 @@ const patches = [
       `CREATE INDEX IF NOT EXISTS "leads_botconversaSubscriberId_idx" ON "leads" ("botconversaSubscriberId");`,
     ],
   },
+  {
+    id: "2026-09-20_botconversa_transfer_delay",
+    description:
+      "Adiciona delay configurável para transferir conversa ao corretor no BotConversa, mapeamento user→manager e agendamento de distribuição por lead",
+    statements: [
+      `ALTER TABLE "attendanceQueues" ADD COLUMN IF NOT EXISTS "botconversaDelayMinutes" integer NOT NULL DEFAULT 4;`,
+      `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "botconversaManagerId" varchar(64);`,
+      `ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "distributeAfter" timestamp;`,
+      `CREATE INDEX IF NOT EXISTS "leads_distributeAfter_idx" ON "leads" ("distributeAfter") WHERE "distributeAfter" IS NOT NULL;`,
+    ],
+  },
 ];
 
 async function ensureManualMigrationsTable(client) {

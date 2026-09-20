@@ -110,6 +110,12 @@ export async function processLeadSlaTick() {
       }
 
       if (!lead.idResponsavel) {
+        // Se o lead tem distribuição agendada no futuro, respeita o delay.
+        // Só distribui após esse instante ter passado.
+        if (lead.distributeAfter && lead.distributeAfter.getTime() > now.getTime()) {
+          continue;
+        }
+
         // Tenta distribuir pela roleta a cada passada; se conseguir, o lead
         // ganha responsável e o SLA de direcionamento não precisa disparar.
         const assignedTo = await distributeLeadToRoleta({

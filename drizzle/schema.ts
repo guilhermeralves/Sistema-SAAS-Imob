@@ -67,6 +67,10 @@ export const users = pgTable("users", {
   // Última vez que o usuário abriu a tela de Tarefas e Eventos. Usado para o
   // badge do calendário contar apenas tarefas/eventos novos (ainda não vistos).
   tasksSeenAt: timestamp("tasksSeenAt", { mode: "date" }),
+  // ID deste usuário como "manager" (atendente) no BotConversa. Quando
+  // preenchido, o sistema transfere automaticamente a conversa do lead
+  // para esse manager no painel do BotConversa.
+  botconversaManagerId: varchar("botconversaManagerId", { length: 64 }),
 });
 
 export type User = typeof users.$inferSelect;
@@ -448,6 +452,10 @@ export const leads = pgTable("leads", {
   // ID do contato (subscriber) no BotConversa. Guardado para chamar a API
   // do BotConversa (transferir conversa, marcar como atendido, etc).
   botconversaSubscriberId: varchar("botconversaSubscriberId", { length: 64 }),
+  // Quando o lead deve ser distribuído pela roleta e transferido ao
+  // corretor no BotConversa. Preenchido pelo webhook com now + delay da fila.
+  // Enquanto null ou futuro, o SLA scheduler não distribui.
+  distributeAfter: timestamp("distributeAfter", { mode: "date" }),
   assignmentCycleStartedAt: timestamp("assignmentCycleStartedAt", {
     mode: "date",
   })
@@ -1122,6 +1130,12 @@ export const attendanceQueues = pgTable("attendanceQueues", {
     .notNull(),
   // 1 = a roleta só roda em horário comercial (regra de leadSla.ts).
   businessHoursOnly: integer("businessHoursOnly").default(1).notNull(),
+  // Minutos entre o webhook do BotConversa e a transferência da conversa
+  // ao corretor no painel BotConversa. Dá tempo para o BotConversa coletar
+  // respostas iniciais antes de acionar o corretor.
+  botconversaDelayMinutes: integer("botconversaDelayMinutes")
+    .default(4)
+    .notNull(),
   createdByUserId: integer("createdByUserId").notNull(),
   createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),

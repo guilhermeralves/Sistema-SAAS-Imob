@@ -142,6 +142,8 @@ export async function distributeLeadToRoleta(
       assignedAt: new Date(),
       attendedAt: null,
       assignmentSlaNotifiedAt: null,
+      // Distribuição efetivada; limpa o agendamento futuro.
+      distributeAfter: null,
     });
 
     await rotateAttendanceQueueParticipantToBack(queue.id, next.userId);
@@ -156,9 +158,54 @@ export async function distributeLeadToRoleta(
     await notifyBrokerLeadAssigned(next.userId, lead.nome, lead.id);
     await notifyQueuePositions(queue.id);
 
+    // Transfere a conversa no painel do BotConversa (se aplicável). Só faz
+    // sentido quando o lead veio do BotConversa (tem subscriber_id) E o
+    // corretor está mapeado a um manager BotConversa. Falhas viram evento
+    // no timeline mas não bloqueiam a distribuição.
+    await maybeTransferConversationInBotConversa(lead.id, next.userId);
+
     return next.userId;
   } catch (error) {
     console.warn("[roleta] Falha ao distribuir lead pela roleta:", error);
     return null;
+  }
+}
+
+async function maybeTransferConversationInBotConversa(
+  leadId: number,
+  brokerUserId: number
+) {
+  try {
+    const { getLeadById, getUserById, createLeadInteraction } = await import(
+      "../db"
+    );
+
+    const [freshLead, broker] = await Promise.all([
+      getLeadById(leadId),
+      getUserById(brokerUserId),
+    ]);
+
+    const subscriberId = freshLead?.botconversaSubscriberId?.trim();
+    const managerId = broker?.botconversaManagerId?.trim();
+
+    if (!subscriberId || !managerId) return;
+
+    const { changeConversationStatus } = await import("./botconversaClient");
+    const result = await changeConversationStatus({
+      subscriberId,
+      managerId,
+      status: "open",
+    });
+
+    await createLeadInteraction({
+      idLead: leadId,
+      idUsuario: null,
+      eventType: result.ok ? "botconversa_transferred" : "botconversa_transfer_failed",
+      message: result.ok
+        ? `Conversa transferida no BotConversa ao manager ${managerId} (${broker?.name ?? "corretor"}).`
+        : `Falha ao transferir conversa no BotConversa: ${result.status} ${result.message}`,
+    });
+  } catch (error) {
+    console.warn("[roleta] Erro ao integrar com BotConversa:", error);
   }
 }
