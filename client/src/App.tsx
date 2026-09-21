@@ -32,6 +32,7 @@ import Integracoes from "./pages/Integracoes";
 import ControleDeChaves from "./pages/ControleDeChaves";
 import Automacao from "./pages/Automacao";
 import Bonificacoes from "./pages/Bonificacoes";
+import Carteira from "./pages/Carteira";
 import EvolucaoProfissional from "./pages/EvolucaoProfissional";
 import TarefasEventos from "./pages/TarefasEventos";
 import Condominios from "./pages/Condominios";
@@ -189,6 +190,12 @@ function Router() {
       </Route>
       <Route path={"/bonificacoes"}>
         <ProtectedRoute component={Bonificacoes} roles={["administrativo"]} />
+      </Route>
+      <Route path={"/carteira"}>
+        <ProtectedRoute
+          component={Carteira}
+          roles={["corretor", "administrativo"]}
+        />
       </Route>
       <Route path={"/evolucao-profissional"}>
         <ProtectedRoute

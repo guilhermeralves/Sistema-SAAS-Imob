@@ -1146,3 +1146,60 @@ export type AttendanceQueueParticipant =
   typeof attendanceQueueParticipants.$inferSelect;
 export type InsertAttendanceQueueParticipant =
   typeof attendanceQueueParticipants.$inferInsert;
+
+/* ==========================================================================
+ * LOJA & CARTEIRA (bonificações)
+ *
+ * `walletBalances` guarda o saldo materializado de tokens por corretor.
+ * `walletTransactions` é o extrato — toda operação (crédito ou débito) vira
+ *  uma linha aqui, para auditoria e histórico. `storeSettings` mantém a
+ *  configuração global da loja (chave PIX da imob, percentuais de
+ *  bonificação por venda/locação).
+ * ========================================================================== */
+
+export const walletBalances = pgTable("walletBalances", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull().unique(),
+  tokens: integer("tokens").default(0).notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export type WalletBalance = typeof walletBalances.$inferSelect;
+export type InsertWalletBalance = typeof walletBalances.$inferInsert;
+
+export const walletTransactions = pgTable("walletTransactions", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  type: varchar("type", { length: 10 })
+    .$type<"credit" | "debit">()
+    .notNull(),
+  amount: integer("amount").notNull(), // sempre positivo; direção pelo type
+  reason: varchar("reason", { length: 40 }).notNull(), // admin_bonus, sale_close, rental_close, store_purchase, purchase_refund
+  description: text("description"), // texto livre p/ mostrar no extrato
+  referenceType: varchar("referenceType", { length: 40 }), // lead, contract, storeOrder, ...
+  referenceId: integer("referenceId"),
+  createdByUserId: integer("createdByUserId"), // admin que originou; null quando automático
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export type WalletTransaction = typeof walletTransactions.$inferSelect;
+export type InsertWalletTransaction = typeof walletTransactions.$inferInsert;
+
+export const storeSettings = pgTable("storeSettings", {
+  id: serial("id").primaryKey(),
+  // Chave PIX que aparecerá no QR Code para compras com pagamento adicional.
+  pixKey: varchar("pixKey", { length: 100 }),
+  pixMerchantName: varchar("pixMerchantName", { length: 60 }),
+  pixMerchantCity: varchar("pixMerchantCity", { length: 40 }),
+  // Percentual do valor da venda que vira tokens (0.10 = 0.10%). Guardamos
+  // em unidade de milésimo (0.10% = 10) para evitar float. 0 desliga.
+  tokensSalePercentMilli: integer("tokensSalePercentMilli").default(0).notNull(),
+  tokensRentalPercentMilli: integer("tokensRentalPercentMilli")
+    .default(0)
+    .notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+  updatedByUserId: integer("updatedByUserId"),
+});
+
+export type StoreSettings = typeof storeSettings.$inferSelect;
+export type InsertStoreSettings = typeof storeSettings.$inferInsert;

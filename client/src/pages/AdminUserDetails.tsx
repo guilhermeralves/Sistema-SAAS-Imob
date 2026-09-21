@@ -30,6 +30,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { parseMoneyCentsInput } from "@/lib/money";
 import { formatPhoneNumber } from "@/lib/phone";
+import WalletAdminPanel from "@/components/WalletAdminPanel";
 import { trpc } from "@/lib/trpc";
 import { type AppRole } from "@shared/auth";
 import { USER_PROFILE_MARITAL_STATUSES, type UserProfileMaritalStatus } from "@shared/user-profile";
@@ -555,6 +556,9 @@ export default function AdminUserDetails() {
                   Apenas o proprio administrador ou o admin principal podem alterar esta conta administrativa.
                 </CardContent>
               </Card>
+            ) : null}
+            {isAdminRoute && user?.role === "corretor" ? (
+              <WalletAdminPanel userId={userId} />
             ) : null}
             <Card className={SURFACE_CARD_CLASS}>
               <CardHeader>
