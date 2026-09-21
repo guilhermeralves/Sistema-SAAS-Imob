@@ -650,6 +650,29 @@ const patches = [
       `INSERT INTO "storeSettings" ("id") VALUES (1) ON CONFLICT ("id") DO NOTHING;`,
     ],
   },
+  {
+    id: "2026-09-21_store_products",
+    description:
+      "Cria tabela storeProducts (Entrega 2 — catálogo de produtos para troca por tokens)",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS "storeProducts" (
+        "id" serial PRIMARY KEY NOT NULL,
+        "nome" varchar(200) NOT NULL,
+        "descricao" text,
+        "categoria" varchar(40) NOT NULL,
+        "fotos" text DEFAULT '[]' NOT NULL,
+        "tokenPrice" integer DEFAULT 0 NOT NULL,
+        "brlPriceCents" integer DEFAULT 0 NOT NULL,
+        "estoque" integer,
+        "isActive" integer DEFAULT 1 NOT NULL,
+        "createdByUserId" integer,
+        "createdAt" timestamp DEFAULT now() NOT NULL,
+        "updatedAt" timestamp DEFAULT now() NOT NULL
+      );`,
+      `CREATE INDEX IF NOT EXISTS "storeProducts_isActive_idx" ON "storeProducts" ("isActive");`,
+      `CREATE INDEX IF NOT EXISTS "storeProducts_categoria_idx" ON "storeProducts" ("categoria");`,
+    ],
+  },
 ];
 
 async function ensureManualMigrationsTable(client) {

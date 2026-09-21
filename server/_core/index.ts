@@ -158,10 +158,25 @@ async function startServer() {
       res.status(404).end();
       return;
     }
-    // Deixa o browser inferir o tipo pelo Content-Type do arquivo
     res.setHeader("Cache-Control", "public, max-age=86400");
     res.sendFile(abs, error => {
       if (error && !res.headersSent) res.status(404).end();
+    });
+  });
+
+  // Imagens públicas de produtos da Loja.
+  app.get("/api/media/store/:fileName", async (req, res) => {
+    const { getStoreImageAbsolutePath } = await import("./store-images");
+    const fileName = String(req.params.fileName || "").trim();
+    const abs = getStoreImageAbsolutePath(fileName);
+    if (!abs) {
+      res.status(400).json({ ok: false, message: "invalid file name" });
+      return;
+    }
+    res.sendFile(abs, err => {
+      if (err && !res.headersSent) {
+        res.status(404).json({ ok: false, message: "not found" });
+      }
     });
   });
 

@@ -73,12 +73,15 @@ import {
   propertyOwners,
   properties,
   pushSubscriptions,
+  storeProducts,
   storeSettings,
   userNotifications,
   users,
   walletBalances,
   walletTransactions,
+  InsertStoreProduct,
   InsertWalletTransaction,
+  StoreProduct,
   StoreSettings,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
@@ -3898,4 +3901,63 @@ export async function updateStoreSettings(
   } else {
     await db.insert(storeSettings).values({ ...data });
   }
+}
+
+/* ========================================================================
+ * Loja — produtos
+ * ======================================================================== */
+
+export async function listStoreProducts(opts: { onlyActive?: boolean } = {}) {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = opts.onlyActive
+    ? await db
+        .select()
+        .from(storeProducts)
+        .where(eq(storeProducts.isActive, 1))
+        .orderBy(desc(storeProducts.createdAt))
+    : await db
+        .select()
+        .from(storeProducts)
+        .orderBy(desc(storeProducts.createdAt));
+  return rows;
+}
+
+export async function getStoreProductById(id: number): Promise<StoreProduct | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db
+    .select()
+    .from(storeProducts)
+    .where(eq(storeProducts.id, id))
+    .limit(1);
+  return row;
+}
+
+export async function createStoreProduct(data: InsertStoreProduct): Promise<StoreProduct> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [row] = await db
+    .insert(storeProducts)
+    .values({ ...data, createdAt: new Date(), updatedAt: new Date() })
+    .returning();
+  return row;
+}
+
+export async function updateStoreProduct(
+  id: number,
+  data: Partial<InsertStoreProduct>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(storeProducts)
+    .set({ ...data, updatedAt: new Date() })
+    .where(eq(storeProducts.id, id));
+}
+
+export async function deleteStoreProduct(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(storeProducts).where(eq(storeProducts.id, id));
 }
