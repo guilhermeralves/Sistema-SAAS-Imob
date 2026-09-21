@@ -30,6 +30,7 @@ import {
   Coins,
   Gift,
   MessageSquare,
+  ShoppingBag,
   Target,
   Hammer,
   Home,
@@ -109,6 +110,7 @@ export default function Header() {
     { href: "/crm", label: "CRM", icon: LayoutDashboard },
     { href: "/meus-imoveis", label: "Meus Im\u00f3veis", icon: Building2 },
     { href: "/carteira", label: "Carteira", icon: Coins },
+    { href: "/loja", label: "Store", icon: ShoppingBag },
   ];
 
   const adminMenuItems = [
@@ -116,6 +118,7 @@ export default function Header() {
     { href: "/crm", label: "CRM", icon: LayoutDashboard },
     { href: "/admin", label: "Administrativo", icon: Briefcase },
     { href: "/financeiro", label: "Financeiro", icon: CircleDollarSign },
+    { href: "/loja", label: "Store", icon: ShoppingBag },
   ];
 
   const getMenuItems = () => {
