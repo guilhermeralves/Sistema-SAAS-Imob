@@ -8,7 +8,34 @@ import App from "./App";
 import { getLoginUrl } from "./const";
 import "./index.css";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Refaz o fetch sempre que a tela é montada — no PWA em standalone, o
+      // "focus" pode não disparar consistentemente, então este flag garante
+      // que ao navegar entre telas os dados ficam frescos.
+      refetchOnMount: "always",
+      // Refaz quando o navegador recupera a conexão de rede.
+      refetchOnReconnect: true,
+      // Padrão v4 é true — mantido para o navegador comum.
+      refetchOnWindowFocus: true,
+      // Considera o dado "fresco" por 30s. Sob esse tempo, evita hammering
+      // (ex: se o usuário abre e fecha o mesmo card 3x em segundos).
+      staleTime: 30_000,
+    },
+  },
+});
+
+// Quando o app/PWA volta do background para a tela ativa, invalida todas as
+// queries em cache. É o gatilho principal para o refresh silencioso em PWA
+// standalone no Android/iOS — mais confiável que o evento "focus" nesse modo.
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      queryClient.invalidateQueries();
+    }
+  });
+}
 
 const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;
@@ -59,6 +86,15 @@ if ("serviceWorker" in navigator) {
     navigator.serviceWorker
       .register("/sw.js")
       .catch(error => console.error("[sw] Falha ao registrar service worker:", error));
+  });
+
+  // Quando o Service Worker recebe um push (novo lead, tarefa, etc), ele
+  // manda "push-received" pra cá. Invalidamos as queries para que a tela
+  // aberta atualize sozinha, sem o usuário precisar recarregar.
+  navigator.serviceWorker.addEventListener("message", event => {
+    if (event.data?.type === "push-received") {
+      queryClient.invalidateQueries();
+    }
   });
 }
 
