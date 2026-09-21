@@ -110,7 +110,6 @@ export default function Header() {
     { href: "/crm", label: "CRM", icon: LayoutDashboard },
     { href: "/meus-imoveis", label: "Meus Im\u00f3veis", icon: Building2 },
     { href: "/carteira", label: "Carteira", icon: Coins },
-    { href: "/loja", label: "Store", icon: ShoppingBag },
   ];
 
   const adminMenuItems = [
@@ -118,7 +117,6 @@ export default function Header() {
     { href: "/crm", label: "CRM", icon: LayoutDashboard },
     { href: "/admin", label: "Administrativo", icon: Briefcase },
     { href: "/financeiro", label: "Financeiro", icon: CircleDollarSign },
-    { href: "/loja", label: "Store", icon: ShoppingBag },
   ];
 
   const getMenuItems = () => {
@@ -274,6 +272,18 @@ export default function Header() {
               ) : null}
 
               {isStaff ? <NotificationBell /> : null}
+
+              {isStaff ? (
+                <Link href="/loja">
+                  <a
+                    aria-label="Loja"
+                    title="Loja"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#d8d6ca] bg-white/80 text-slate-700 transition-colors hover:bg-emerald-50 hover:text-emerald-900 dark:border-white/20 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-emerald-500/15 dark:hover:text-emerald-200"
+                  >
+                    <ShoppingBag className="h-4 w-4" />
+                  </a>
+                </Link>
+              ) : null}
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
