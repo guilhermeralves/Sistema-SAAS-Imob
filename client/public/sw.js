@@ -44,7 +44,18 @@ self.addEventListener("push", event => {
     data: { url: data.url || "/" },
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(
+    Promise.all([
+      self.registration.showNotification(title, options),
+      // Avisa páginas abertas do app para atualizarem os dados (invalida
+      // queries do React Query). Silencioso — só um sinal.
+      self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(clientList => {
+        for (const client of clientList) {
+          client.postMessage({ type: "push-received", tag: data.tag || null });
+        }
+      }),
+    ])
+  );
 });
 
 /* Permite que a página peça para fechar notificações já visualizadas.
