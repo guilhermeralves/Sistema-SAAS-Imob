@@ -278,9 +278,9 @@ export default function Header() {
                   <a
                     aria-label="Loja"
                     title="Loja"
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[#d8d6ca] bg-white/80 text-slate-700 transition-colors hover:bg-emerald-50 hover:text-emerald-900 dark:border-white/20 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-emerald-500/15 dark:hover:text-emerald-200"
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border-0 bg-transparent p-0 text-slate-600 shadow-none transition-colors hover:bg-emerald-50/60 hover:text-emerald-900 dark:text-slate-200 dark:hover:bg-emerald-500/15 dark:hover:text-emerald-200"
                   >
-                    <ShoppingBag className="h-4 w-4" />
+                    <ShoppingBag className="h-5 w-5" />
                   </a>
                 </Link>
               ) : null}
