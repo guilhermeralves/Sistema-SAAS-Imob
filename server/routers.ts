@@ -2614,8 +2614,11 @@ const roletaRouter = router({
   }),
 });
 
+import { storeRouter } from "./storeRouter";
+
 export const appRouter = router({
   system: systemRouter,
+  store: storeRouter,
   notifications: router({
     config: protectedProcedure.query(async () => {
       const { getVapidPublicKey, isPushConfigured } = await import(

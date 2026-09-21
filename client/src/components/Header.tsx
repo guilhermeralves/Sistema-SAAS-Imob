@@ -27,6 +27,7 @@ import {
   CircleDollarSign,
   Briefcase,
   Building2,
+  Coins,
   Gift,
   MessageSquare,
   Target,
@@ -107,6 +108,7 @@ export default function Header() {
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/crm", label: "CRM", icon: LayoutDashboard },
     { href: "/meus-imoveis", label: "Meus Im\u00f3veis", icon: Building2 },
+    { href: "/carteira", label: "Carteira", icon: Coins },
   ];
 
   const adminMenuItems = [

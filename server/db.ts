@@ -73,8 +73,13 @@ import {
   propertyOwners,
   properties,
   pushSubscriptions,
+  storeSettings,
   userNotifications,
   users,
+  walletBalances,
+  walletTransactions,
+  InsertWalletTransaction,
+  StoreSettings,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -3774,4 +3779,123 @@ export async function rotateAttendanceQueueParticipantToBack(
         eq(attendanceQueueParticipants.userId, userId)
       )
     );
+}
+
+/* ============================================================================
+ * Loja & Carteira — helpers
+ * ============================================================================ */
+
+export async function getWalletBalance(userId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const [row] = await db
+    .select({ tokens: walletBalances.tokens })
+    .from(walletBalances)
+    .where(eq(walletBalances.userId, userId))
+    .limit(1);
+  return row?.tokens ?? 0;
+}
+
+export async function getWalletTransactions(
+  userId: number,
+  limit = 50
+) {
+  const db = await getDb();
+  if (!db) return [];
+  return await db
+    .select()
+    .from(walletTransactions)
+    .where(eq(walletTransactions.userId, userId))
+    .orderBy(desc(walletTransactions.createdAt))
+    .limit(limit);
+}
+
+/**
+ * Aplica crédito ou débito atomicamente:
+ *  - upsert em walletBalances (soma/subtrai)
+ *  - insere linha em walletTransactions
+ * Lança erro se debit resultar em saldo negativo.
+ */
+export async function applyWalletTransaction(input: {
+  userId: number;
+  type: "credit" | "debit";
+  amount: number;
+  reason: InsertWalletTransaction["reason"];
+  description?: string | null;
+  referenceType?: string | null;
+  referenceId?: number | null;
+  createdByUserId?: number | null;
+}): Promise<{ balance: number; transactionId: number }> {
+  if (!Number.isInteger(input.amount) || input.amount <= 0) {
+    throw new Error("amount deve ser inteiro positivo");
+  }
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return await db.transaction(async tx => {
+    const [existing] = await tx
+      .select()
+      .from(walletBalances)
+      .where(eq(walletBalances.userId, input.userId))
+      .limit(1);
+
+    const currentBalance = existing?.tokens ?? 0;
+    const delta = input.type === "credit" ? input.amount : -input.amount;
+    const newBalance = currentBalance + delta;
+
+    if (newBalance < 0) {
+      throw new Error("saldo insuficiente");
+    }
+
+    if (existing) {
+      await tx
+        .update(walletBalances)
+        .set({ tokens: newBalance, updatedAt: new Date() })
+        .where(eq(walletBalances.userId, input.userId));
+    } else {
+      await tx
+        .insert(walletBalances)
+        .values({ userId: input.userId, tokens: newBalance });
+    }
+
+    const [inserted] = await tx
+      .insert(walletTransactions)
+      .values({
+        userId: input.userId,
+        type: input.type,
+        amount: input.amount,
+        reason: input.reason,
+        description: input.description ?? null,
+        referenceType: input.referenceType ?? null,
+        referenceId: input.referenceId ?? null,
+        createdByUserId: input.createdByUserId ?? null,
+      })
+      .returning({ id: walletTransactions.id });
+
+    return { balance: newBalance, transactionId: inserted.id };
+  });
+}
+
+export async function getStoreSettings(): Promise<StoreSettings | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const [row] = await db.select().from(storeSettings).limit(1);
+  return row ?? null;
+}
+
+export async function updateStoreSettings(
+  data: Partial<Omit<StoreSettings, "id" | "updatedAt">>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [existing] = await db.select().from(storeSettings).limit(1);
+  if (existing) {
+    await db
+      .update(storeSettings)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(storeSettings.id, existing.id));
+  } else {
+    await db.insert(storeSettings).values({ ...data });
+  }
 }

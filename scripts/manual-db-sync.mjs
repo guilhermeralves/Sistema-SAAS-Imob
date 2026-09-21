@@ -611,6 +611,45 @@ const patches = [
       `CREATE INDEX IF NOT EXISTS "leads_distributeAfter_idx" ON "leads" ("distributeAfter") WHERE "distributeAfter" IS NOT NULL;`,
     ],
   },
+  {
+    id: "2026-09-21_store_wallet_foundation",
+    description:
+      "Cria walletBalances, walletTransactions e storeSettings — fundação da Loja/Carteira de bonificações",
+    statements: [
+      `CREATE TABLE IF NOT EXISTS "walletBalances" (
+        "id" serial PRIMARY KEY NOT NULL,
+        "userId" integer NOT NULL,
+        "tokens" integer DEFAULT 0 NOT NULL,
+        "updatedAt" timestamp DEFAULT now() NOT NULL
+      );`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "walletBalances_userId_idx" ON "walletBalances" ("userId");`,
+      `CREATE TABLE IF NOT EXISTS "walletTransactions" (
+        "id" serial PRIMARY KEY NOT NULL,
+        "userId" integer NOT NULL,
+        "type" varchar(10) NOT NULL,
+        "amount" integer NOT NULL,
+        "reason" varchar(40) NOT NULL,
+        "description" text,
+        "referenceType" varchar(40),
+        "referenceId" integer,
+        "createdByUserId" integer,
+        "createdAt" timestamp DEFAULT now() NOT NULL
+      );`,
+      `CREATE INDEX IF NOT EXISTS "walletTransactions_userId_idx" ON "walletTransactions" ("userId");`,
+      `CREATE INDEX IF NOT EXISTS "walletTransactions_createdAt_idx" ON "walletTransactions" ("createdAt");`,
+      `CREATE TABLE IF NOT EXISTS "storeSettings" (
+        "id" serial PRIMARY KEY NOT NULL,
+        "pixKey" varchar(100),
+        "pixMerchantName" varchar(60),
+        "pixMerchantCity" varchar(40),
+        "tokensSalePercentMilli" integer DEFAULT 0 NOT NULL,
+        "tokensRentalPercentMilli" integer DEFAULT 0 NOT NULL,
+        "updatedAt" timestamp DEFAULT now() NOT NULL,
+        "updatedByUserId" integer
+      );`,
+      `INSERT INTO "storeSettings" ("id") VALUES (1) ON CONFLICT ("id") DO NOTHING;`,
+    ],
+  },
 ];
 
 async function ensureManualMigrationsTable(client) {

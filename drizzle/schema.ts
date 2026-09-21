@@ -1371,3 +1371,49 @@ export const licensePayments = pgTable("licensePayments", {
 
 export type LicensePayment = typeof licensePayments.$inferSelect;
 export type InsertLicensePayment = typeof licensePayments.$inferInsert;
+
+/* ==========================================================================
+ * LOJA & CARTEIRA (bonificações)
+ * ========================================================================== */
+
+export const walletBalances = pgTable("walletBalances", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull().unique(),
+  tokens: integer("tokens").default(0).notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export type WalletBalance = typeof walletBalances.$inferSelect;
+export type InsertWalletBalance = typeof walletBalances.$inferInsert;
+
+export const walletTransactions = pgTable("walletTransactions", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull(),
+  type: varchar("type", { length: 10 })
+    .$type<"credit" | "debit">()
+    .notNull(),
+  amount: integer("amount").notNull(),
+  reason: varchar("reason", { length: 40 }).notNull(),
+  description: text("description"),
+  referenceType: varchar("referenceType", { length: 40 }),
+  referenceId: integer("referenceId"),
+  createdByUserId: integer("createdByUserId"),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export type WalletTransaction = typeof walletTransactions.$inferSelect;
+export type InsertWalletTransaction = typeof walletTransactions.$inferInsert;
+
+export const storeSettings = pgTable("storeSettings", {
+  id: serial("id").primaryKey(),
+  pixKey: varchar("pixKey", { length: 100 }),
+  pixMerchantName: varchar("pixMerchantName", { length: 60 }),
+  pixMerchantCity: varchar("pixMerchantCity", { length: 40 }),
+  tokensSalePercentMilli: integer("tokensSalePercentMilli").default(0).notNull(),
+  tokensRentalPercentMilli: integer("tokensRentalPercentMilli").default(0).notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+  updatedByUserId: integer("updatedByUserId"),
+});
+
+export type StoreSettings = typeof storeSettings.$inferSelect;
+export type InsertStoreSettings = typeof storeSettings.$inferInsert;
