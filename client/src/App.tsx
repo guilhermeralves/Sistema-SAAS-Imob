@@ -33,6 +33,7 @@ import ControleDeChaves from "./pages/ControleDeChaves";
 import Automacao from "./pages/Automacao";
 import Bonificacoes from "./pages/Bonificacoes";
 import Carteira from "./pages/Carteira";
+import Loja from "./pages/Loja";
 import EvolucaoProfissional from "./pages/EvolucaoProfissional";
 import TarefasEventos from "./pages/TarefasEventos";
 import Condominios from "./pages/Condominios";
@@ -194,6 +195,12 @@ function Router() {
       <Route path={"/carteira"}>
         <ProtectedRoute
           component={Carteira}
+          roles={["corretor", "administrativo"]}
+        />
+      </Route>
+      <Route path={"/loja"}>
+        <ProtectedRoute
+          component={Loja}
           roles={["corretor", "administrativo"]}
         />
       </Route>
