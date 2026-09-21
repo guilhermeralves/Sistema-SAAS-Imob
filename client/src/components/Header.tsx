@@ -280,7 +280,7 @@ export default function Header() {
                     title="Loja"
                     className="inline-flex h-9 w-9 items-center justify-center rounded-full border-0 bg-transparent p-0 text-slate-600 shadow-none transition-colors hover:bg-emerald-50/60 hover:text-emerald-900 dark:text-slate-200 dark:hover:bg-emerald-500/15 dark:hover:text-emerald-200"
                   >
-                    <ShoppingBag className="h-5 w-5" />
+                    <ShoppingBag className="h-[18px] w-[18px]" strokeWidth={1.75} />
                   </a>
                 </Link>
               ) : null}
