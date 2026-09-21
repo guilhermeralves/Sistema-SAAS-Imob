@@ -27,6 +27,17 @@ const storeSettingsInputSchema = z.object({
   tokensRentalPercentMilli: z.number().int().min(0).max(100_000).optional(),
 });
 
+const productInputSchema = z.object({
+  nome: z.string().trim().min(1).max(200),
+  descricao: z.string().trim().max(4000).optional().nullable(),
+  categoria: z.string().trim().min(1).max(40),
+  fotos: z.array(z.string().min(1).max(500)).max(10).default([]),
+  tokenPrice: z.number().int().min(0).max(100_000_000),
+  brlPriceCents: z.number().int().min(0).max(100_000_000).default(0),
+  estoque: z.number().int().min(0).max(1_000_000).optional().nullable(),
+  isActive: z.number().int().min(0).max(1).default(1),
+});
+
 export const storeRouter = router({
   /* ---------- Endpoints de corretor / self ---------- */
 
@@ -114,5 +125,68 @@ export const storeRouter = router({
         await updateStoreSettings({ ...input, updatedByUserId: ctx.user.id });
         return { ok: true };
       }),
+
+    /* Produtos — CRUD do admin */
+    listProducts: adminProcedure.query(async () => {
+      const { listStoreProducts } = await import("./db");
+      return await listStoreProducts();
+    }),
+
+    productById: adminProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .query(async ({ input }) => {
+        const { getStoreProductById } = await import("./db");
+        const row = await getStoreProductById(input.id);
+        if (!row) throw new Error("produto não encontrado");
+        return row;
+      }),
+
+    createProduct: adminProcedure
+      .input(productInputSchema)
+      .mutation(async ({ ctx, input }) => {
+        const { createStoreProduct } = await import("./db");
+        const row = await createStoreProduct({
+          ...input,
+          descricao: input.descricao ?? null,
+          estoque: input.estoque ?? null,
+          fotos: JSON.stringify(input.fotos ?? []),
+          createdByUserId: ctx.user.id,
+        });
+        return row;
+      }),
+
+    updateProduct: adminProcedure
+      .input(z.object({ id: z.number().int().positive() }).and(productInputSchema.partial()))
+      .mutation(async ({ input }) => {
+        const { updateStoreProduct } = await import("./db");
+        const { id, fotos, ...rest } = input;
+        await updateStoreProduct(id, {
+          ...rest,
+          ...(fotos ? { fotos: JSON.stringify(fotos) } : {}),
+        });
+        return { ok: true };
+      }),
+
+    deleteProduct: adminProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ input }) => {
+        const { deleteStoreProduct } = await import("./db");
+        await deleteStoreProduct(input.id);
+        return { ok: true };
+      }),
+
+    uploadProductImage: adminProcedure
+      .input(z.object({ dataUrl: z.string().min(20) }))
+      .mutation(async ({ input }) => {
+        const { optimizeAndStoreProductImage } = await import("./_core/store-images");
+        const { url } = await optimizeAndStoreProductImage({ dataUrl: input.dataUrl });
+        return { url };
+      }),
+  }),
+
+  /* Vitrine — corretor/admin veem só produtos ativos */
+  listActiveProducts: protectedProcedure.query(async () => {
+    const { listStoreProducts } = await import("./db");
+    return await listStoreProducts({ onlyActive: true });
   }),
 });

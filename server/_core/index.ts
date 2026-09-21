@@ -104,6 +104,22 @@ async function startServer() {
     await sendPropertyImage(req, res, "large", String(req.params.fileName || "").trim());
   });
 
+  // Imagens públicas de produtos da Loja.
+  app.get("/api/media/store/:fileName", async (req, res) => {
+    const { getStoreImageAbsolutePath } = await import("./store-images");
+    const fileName = String(req.params.fileName || "").trim();
+    const abs = getStoreImageAbsolutePath(fileName);
+    if (!abs) {
+      res.status(400).json({ ok: false, message: "invalid file name" });
+      return;
+    }
+    res.sendFile(abs, err => {
+      if (err && !res.headersSent) {
+        res.status(404).json({ ok: false, message: "not found" });
+      }
+    });
+  });
+
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
 

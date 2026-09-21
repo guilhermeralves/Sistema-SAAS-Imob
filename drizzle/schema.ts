@@ -1203,3 +1203,26 @@ export const storeSettings = pgTable("storeSettings", {
 
 export type StoreSettings = typeof storeSettings.$inferSelect;
 export type InsertStoreSettings = typeof storeSettings.$inferInsert;
+
+export const storeProducts = pgTable("storeProducts", {
+  id: serial("id").primaryKey(),
+  nome: varchar("nome", { length: 200 }).notNull(),
+  descricao: text("descricao"),
+  // Categoria livre: produto, viagem, servico, etc.
+  categoria: varchar("categoria", { length: 40 }).notNull(),
+  // JSON com array de URLs de imagens. Primeira é a principal.
+  fotos: text("fotos").default("[]").notNull(),
+  // Preco em tokens (obrigatorio, minimo 0).
+  tokenPrice: integer("tokenPrice").default(0).notNull(),
+  // Preco adicional em BRL (centavos). 0 = trocavel só com tokens.
+  brlPriceCents: integer("brlPriceCents").default(0).notNull(),
+  // Estoque disponivel. null = ilimitado.
+  estoque: integer("estoque"),
+  isActive: integer("isActive").default(1).notNull(),
+  createdByUserId: integer("createdByUserId"),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export type StoreProduct = typeof storeProducts.$inferSelect;
+export type InsertStoreProduct = typeof storeProducts.$inferInsert;
