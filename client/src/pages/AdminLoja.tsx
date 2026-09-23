@@ -19,7 +19,8 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { Coins, Loader2, Package, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
+import { Coins, Loader2, Package, Pencil, Plus, Settings, Trash2, Upload, X } from "lucide-react";
+import { Link } from "wouter";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -211,9 +212,18 @@ export default function AdminLoja() {
               trocar pelos tokens acumulados.
             </p>
           </div>
-          <Button onClick={openNew} className="gap-2">
-            <Plus className="h-4 w-4" /> Novo produto
-          </Button>
+          <div className="flex gap-2">
+            <Link href="/admin/loja/configuracoes">
+              <a>
+                <Button variant="outline" className="gap-2">
+                  <Settings className="h-4 w-4" /> Configurações
+                </Button>
+              </a>
+            </Link>
+            <Button onClick={openNew} className="gap-2">
+              <Plus className="h-4 w-4" /> Novo produto
+            </Button>
+          </div>
         </div>
 
         <Card>
