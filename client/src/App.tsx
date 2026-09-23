@@ -37,6 +37,7 @@ import Bonificacoes from "./pages/Bonificacoes";
 import Carteira from "./pages/Carteira";
 import Loja from "./pages/Loja";
 import AdminLoja from "./pages/AdminLoja";
+import AdminLojaConfig from "./pages/AdminLojaConfig";
 import EvolucaoProfissional from "./pages/EvolucaoProfissional";
 import TarefasEventos from "./pages/TarefasEventos";
 import Condominios from "./pages/Condominios";
@@ -176,6 +177,9 @@ function Router() {
       </Route>
       <Route path={"/admin/loja"}>
         <ProtectedRoute component={AdminLoja} roles={["administrativo"]} />
+      </Route>
+      <Route path={"/admin/loja/configuracoes"}>
+        <ProtectedRoute component={AdminLojaConfig} roles={["administrativo"]} />
       </Route>
       <Route path={"/evolucao-profissional"}>
         <ProtectedRoute component={EvolucaoProfissional} roles={["corretor", "administrativo"]} />

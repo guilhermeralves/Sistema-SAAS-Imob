@@ -1411,6 +1411,10 @@ export const storeSettings = pgTable("storeSettings", {
   pixMerchantCity: varchar("pixMerchantCity", { length: 40 }),
   tokensSalePercentMilli: integer("tokensSalePercentMilli").default(0).notNull(),
   tokensRentalPercentMilli: integer("tokensRentalPercentMilli").default(0).notNull(),
+  // Valor em centavos de 1 token. Ex: 10 = R$ 0,10 → 1000 tokens = R$ 100.
+  // Usado para converter tokens em BRL na exibição e no cálculo do
+  // complemento PIX durante uma compra.
+  tokenValueCents: integer("tokenValueCents").default(10).notNull(),
   updatedAt: timestamp("updatedAt", { mode: "date" }).defaultNow().notNull(),
   updatedByUserId: integer("updatedByUserId"),
 });

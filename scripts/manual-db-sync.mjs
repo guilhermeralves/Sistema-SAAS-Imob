@@ -673,6 +673,14 @@ const patches = [
       `CREATE INDEX IF NOT EXISTS "storeProducts_categoria_idx" ON "storeProducts" ("categoria");`,
     ],
   },
+  {
+    id: "2026-09-23_store_settings_token_value",
+    description:
+      "Adiciona tokenValueCents em storeSettings (valor em centavos de 1 token para conversão em BRL)",
+    statements: [
+      `ALTER TABLE "storeSettings" ADD COLUMN IF NOT EXISTS "tokenValueCents" integer NOT NULL DEFAULT 10;`,
+    ],
+  },
 ];
 
 async function ensureManualMigrationsTable(client) {

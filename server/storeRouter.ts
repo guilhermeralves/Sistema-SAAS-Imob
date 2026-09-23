@@ -25,6 +25,8 @@ const storeSettingsInputSchema = z.object({
   // Percentuais em milésimos: 100 = 0.1%, 1000 = 1%. Aceita 0 para desligar.
   tokensSalePercentMilli: z.number().int().min(0).max(100_000).optional(),
   tokensRentalPercentMilli: z.number().int().min(0).max(100_000).optional(),
+  // Valor em centavos de 1 token (0 = tokens não convertem em BRL).
+  tokenValueCents: z.number().int().min(0).max(100_000).optional(),
 });
 
 const productInputSchema = z.object({
@@ -188,5 +190,14 @@ export const storeRouter = router({
   listActiveProducts: protectedProcedure.query(async () => {
     const { listStoreProducts } = await import("./db");
     return await listStoreProducts({ onlyActive: true });
+  }),
+
+  /* Config pública consumível pela vitrine (só o que o corretor precisa ver). */
+  publicSettings: protectedProcedure.query(async () => {
+    const { getStoreSettings } = await import("./db");
+    const s = await getStoreSettings();
+    return {
+      tokenValueCents: s?.tokenValueCents ?? 10,
+    };
   }),
 });
